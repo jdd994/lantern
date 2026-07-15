@@ -17,8 +17,9 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Device, LightState } from "./connectors";
+import type { Room } from "./rooms";
 
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 // A connected brand, app-facing. id is the connector id ("govee"); cred is its API
 // key in the clear (decrypted on read, encrypted on write — see below).
@@ -41,6 +42,7 @@ interface AuraDB extends DBSchema {
   sources: { key: string; value: SourceRecord };
   devices: { key: string; value: Device }; // cache, keyed by device.id
   scenes: { key: string; value: StoredScene };
+  rooms: { key: string; value: Room };
   keyring: { key: string; value: { id: string; key: CryptoKey } };
 }
 
@@ -56,6 +58,9 @@ function db() {
         }
         if (oldVersion < 2) {
           d.createObjectStore("keyring", { keyPath: "id" });
+        }
+        if (oldVersion < 3) {
+          d.createObjectStore("rooms", { keyPath: "id" });
         }
       },
     });
@@ -152,4 +157,21 @@ export async function putScene(s: StoredScene): Promise<void> {
 }
 export async function deleteScene(id: string): Promise<void> {
   await (await db()).delete("scenes", id);
+}
+
+// ---- rooms ---------------------------------------------------------------
+export async function allRooms(): Promise<Room[]> {
+  return (await db()).getAll("rooms");
+}
+export async function putRoom(r: Room): Promise<void> {
+  await (await db()).put("rooms", r);
+}
+export async function putRooms(rs: Room[]): Promise<void> {
+  const d = await db();
+  const tx = d.transaction("rooms", "readwrite");
+  for (const r of rs) await tx.store.put(r);
+  await tx.done;
+}
+export async function deleteRoom(id: string): Promise<void> {
+  await (await db()).delete("rooms", id);
 }

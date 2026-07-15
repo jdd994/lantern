@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { connectorFor, type Device, type LightState } from "../lib/connectors";
+import { assign, type Room } from "../lib/rooms";
 import type { StoredScene, StoredSource } from "../lib/db";
 
 const uid = () => crypto.randomUUID();
@@ -14,6 +15,7 @@ export function useAura() {
   const [sources, setSources] = useState<StoredSource[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [scenes, setScenes] = useState<StoredScene[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [states, setStates] = useState<Record<string, LightState>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +45,16 @@ export function useAura() {
 
   useEffect(() => {
     (async () => {
-      const [srcs, devs, scns] = await Promise.all([db.allSources(), db.allDevices(), db.allScenes()]);
+      const [srcs, devs, scns, rms] = await Promise.all([
+        db.allSources(),
+        db.allDevices(),
+        db.allScenes(),
+        db.allRooms(),
+      ]);
       setSources(srcs);
       setDevices(devs);
       setScenes(scns.sort((a, b) => a.createdAt - b.createdAt));
+      setRooms(rms);
       if (devs.length) void loadStates(devs, srcs);
     })();
   }, [loadStates]);
@@ -189,10 +197,52 @@ export function useAura() {
     setScenes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  // ---- rooms: named groups of devices in one physical place ---------------
+  const createRoom = useCallback(async (name: string) => {
+    const room: Room = { id: uid(), name: name.trim() || "Room", deviceIds: [], createdAt: Date.now() };
+    await db.putRoom(room);
+    setRooms((prev) => [...prev, room]);
+  }, []);
+
+  const renameRoom = useCallback(async (id: string, name: string) => {
+    setRooms((prev) => {
+      const next = prev.map((r) => (r.id === id ? { ...r, name: name.trim() || r.name } : r));
+      const room = next.find((r) => r.id === id);
+      if (room) void db.putRoom(room);
+      return next;
+    });
+  }, []);
+
+  const removeRoom = useCallback(async (id: string) => {
+    await db.deleteRoom(id); // devices in it simply become unassigned
+    setRooms((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  // Move a device into a room (or out, roomId null). Persists every room the move
+  // touched, since the device leaves its old room and joins the new one.
+  const assignDevice = useCallback(async (deviceId: string, roomId: string | null) => {
+    setRooms((prev) => {
+      const next = assign(prev, deviceId, roomId);
+      // Persist only rooms whose membership actually changed.
+      const changed = next.filter((r, i) => r.deviceIds.join() !== prev[i].deviceIds.join());
+      if (changed.length) void db.putRooms(changed);
+      return next;
+    });
+  }, []);
+
+  // Master control for a room: turn every light in it on or off at once.
+  const setRoomPower = useCallback(
+    (deviceIds: string[], on: boolean) => {
+      for (const id of deviceIds) setDevice(id, { on }, true);
+    },
+    [setDevice]
+  );
+
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
-    sources, devices, scenes, states, busy, error, connected,
+    sources, devices, scenes, rooms, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
+    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
   };
 }

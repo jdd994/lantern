@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useTheme, type ThemeOption } from "@lantern/ui";
 import { useAura } from "./hooks/useAura";
+import { groupByRoom } from "./lib/rooms";
 import { ConnectSheet } from "./components/ConnectSheet";
 import { DeviceList } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
+import { RoomsSheet } from "./components/RoomsSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
 // Aura's own vibes — the app dogfoods the shared theme system. Each id maps to a
@@ -19,6 +21,8 @@ export default function App() {
   const aura = useAura();
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [managingRooms, setManagingRooms] = useState(false);
+  const sections = groupByRoom(aura.devices, aura.rooms);
 
   return (
     <div className="wrap">
@@ -54,14 +58,53 @@ export default function App() {
           <section className="section">
             <div className="section-head">
               <h2>Lights</h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => setConnecting(true)}>
-                Add
-              </button>
+              <div className="head-actions">
+                {aura.devices.length > 0 && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setManagingRooms(true)}>
+                    Rooms
+                  </button>
+                )}
+                <button className="btn btn-ghost btn-sm" onClick={() => setConnecting(true)}>
+                  Add
+                </button>
+              </div>
             </div>
+
             {aura.devices.length === 0 ? (
               <p className="hint">No lights found on this account yet. Try Refresh.</p>
-            ) : (
+            ) : aura.rooms.length === 0 ? (
               <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} />
+            ) : (
+              <div className="rooms">
+                {sections.map((sec) => (
+                  <div className="room" key={sec.room?.id ?? "unassigned"}>
+                    <div className="room-head">
+                      <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
+                      {sec.devices.length > 0 && (
+                        <div className="room-master">
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), false)}
+                          >
+                            All off
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), true)}
+                          >
+                            All on
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {sec.devices.length === 0 ? (
+                      <p className="hint">No lights here yet — add some from Rooms.</p>
+                    ) : (
+                      <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} />
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </section>
 
@@ -78,6 +121,17 @@ export default function App() {
 
       {connecting && (
         <ConnectSheet onConnect={aura.connect} onClose={() => setConnecting(false)} />
+      )}
+      {managingRooms && (
+        <RoomsSheet
+          rooms={aura.rooms}
+          devices={aura.devices}
+          onCreate={aura.createRoom}
+          onRename={aura.renameRoom}
+          onDelete={aura.removeRoom}
+          onAssign={aura.assignDevice}
+          onClose={() => setManagingRooms(false)}
+        />
       )}
       {settings && (
         <SettingsSheet
