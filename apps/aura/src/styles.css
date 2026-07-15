@@ -200,6 +200,13 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .assign-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assign-select { width: auto; flex: none; padding: 8px 10px; font-size: 14px; }
 
+/* ---- vibe strip (shared vibe layer) ---- */
+.vibes { display: flex; flex-wrap: wrap; gap: 8px; }
+.vibe { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px 9px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; transition: background .15s, border-color .15s; }
+.vibe:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glow); }
+.vibe:disabled { opacity: .5; cursor: default; }
+.vibe-dot { width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 8px -1px currentColor; }
+
 /* ---- automations ---- */
 .auto-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .auto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

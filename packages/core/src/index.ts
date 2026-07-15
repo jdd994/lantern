@@ -7,3 +7,4 @@ export * from "./biometric";
 export * from "./sync";
 export * from "./api";
 export * from "./vault";
+export * from "./vibe";

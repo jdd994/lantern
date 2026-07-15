@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
+import { vibeById } from "@lantern/core";
 import { connectorFor, type Device, type LightState } from "../lib/connectors";
 import { assign, type Room } from "../lib/rooms";
 import {
@@ -270,6 +271,28 @@ export function useAura() {
     [setDevice]
   );
 
+  // Apply a shared vibe (from @lantern/core) to the lights — the local end of the
+  // cross-app vibe layer. Each device takes what it can of the vibe's target
+  // (brightness / color); the vibe stays medium-agnostic, Aura renders it in light.
+  const applyVibe = useCallback(
+    (vibeId: string, roomId?: string) => {
+      const v = vibeById(vibeId);
+      if (!v) return;
+      const targetIds = roomId
+        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
+        : devices.map((d) => d.id);
+      for (const id of targetIds) {
+        const device = devices.find((d) => d.id === id);
+        if (!device) continue;
+        const patch: Partial<LightState> = { on: true };
+        if (device.canBrightness) patch.brightness = v.light.brightness;
+        if (device.canColor) patch.color = v.light.rgb;
+        setDevice(id, patch, true);
+      }
+    },
+    [devices, rooms, setDevice]
+  );
+
   // ---- automations: "when <trigger>, do <action>" -------------------------
   // Ask the OS for location, once, so sun-based triggers can be computed. Stored
   // in localStorage (coarse coordinates, not a secret); only requested on demand.
@@ -364,5 +387,6 @@ export function useAura() {
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
+    applyVibe,
   };
 }

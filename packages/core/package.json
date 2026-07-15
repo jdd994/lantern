@@ -10,6 +10,7 @@
     "./biometric": "./src/biometric.ts",
     "./sync": "./src/sync.ts",
     "./api": "./src/api.ts",
-    "./vault": "./src/vault.ts"
+    "./vault": "./src/vault.ts",
+    "./vibe": "./src/vibe.ts"
   }
 }

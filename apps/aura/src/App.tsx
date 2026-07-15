@@ -7,6 +7,7 @@ import { DeviceList } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
+import { Vibes } from "./components/Vibes";
 import { SettingsSheet } from "./components/SettingsSheet";
 
 // Aura's own vibes — the app dogfoods the shared theme system. Each id maps to a
@@ -62,6 +63,8 @@ export default function App() {
         </section>
       ) : (
         <>
+          {aura.devices.length > 0 && <Vibes busy={aura.busy} onApply={(id) => aura.applyVibe(id)} />}
+
           <section className="section">
             <div className="section-head">
               <h2>Lights</h2>
