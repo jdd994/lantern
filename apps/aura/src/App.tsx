@@ -8,6 +8,7 @@ import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
 import { Vibes } from "./components/Vibes";
+import { AmbientSheet } from "./components/AmbientSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
 // Aura's own vibes — the app dogfoods the shared theme system. Each id maps to a
@@ -25,6 +26,7 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [managingRooms, setManagingRooms] = useState(false);
   const [automating, setAutomating] = useState(false);
+  const [ambient, setAmbient] = useState(false);
   const sections = groupByRoom(aura.devices, aura.rooms);
 
   return (
@@ -63,7 +65,9 @@ export default function App() {
         </section>
       ) : (
         <>
-          {aura.devices.length > 0 && <Vibes busy={aura.busy} onApply={(id) => aura.applyVibe(id)} />}
+          {aura.devices.length > 0 && (
+            <Vibes busy={aura.busy} onApply={(id) => aura.applyVibe(id)} onAuto={() => setAmbient(true)} />
+          )}
 
           <section className="section">
             <div className="section-head">
@@ -167,6 +171,9 @@ export default function App() {
           onRemove={aura.removeAutomation}
           onClose={() => setAutomating(false)}
         />
+      )}
+      {ambient && (
+        <AmbientSheet onApplyVibe={(id) => aura.applyVibe(id)} onClose={() => setAmbient(false)} />
       )}
       {settings && (
         <SettingsSheet
