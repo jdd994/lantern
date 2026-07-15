@@ -5,7 +5,7 @@
 
 import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
-import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth";
+import { hashPassword, verifyPassword, signToken, verifyToken } from "@lantern/server/auth";
 
 type Env = {
   DB: D1Database;

@@ -1,0 +1,12 @@
+{
+  "name": "@lantern/core",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Headless local-first primitives (crypto, biometric) shared by the lantern apps.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./crypto": "./src/crypto.ts",
+    "./biometric": "./src/biometric.ts"
+  }
+}

@@ -2,7 +2,7 @@
   "name": "driftless-server",
   "private": true,
   "type": "module",
-  "description": "Driftless sync server — stores opaque ciphertext only. See ../SYNC_PLAN.md.",
+  "description": "Driftless sync server \u2014 stores opaque ciphertext only. See ../SYNC_PLAN.md.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -10,6 +10,7 @@
     "db:init:local": "wrangler d1 execute driftless --local --file=schema.sql"
   },
   "dependencies": {
+    "@lantern/server": "*",
     "hono": "^4.6.14"
   },
   "devDependencies": {
