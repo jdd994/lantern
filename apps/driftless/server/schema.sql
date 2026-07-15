@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS vaults (
   wrapped_dek TEXT,                   -- envelope: the data key (DEK) wrapped by the
                                       -- passphrase-derived KEK (opaque). Null on
                                       -- legacy vaults; set on register/passphrase change.
+  currency    TEXT,                   -- unused by Driftless; kept for shared-server schema parity
   created_at  INTEGER NOT NULL
 );
 

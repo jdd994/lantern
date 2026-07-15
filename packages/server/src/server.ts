@@ -33,8 +33,9 @@ export type ServerConfig<E extends BaseEnv = BaseEnv> = {
   deleteAccount?: (c: ServerContext<E>, userId: string) => Promise<Response>;
 };
 
-// Token auth middleware. Exported so an app's extra routes can gate on it too.
-export async function requireAuth(c: ServerContext, next: Next) {
+// Token auth middleware. Exported (generic over the app's Env, so an app with a
+// wider Env — e.g. Driftless's R2 binding — can gate its own routes with it too).
+export async function requireAuth<E extends BaseEnv>(c: ServerContext<E>, next: Next) {
   const header = c.req.header("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const userId = token ? await verifyToken(token, c.env.TOKEN_SECRET) : null;
@@ -43,9 +44,11 @@ export async function requireAuth(c: ServerContext, next: Next) {
   await next();
 }
 
-const TOO_MANY = "Too many attempts from here — please wait a little and try again.";
+export const TOO_MANY = "Too many attempts from here — please wait a little and try again.";
 
-async function withinRateLimit(c: ServerContext, action: string, limit: number, windowMs: number): Promise<boolean> {
+// Fixed-window rate limit for open endpoints. Exported so an app's extra open
+// routes (e.g. Driftless's feedback) can reuse it.
+export async function withinRateLimit<E extends BaseEnv>(c: ServerContext<E>, action: string, limit: number, windowMs: number): Promise<boolean> {
   const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
   const key = `${action}:${ip}:${Math.floor(Date.now() / windowMs)}`;
   try {
