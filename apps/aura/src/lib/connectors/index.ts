@@ -37,6 +37,10 @@ export type Connector = {
 
 import { govee } from "./govee";
 import { demo } from "./demo";
+// Staged: Philips Hue (local CLIP v2). Implemented in ./hue.ts but not registered —
+// a browser PWA can't reach a LAN bridge (mixed-content/TLS/CORS). Add it here once
+// Aura ships as Tauri (native HTTP), plus a discovery + link-button pairing step.
+// import { hue } from "./hue";
 
 export const connectors: Connector[] = [govee, demo];
 
