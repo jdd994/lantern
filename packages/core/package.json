@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./crypto": "./src/crypto.ts",
-    "./biometric": "./src/biometric.ts"
+    "./biometric": "./src/biometric.ts",
+    "./sync": "./src/sync.ts"
   }
 }
