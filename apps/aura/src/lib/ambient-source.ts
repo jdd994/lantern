@@ -27,6 +27,9 @@ export function createMicSource(): AmbientSource {
     async start(onReading) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       ctx = new AudioContext();
+      // Browsers often hand back a suspended context; without this the analyser
+      // reads all zeros. start() is called from a user gesture, so resume is allowed.
+      if (ctx.state === "suspended") await ctx.resume().catch(() => {});
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
       ctx.createMediaStreamSource(stream).connect(analyser);
