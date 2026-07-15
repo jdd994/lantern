@@ -3,7 +3,7 @@
 // outside the ciphertext). Photos are large encrypted blobs on their own path, so
 // syncNow composes the engine's pull + push with the shared media upload.
 import { createSyncEngine, createMediaSync, type SyncRecord } from "@lantern/core/sync";
-import { pushChanges, pullChanges, uploadMedia, type SyncRecord as ApiRecord } from "./api";
+import { pushChanges, pullChanges, uploadMedia } from "./api";
 import {
   dirtyEntries, dirtyStrands, dirtyMedia,
   clearEntryDirty, clearStrandDirty, clearMediaDirty,
@@ -43,8 +43,8 @@ const engine = createSyncEngine<EntryOrStrand>({
     dirty: false,
     content: rec.content,
   }),
-  push: (token, changes) => pushChanges(token, changes as unknown as ApiRecord[]),
-  pull: (token, since) => pullChanges(token, since),
+  push: pushChanges,
+  pull: pullChanges,
 });
 
 export const pull = engine.pull;

@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./crypto": "./src/crypto.ts",
     "./biometric": "./src/biometric.ts",
-    "./sync": "./src/sync.ts"
+    "./sync": "./src/sync.ts",
+    "./api": "./src/api.ts"
   }
 }
