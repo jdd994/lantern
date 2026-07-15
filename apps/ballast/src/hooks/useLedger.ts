@@ -10,22 +10,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  checkVerifier,
-  deriveKeyFromSalt,
   exportKeyRaw,
-  generateIdentityKeypair,
   importKeyRaw,
-  makeVerifier,
-  newSalt,
   openJSON,
   sealJSON,
-  exportPublicKeyB64,
-  wrapPrivateKey,
-  generateDEK,
-  wrapVaultKey,
-  unwrapVaultKey,
   PBKDF2_ITERATIONS,
+  VERIFIER_TEXT,
 } from "../lib/crypto";
+import { createVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
 import * as db from "../lib/db";
 import {
   valueAccounts,
@@ -287,29 +279,10 @@ export function useLedger(): Ledger {
     setBusy(true);
     setError(null);
     try {
-      // Envelope model: a random DEK encrypts the data; the passphrase-derived
-      // KEK only wraps it, so the passphrase can change later without
-      // re-encrypting anything. The verifier validates the DEK.
-      const salt = newSalt();
-      const kek = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
-      const dek = await generateDEK();
-
-      // Identity keypair from day one. Nothing uses it yet — see crypto.ts for
-      // why it exists anyway. Wrapped by the DEK so it survives a passphrase change.
-      const kp = await generateIdentityKeypair();
-
-      await db.saveVault({
-        id: "vault",
-        salt,
-        verifier: await makeVerifier(dek),
-        wrappedDEK: await wrapVaultKey(kek, dek),
-        createdAt: Date.now(),
-        iterations: PBKDF2_ITERATIONS,
-        currency: cur,
-        identityPublic: await exportPublicKeyB64(kp.publicKey),
-        identityPrivate: await wrapPrivateKey(dek, kp.privateKey),
-      });
-
+      // Envelope model (see @lantern/core/vault): a random DEK encrypts the data;
+      // the passphrase only wraps it, so it can change later without re-encrypting.
+      const { dek, secrets } = await createVault(passphrase, VERIFIER_TEXT);
+      await db.saveVault({ id: "vault", ...secrets, currency: cur, createdAt: Date.now() });
       keyRef.current = dek;
       setCurrency(cur);
       setStatus("unlocked");
@@ -337,34 +310,16 @@ export function useLedger(): Ledger {
       try {
         const vault = await db.getVault();
         if (!vault) return false;
-        const kek = await deriveKeyFromSalt(passphrase, vault.salt, vault.iterations);
-
-        let dek: CryptoKey;
-        if (vault.wrappedDEK) {
-          // Envelope vault: the KEK unwraps the DEK; a wrong passphrase fails here.
-          try {
-            dek = await unwrapVaultKey(kek, vault.wrappedDEK);
-          } catch {
-            setError("That passphrase doesn't open this vault.");
-            return false;
-          }
-          if (!(await checkVerifier(dek, vault.verifier))) {
-            setError("That passphrase doesn't open this vault.");
-            return false;
-          }
-        } else {
-          // Legacy vault: the key was derived straight from the passphrase, so it
-          // IS the data key. Verify, then migrate to the envelope model in place —
-          // no data is re-encrypted (the DEK stays this key).
-          if (!(await checkVerifier(kek, vault.verifier))) {
-            setError("That passphrase doesn't open this vault.");
-            return false;
-          }
-          dek = kek;
-          await db.saveVault({ ...vault, wrappedDEK: await wrapVaultKey(kek, dek) });
+        // Delegates the unwrap-or-migrate logic to the tested vault module.
+        const opened = await openVault(passphrase, vault, VERIFIER_TEXT);
+        if (!opened) {
+          setError("That passphrase doesn't open this vault.");
+          return false;
         }
-
-        await finishUnlock(dek, vault.currency);
+        if (opened.migratedWrappedDEK) {
+          await db.saveVault({ ...vault, wrappedDEK: opened.migratedWrappedDEK });
+        }
+        await finishUnlock(opened.dek, vault.currency);
         return true;
       } finally {
         setBusy(false);
@@ -383,7 +338,7 @@ export function useLedger(): Ledger {
       return false;
     }
     const key = await importKeyRaw(raw);
-    if (!(await checkVerifier(key, vault.verifier))) {
+    if (!(await verifyDEK(key, vault.verifier, VERIFIER_TEXT))) {
       // The stored wrap no longer matches this vault. Drop it rather than
       // leaving a broken shortcut in place.
       await db.clearDevice();
@@ -561,30 +516,10 @@ export function useLedger(): Ledger {
       const vault = await db.getVault();
       if (!vault) return "No vault on this device.";
 
-      const curKek = await deriveKeyFromSalt(current, vault.salt, vault.iterations);
-      let okCurrent = false;
-      try {
-        if (vault.wrappedDEK) {
-          const a = await exportKeyRaw(await unwrapVaultKey(curKek, vault.wrappedDEK));
-          const b = await exportKeyRaw(dek);
-          okCurrent = a.length === b.length && a.every((x, i) => x === b[i]);
-        } else {
-          okCurrent = await checkVerifier(curKek, vault.verifier);
-        }
-      } catch {
-        okCurrent = false;
-      }
-      if (!okCurrent) return "That current passphrase isn't right.";
-
-      const salt = newSalt();
-      const kek = await deriveKeyFromSalt(next, salt, PBKDF2_ITERATIONS);
-      const updated = {
-        ...vault,
-        salt,
-        iterations: PBKDF2_ITERATIONS,
-        verifier: await makeVerifier(dek),
-        wrappedDEK: await wrapVaultKey(kek, dek),
-      };
+      // Verify the current passphrase + re-wrap the DEK, via the tested vault module.
+      const rewrapped = await rewrapVault(dek, current, next, vault, VERIFIER_TEXT);
+      if (!rewrapped) return "That current passphrase isn't right.";
+      const updated = { ...vault, ...rewrapped };
       await db.saveVault(updated);
 
       const token = tokenRef.current;
