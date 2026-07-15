@@ -37,6 +37,35 @@
 
   --maxw: 720px;
   --radius: 12px;
+
+  /* Canonical accent alias for shared @lantern/ui components. */
+  --accent: var(--ember);
+}
+
+/* ---- Vibes (presets). Default "Ember" is the base palette above; these re-tint
+   the app by overriding a few tokens. Starter set — deeper customization later. ---- */
+:root[data-mood="hearthlight"] {
+  --bg:        #140E09;
+  --bg-raised: #1B140C;
+  --surface:   #231A10;
+  --surface-2: #2B2015;
+  --line:      #352A1B;
+  --line-soft: #241B1298;
+}
+:root[data-mood="cream"] {
+  --bg:        #F0E7D6;
+  --bg-raised: #F7F0E2;
+  --surface:   #FCF7EC;
+  --surface-2: #EFE6D3;
+  --line:      #DCCFB8;
+  --line-soft: #E8DFCC;
+  --ink:       #2A2015;
+  --ink-soft:  #5C4F3B;
+  --ink-faint: #8A7C63;
+  --ember:     #C0662A;
+  --ember-dim: rgba(192, 102, 42, 0.12);
+  --sage:      #5E7C4E;
+  --clay:      #B25B41;
 }
 
 * { box-sizing: border-box; }
@@ -208,3 +237,9 @@ input::placeholder { color: var(--ink-faint); }
 .linklike.danger:hover { color: var(--ink); text-decoration: underline; }
 
 .pass-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; }
+
+/* Settings sheet sections */
+.set-section { margin-bottom: 1.4rem; }
+.set-section:last-of-type { margin-bottom: 0.8rem; }
+.set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
+.set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
