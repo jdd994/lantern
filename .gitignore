@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Wrangler / Cloudflare local state
+.wrangler/
+.dev.vars
+
+# Editor / OS
+.DS_Store
+*.log

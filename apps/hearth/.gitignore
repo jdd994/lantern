@@ -1,0 +1,13 @@
+node_modules
+dist
+*.local
+.DS_Store
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+.env
+.env.*
+
+# Never commit anyone's food/health data
+*.hearth
+backups/
