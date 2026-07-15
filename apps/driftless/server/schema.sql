@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS objects (
   updated_at  INTEGER NOT NULL,
   deleted     INTEGER NOT NULL DEFAULT 0,
   content     TEXT NOT NULL,          -- JSON CipherBlob (opaque)
+  meta        TEXT,                   -- opaque non-secret metadata (unused by Driftless; shared-server parity)
   seq         INTEGER NOT NULL,
   PRIMARY KEY (user_id, kind, id)
 );
