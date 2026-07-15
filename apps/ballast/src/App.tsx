@@ -10,8 +10,10 @@ import { Spending, ReceiptView } from "./components/Spending";
 import { AddExpense } from "./components/AddExpense";
 import { Support } from "./components/Support";
 import { Sync } from "./components/Sync";
+import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { InstallHint } from "./components/InstallHint";
-import { Heart } from "./components/icons";
+import { Heart, Gear } from "./components/icons";
+import { useTheme } from "@lantern/ui";
 import type { SnapshotContent } from "./lib/ledger";
 
 type Tab = "worth" | "spending";
@@ -26,6 +28,8 @@ export default function App() {
   const [receipt, setReceipt] = useState<string | null>(null);
   const [support, setSupport] = useState(false);
   const [sync, setSync] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const { mood, setMood } = useTheme("ballast-mood", MOODS.map((m) => m.id), "deep");
 
   async function viewReceipt(mediaId: string) {
     setReceipt(await l.loadReceipt(mediaId));
@@ -96,6 +100,14 @@ export default function App() {
             title={l.account ? `Syncing as ${l.account}` : "Sync across devices"}
           >
             {l.syncing ? "Syncing…" : l.account ? "Synced" : "Sync"}
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setSettings(true)}
+            title="Settings & vibe"
+            aria-label="Settings and vibe"
+          >
+            <Gear />
           </button>
           <button
             className="btn btn-ghost btn-sm heart"
@@ -201,6 +213,10 @@ export default function App() {
       {receipt ? <ReceiptView src={receipt} onClose={() => setReceipt(null)} /> : null}
 
       {support ? <Support onClose={() => setSupport(false)} /> : null}
+
+      {settings ? (
+        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+      ) : null}
 
       {sync ? (
         <Sync

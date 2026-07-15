@@ -8,6 +8,9 @@ import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Sync } from "./components/Sync";
+import { SettingsSheet, MOODS } from "./components/SettingsSheet";
+import { Gear } from "./components/icons";
+import { useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
 
 function timeLabel(at: number): string {
@@ -21,6 +24,8 @@ export default function App() {
   const [addingRecipe, setAddingRecipe] = useState(false);
   const [loggingMetric, setLoggingMetric] = useState(false);
   const [sync, setSync] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
 
   if (h.status === "loading") return null;
   if (h.status === "setup") {
@@ -75,6 +80,14 @@ export default function App() {
             title={h.account ? `Syncing as ${h.account}` : "Sync across devices"}
           >
             {h.syncing ? "Syncing…" : h.account ? "Synced" : "Sync"}
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setSettings(true)}
+            title="Settings & vibe"
+            aria-label="Settings and vibe"
+          >
+            <Gear />
           </button>
           <button className="btn btn-sm" onClick={h.lock} title="Lock the vault">Lock</button>
         </div>
@@ -146,6 +159,9 @@ export default function App() {
       {addingGoal ? <AddGoal onAdd={h.addGoal} onClose={() => setAddingGoal(false)} /> : null}
       {addingRecipe ? <AddRecipe onAdd={h.addRecipe} onClose={() => setAddingRecipe(false)} /> : null}
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
+      {settings ? (
+        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+      ) : null}
       {sync ? (
         <Sync
           account={h.account}

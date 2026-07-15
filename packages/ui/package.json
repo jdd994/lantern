@@ -1,0 +1,14 @@
+{
+  "name": "@lantern/ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Shared experience primitives (Sheet, ThemePicker, useTheme) for the lantern apps, themed by each app's own tokens.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

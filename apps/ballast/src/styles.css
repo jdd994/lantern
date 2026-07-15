@@ -45,6 +45,36 @@
 
   --maxw: 760px;
   --radius: 10px;
+
+  /* Canonical accent alias for shared @lantern/ui components. */
+  --accent: var(--brass);
+}
+
+/* ---- Vibes (presets). The default "Deep" is the base palette above; these
+   re-tint the whole app by overriding a handful of tokens. Starter set — a
+   deeper customization layer can grow on top later. ---- */
+:root[data-mood="midnight"] {
+  --bg:        #0B1016;
+  --bg-raised: #111823;
+  --surface:   #17202B;
+  --surface-2: #1E2833;
+  --line:      #26333F;
+  --line-soft: #1A222C;
+}
+:root[data-mood="shoreline"] {
+  --bg:        #ECE6D8;
+  --bg-raised: #F4EFE3;
+  --surface:   #FBF7EE;
+  --surface-2: #EEE7D7;
+  --line:      #D8CFBB;
+  --line-soft: #E6DDCB;
+  --ink:       #22281F;
+  --ink-soft:  #55604F;
+  --ink-faint: #8A8577;
+  --brass:     #9A7B2E;
+  --brass-dim: rgba(154, 123, 46, 0.12);
+  --above:     #4E7C5E;
+  --below:     #B25B41;
 }
 
 * { box-sizing: border-box; }
@@ -1037,3 +1067,9 @@ input.mono, input[inputmode="decimal"] {
 .linklike.danger:hover { color: var(--ink); text-decoration: underline; }
 .btn-danger { background: none; border: 1px solid var(--below); color: var(--below); }
 .btn-danger:hover:not(:disabled) { background: var(--below-dim); color: var(--ink); }
+
+/* Settings sheet sections */
+.set-section { margin-bottom: 1.4rem; }
+.set-section:last-of-type { margin-bottom: 0.8rem; }
+.set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
+.set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
