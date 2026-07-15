@@ -13,6 +13,7 @@
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name getballast --branch=production"
   },
   "dependencies": {
+    "@lantern/core": "*",
     "idb": "^8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

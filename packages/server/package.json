@@ -1,0 +1,10 @@
+{
+  "name": "@lantern/server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Shared server-side pieces for the lantern apps (Workers + D1). Stores opaque ciphertext only.",
+  "exports": {
+    "./auth": "./src/auth.ts"
+  }
+}
