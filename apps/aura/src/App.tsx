@@ -6,6 +6,7 @@ import { ConnectSheet } from "./components/ConnectSheet";
 import { DeviceList } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
+import { AutomationsSheet } from "./components/AutomationsSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
 // Aura's own vibes — the app dogfoods the shared theme system. Each id maps to a
@@ -22,6 +23,7 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
   const [managingRooms, setManagingRooms] = useState(false);
+  const [automating, setAutomating] = useState(false);
   const sections = groupByRoom(aura.devices, aura.rooms);
 
   return (
@@ -32,9 +34,14 @@ export default function App() {
         </h1>
         <div className="top-actions">
           {aura.connected && (
-            <button className="btn btn-ghost btn-sm" onClick={() => aura.refresh()} disabled={aura.busy}>
-              {aura.busy ? "…" : "Refresh"}
-            </button>
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => aura.refresh()} disabled={aura.busy}>
+                {aura.busy ? "…" : "Refresh"}
+              </button>
+              <button className="icon-btn" aria-label="Automations" onClick={() => setAutomating(true)}>
+                ⏱
+              </button>
+            </>
           )}
           <button className="icon-btn" aria-label="Settings" onClick={() => setSettings(true)}>
             ⚙
@@ -143,6 +150,19 @@ export default function App() {
           onDelete={aura.removeRoom}
           onAssign={aura.assignDevice}
           onClose={() => setManagingRooms(false)}
+        />
+      )}
+      {automating && (
+        <AutomationsSheet
+          automations={aura.automations}
+          scenes={aura.scenes}
+          rooms={aura.rooms}
+          coords={aura.coords}
+          onRequestLocation={aura.requestLocation}
+          onAdd={aura.addAutomation}
+          onToggle={aura.toggleAutomation}
+          onRemove={aura.removeAutomation}
+          onClose={() => setAutomating(false)}
         />
       )}
       {settings && (

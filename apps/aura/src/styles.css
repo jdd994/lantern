@@ -200,6 +200,26 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .assign-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assign-select { width: auto; flex: none; padding: 8px 10px; font-size: 14px; }
 
+/* ---- automations ---- */
+.auto-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.auto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.auto-row.off { opacity: .55; }
+.auto-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+.auto-when { font-size: 14px; color: var(--ink); font-weight: 600; }
+.auto-arrow { color: var(--ink-faint); }
+.auto-do { font-size: 14px; color: var(--ink-soft); }
+.auto-next { flex-basis: 100%; font-size: 11.5px; color: var(--ink-faint); font-family: var(--mono); }
+.auto-controls { display: flex; align-items: center; gap: 8px; flex: none; }
+.toggle.sm { width: 38px; height: 22px; }
+.toggle.sm .toggle-knob { width: 16px; height: 16px; }
+.toggle.sm[aria-checked="true"] .toggle-knob { transform: translateX(16px); }
+.scene-x.static { position: static; opacity: 1; }
+.auto-new { margin-top: 4px; }
+.loc-note { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px dashed var(--line); border-radius: var(--radius); }
+.loc-note p { margin: 0; }
+.auto-foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+input[type=time], input[type=number] { width: 100%; padding: 11px 13px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg-raised); color: var(--ink); font: inherit; font-size: 15px; }
+
 /* connected sources (settings) */
 .source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .source-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 14px; }

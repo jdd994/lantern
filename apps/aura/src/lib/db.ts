@@ -18,8 +18,9 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Device, LightState } from "./connectors";
 import type { Room } from "./rooms";
+import type { Automation } from "./automations";
 
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 // A connected brand, app-facing. id is the connector id ("govee"); cred is its API
 // key in the clear (decrypted on read, encrypted on write — see below).
@@ -46,6 +47,7 @@ interface AuraDB extends DBSchema {
   devices: { key: string; value: Device }; // cache, keyed by device.id
   scenes: { key: string; value: StoredScene };
   rooms: { key: string; value: Room };
+  automations: { key: string; value: Automation };
   keyring: { key: string; value: { id: string; key: CryptoKey } };
 }
 
@@ -64,6 +66,9 @@ function db() {
         }
         if (oldVersion < 3) {
           d.createObjectStore("rooms", { keyPath: "id" });
+        }
+        if (oldVersion < 4) {
+          d.createObjectStore("automations", { keyPath: "id" });
         }
       },
     });
@@ -177,4 +182,15 @@ export async function putRooms(rs: Room[]): Promise<void> {
 }
 export async function deleteRoom(id: string): Promise<void> {
   await (await db()).delete("rooms", id);
+}
+
+// ---- automations ---------------------------------------------------------
+export async function allAutomations(): Promise<Automation[]> {
+  return (await db()).getAll("automations");
+}
+export async function putAutomation(a: Automation): Promise<void> {
+  await (await db()).put("automations", a);
+}
+export async function deleteAutomation(id: string): Promise<void> {
+  await (await db()).delete("automations", id);
 }
