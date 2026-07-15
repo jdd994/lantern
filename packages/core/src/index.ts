@@ -5,3 +5,4 @@
 export * from "./crypto";
 export * from "./biometric";
 export * from "./sync";
+export * from "./api";

@@ -1517,7 +1517,7 @@ export function useJournal() {
           salt: meta.salt,
           verifier: meta.verifier,
           iterations: meta.iterations,
-          wrappedDEK: meta.wrappedDEK,
+          wrappedDEK: meta.wrappedDEK ?? undefined,
           createdAt: Date.now(),
         });
         tokenRef.current = token;

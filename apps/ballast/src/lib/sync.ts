@@ -4,7 +4,7 @@
 // ciphertext as `meta` (a snapshot's accountId + at, a transaction's at), how to
 // read/write the stores, and the network calls.
 import { createSyncEngine, type SyncRecord } from "@lantern/core/sync";
-import { pushChanges, pullChanges, type SyncRecord as ApiRecord } from "./api";
+import { pushChanges, pullChanges } from "./api";
 import {
   dirtyRecords, getStoredByKind, putStoredByKind, clearDirtyByKind, getSyncState, saveSyncState,
   type AnyStored, type SyncKind, type StoredSnapshot, type StoredTransaction,
@@ -54,8 +54,8 @@ const engine = createSyncEngine<AnyStored>({
   },
   metaFor,
   fromRecord,
-  push: (token, changes) => pushChanges(token, changes as unknown as ApiRecord[]),
-  pull: (token, since) => pullChanges(token, since),
+  push: pushChanges,
+  pull: pullChanges,
 });
 
 export const pull = engine.pull;

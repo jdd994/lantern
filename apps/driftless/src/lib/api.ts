@@ -1,75 +1,22 @@
-// api.ts
-// Client for the Driftless sync server. Thin, typed fetch wrappers — it moves
-// ciphertext + non-secret metadata only, never plaintext or the passphrase.
-// See ../SYNC_PLAN.md. Nothing here runs until the sync engine (Phase 4) wires
-// it in.
+// api.ts — Driftless's binding to the shared sync client (@lantern/core/api),
+// plus its own endpoints (identity, media, shared strands, invites, feedback)
+// built on the same fetch wrapper. Moves ciphertext + non-secret metadata only.
 import type { CipherBlob, WrappedKey } from "./crypto";
+import { createApiClient, ApiError } from "@lantern/core/api";
+
+export { ApiError };
+export type { VaultMetaDTO } from "@lantern/core/api";
+export type { SyncRecord } from "@lantern/core/sync";
 
 // The sync server. (Swap for a custom domain later; also update connect-src in
 // public/_headers if this origin changes.)
 export const API_BASE = "https://driftless-server.jdd994.workers.dev";
 
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
+const client = createApiClient(API_BASE);
+// The Driftless-specific JSON endpoints below reuse the shared wrapper.
+const req = client.req;
 
-export type SyncKind = "entry" | "strand";
-
-// One record as it travels to/from the server (the content stays ciphertext).
-export type SyncRecord = {
-  kind: SyncKind;
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  deleted: boolean;
-  content: CipherBlob;
-};
-
-export type VaultMetaDTO = {
-  salt: number[];
-  verifier: CipherBlob;
-  iterations?: number;
-  identityPublicKey?: string | null;
-  identityPrivWrapped?: WrappedKey | null;
-  // Envelope encryption: the DEK wrapped by the passphrase-derived KEK. Opaque —
-  // the server stores and returns it, never reads it. Absent for legacy vaults.
-  wrappedDEK?: CipherBlob;
-};
-
-type ReqOpts = { method?: string; token?: string; body?: unknown };
-
-async function req<T>(path: string, opts: ReqOpts = {}): Promise<T> {
-  const res = await fetch(API_BASE + path, {
-    method: opts.method ?? "GET",
-    headers: {
-      ...(opts.body ? { "content-type": "application/json" } : {}),
-      ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  const data = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status})`, res.status);
-  return data as T;
-}
-
-// ---- auth + account ----
-
-export function register(
-  email: string,
-  password: string,
-  vault: VaultMetaDTO,
-  identityPublicKey: string,
-  identityPrivWrapped: WrappedKey
-): Promise<{ token: string; userId: string }> {
-  return req("/auth/register", {
-    method: "POST",
-    body: { email, password, vault, identityPublicKey, identityPrivWrapped },
-  });
-}
+export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
 
 // Set/update this account's identity keypair (migrate old accounts + rotation).
 export function setIdentity(
@@ -80,66 +27,17 @@ export function setIdentity(
   return req("/identity", { method: "POST", token, body: { identityPublicKey, identityPrivWrapped } });
 }
 
-export function login(
-  email: string,
-  password: string
-): Promise<{ token: string; userId: string }> {
-  return req("/auth/login", { method: "POST", body: { email, password } });
-}
-
-// Fetch the vault metadata so a new device can re-derive the key from the
-// passphrase.
-export function fetchVault(token: string): Promise<VaultMetaDTO> {
-  return req("/vault", { token });
-}
-
-// Update the vault record after a passphrase change: new salt, verifier, and
-// re-wrapped DEK. Only these envelope fields move; the ciphertext is untouched,
-// so other devices keep reading their data and just need the new wrap to unlock.
-export function updateVault(
-  token: string,
-  vault: { salt: number[]; verifier: CipherBlob; iterations?: number; wrappedDEK: CipherBlob }
-): Promise<{ ok: boolean }> {
-  return req("/vault", { method: "PUT", token, body: vault });
-}
-
 // This account's own user id (for authorship of shared pieces).
 export function fetchMe(token: string): Promise<{ userId: string }> {
   return req("/me", { token });
 }
 
-// Permanently delete the account and everything the server holds for it —
-// private entries, the vault record, photos in R2, and shared-strand
-// membership. Local data on the device is untouched. The server refuses (409)
-// if the user still owns a shared strand that other people are in. Irreversible.
-export function deleteAccount(token: string): Promise<{ ok: boolean }> {
-  return req("/me", { method: "DELETE", token });
-}
-
-// Public-key directory (for future sharing).
+// Public-key directory (for sharing invites).
 export function fetchKeys(
   token: string,
   email: string
 ): Promise<{ identityPublicKey: string | null }> {
   return req(`/keys?email=${encodeURIComponent(email)}`, { token });
-}
-
-// ---- sync ----
-
-// Push a batch of changed records (any mix of kinds). Server applies LWW.
-export function pushChanges(
-  token: string,
-  changes: SyncRecord[]
-): Promise<{ applied: number; cursor: number }> {
-  return req("/sync/push", { method: "POST", token, body: { changes } });
-}
-
-// Pull everything with seq greater than the cursor (all kinds).
-export function pullChanges(
-  token: string,
-  since: number
-): Promise<{ changes: SyncRecord[]; cursor: number; more: boolean }> {
-  return req(`/sync/pull?since=${since}`, { token });
 }
 
 // ---- media (M1: encrypted photo blobs over R2) ----
