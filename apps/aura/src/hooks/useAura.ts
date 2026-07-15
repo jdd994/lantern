@@ -7,7 +7,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { connectorFor, type Device, type LightState } from "../lib/connectors";
 import { assign, type Room } from "../lib/rooms";
+import {
+  dueAutomations,
+  ymd,
+  type Action,
+  type Automation,
+  type Coords,
+  type Trigger,
+} from "../lib/automations";
 import type { StoredScene, StoredSource } from "../lib/db";
+
+const GEO_KEY = "aura-geo";
+const readGeo = (): Coords | null => {
+  try {
+    const raw = localStorage.getItem(GEO_KEY);
+    return raw ? (JSON.parse(raw) as Coords) : null;
+  } catch {
+    return null;
+  }
+};
 
 const uid = () => crypto.randomUUID();
 
@@ -16,6 +34,8 @@ export function useAura() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [scenes, setScenes] = useState<StoredScene[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [coords, setCoords] = useState<Coords | null>(readGeo);
   const [states, setStates] = useState<Record<string, LightState>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +65,18 @@ export function useAura() {
 
   useEffect(() => {
     (async () => {
-      const [srcs, devs, scns, rms] = await Promise.all([
+      const [srcs, devs, scns, rms, autos] = await Promise.all([
         db.allSources(),
         db.allDevices(),
         db.allScenes(),
         db.allRooms(),
+        db.allAutomations(),
       ]);
       setSources(srcs);
       setDevices(devs);
       setScenes(scns.sort((a, b) => a.createdAt - b.createdAt));
       setRooms(rms);
+      setAutomations(autos.sort((a, b) => a.name.localeCompare(b.name)));
       if (devs.length) void loadStates(devs, srcs);
     })();
   }, [loadStates]);
@@ -248,11 +270,99 @@ export function useAura() {
     [setDevice]
   );
 
+  // ---- automations: "when <trigger>, do <action>" -------------------------
+  // Ask the OS for location, once, so sun-based triggers can be computed. Stored
+  // in localStorage (coarse coordinates, not a secret); only requested on demand.
+  const requestLocation = useCallback((): Promise<Coords | null> => {
+    return new Promise((resolve) => {
+      if (!("geolocation" in navigator)) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const c = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          try {
+            localStorage.setItem(GEO_KEY, JSON.stringify(c));
+          } catch {
+            /* private mode */
+          }
+          setCoords(c);
+          resolve(c);
+        },
+        () => resolve(null),
+        { maximumAge: 6 * 3600_000, timeout: 10_000 }
+      );
+    });
+  }, []);
+
+  const runAction = useCallback(
+    (action: Action) => {
+      if (action.kind === "scene") applyScene(action.sceneId);
+      else if (action.kind === "allOff") setRoomPower(devices.map((d) => d.id), false);
+      else if (action.kind === "roomPower") {
+        const room = rooms.find((r) => r.id === action.roomId);
+        if (room) setRoomPower(room.deviceIds, action.on);
+      }
+    },
+    [applyScene, setRoomPower, devices, rooms]
+  );
+
+  const addAutomation = useCallback(async (name: string, trigger: Trigger, action: Action) => {
+    const a: Automation = { id: uid(), name: name.trim() || "Automation", enabled: true, trigger, action };
+    await db.putAutomation(a);
+    setAutomations((prev) => [...prev, a].sort((x, y) => x.name.localeCompare(y.name)));
+  }, []);
+
+  const toggleAutomation = useCallback(async (id: string) => {
+    setAutomations((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a));
+      const changed = next.find((a) => a.id === id);
+      if (changed) void db.putAutomation(changed);
+      return next;
+    });
+  }, []);
+
+  const removeAutomation = useCallback(async (id: string) => {
+    await db.deleteAutomation(id);
+    setAutomations((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  // The scheduler. A pure PWA can only fire while it's running, so this is a plain
+  // interval over the pure `dueAutomations` check; a Tauri background process can
+  // later drive the same check while the window is closed. Refs keep the ticker
+  // stable while reading the latest automations/coords/action-runner each tick.
+  const autoRef = useRef(automations);
+  autoRef.current = automations;
+  const coordsRef = useRef(coords);
+  coordsRef.current = coords;
+  const runRef = useRef(runAction);
+  runRef.current = runAction;
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const due = dueAutomations(autoRef.current, now, coordsRef.current);
+      if (!due.length) return;
+      const stamp = ymd(now);
+      for (const a of due) {
+        runRef.current(a.action);
+        const updated = { ...a, lastRun: stamp };
+        void db.putAutomation(updated);
+        setAutomations((prev) => prev.map((x) => (x.id === a.id ? updated : x)));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
-    sources, devices, scenes, rooms, states, busy, error, connected,
+    sources, devices, scenes, rooms, automations, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
+    requestLocation, addAutomation, toggleAutomation, removeAutomation,
   };
 }
