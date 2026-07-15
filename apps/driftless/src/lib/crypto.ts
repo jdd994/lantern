@@ -15,7 +15,9 @@ import {
 
 export * from "@lantern/core/crypto";
 
-const VERIFIER_TEXT = "driftless-ok";
+// The per-app verifier token. Exported for @lantern/core/vault (setup / unlock /
+// change-passphrase). MUST stay "driftless-ok" forever, or existing vaults break.
+export const VERIFIER_TEXT = "driftless-ok";
 export const makeVerifier = (key: CryptoKey): Promise<CipherBlob> => coreMakeVerifier(key, VERIFIER_TEXT);
 export const checkVerifier = (key: CryptoKey, blob: CipherBlob): Promise<boolean> =>
   coreCheckVerifier(key, blob, VERIFIER_TEXT);

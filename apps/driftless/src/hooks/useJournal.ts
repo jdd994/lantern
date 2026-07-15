@@ -4,14 +4,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  deriveKeyFromSalt,
-  makeVerifier,
-  checkVerifier,
   encryptString,
   decryptString,
   encryptBytes,
   decryptBytes,
-  newSalt,
   exportKeyRaw,
   importKeyRaw,
   generateIdentityKeypair,
@@ -20,8 +16,6 @@ import {
   wrapPrivateKey,
   unwrapPrivateKey,
   generateDEK,
-  wrapVaultKey,
-  unwrapVaultKey,
   wrapDEKForRecipient,
   unwrapDEK,
   randomLinkSecret,
@@ -32,8 +26,9 @@ import {
   b64url,
   fromB64url,
   toBase64,
-  PBKDF2_ITERATIONS,
+  VERIFIER_TEXT,
 } from "../lib/crypto";
+import { createVault as makeVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
 import { compressImage, bytesToBase64 } from "../lib/media";
 import {
   biometricSupported,
@@ -440,19 +435,17 @@ export function useJournal() {
       // Guard so a retry (after an account error) reuses the same vault rather
       // than regenerating the salt/key.
       if (!keyRef.current) {
-        // Envelope model: a random DEK encrypts the data; the passphrase-derived
-        // KEK only wraps it. This is what lets the passphrase change later
-        // without re-encrypting a thing. The verifier validates the DEK.
-        const salt = newSalt();
-        const kek = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
-        const dek = await generateDEK();
+        // Envelope model (see @lantern/core/vault). Driftless creates its identity
+        // lazily / server-side, so it isn't part of the local vault here — only the
+        // DEK-bearing fields are persisted.
+        const { dek, secrets } = await makeVault(passphrase, VERIFIER_TEXT);
         await saveVault({
           id: "vault",
-          salt,
-          verifier: await makeVerifier(dek),
-          wrappedDEK: await wrapVaultKey(kek, dek),
+          salt: secrets.salt,
+          verifier: secrets.verifier,
+          wrappedDEK: secrets.wrappedDEK,
+          iterations: secrets.iterations,
           createdAt: Date.now(),
-          iterations: PBKDF2_ITERATIONS,
         });
         keyRef.current = dek;
         setEntries([]);
@@ -474,30 +467,16 @@ export function useJournal() {
     async (passphrase: string): Promise<boolean> => {
       const v = await getVault();
       if (!v) return false;
-      const kek = await deriveKeyFromSalt(passphrase, v.salt, v.iterations ?? 250_000);
-
-      let dek: CryptoKey;
-      if (v.wrappedDEK) {
-        // Envelope vault: the KEK unwraps the DEK. A wrong passphrase fails the
-        // GCM auth here.
-        try {
-          dek = await unwrapVaultKey(kek, v.wrappedDEK);
-        } catch {
-          return false;
-        }
-        if (!(await checkVerifier(dek, v.verifier))) return false;
-      } else {
-        // Legacy vault: the key was derived straight from the passphrase, so the
-        // derived key IS the data key. Verify it, then migrate to the envelope
-        // model in place — no data is re-encrypted (the DEK stays this key).
-        if (!(await checkVerifier(kek, v.verifier))) return false;
-        dek = kek;
-        await saveVault({ ...v, wrappedDEK: await wrapVaultKey(kek, dek) });
+      // Delegates the unwrap-or-migrate logic to the tested vault module.
+      const opened = await openVault(passphrase, v, VERIFIER_TEXT);
+      if (!opened) return false;
+      if (opened.migratedWrappedDEK) {
+        await saveVault({ ...v, wrappedDEK: opened.migratedWrappedDEK });
       }
 
-      keyRef.current = dek;
-      await loadEntries(dek);
-      await loadStrands(dek);
+      keyRef.current = opened.dek;
+      await loadEntries(opened.dek);
+      await loadStrands(opened.dek);
       setVaultState("open");
       void requestDurableStorage();
       return true;
@@ -516,7 +495,7 @@ export function useJournal() {
     if (!raw) return false;
     const key = await importKeyRaw(raw);
     const v = await getVault();
-    if (!v || !(await checkVerifier(key, v.verifier))) return false;
+    if (!v || !(await verifyDEK(key, v.verifier, VERIFIER_TEXT))) return false;
     keyRef.current = key;
     await loadEntries(key);
     await loadStrands(key);
@@ -556,32 +535,10 @@ export function useJournal() {
       const v = await getVault();
       if (!v) return "No vault on this device.";
 
-      // Prove they know the CURRENT passphrase before changing anything.
-      const curKek = await deriveKeyFromSalt(current, v.salt, v.iterations ?? 250_000);
-      let okCurrent = false;
-      try {
-        if (v.wrappedDEK) {
-          const a = await exportKeyRaw(await unwrapVaultKey(curKek, v.wrappedDEK));
-          const b = await exportKeyRaw(dek);
-          okCurrent = a.length === b.length && a.every((x, i) => x === b[i]);
-        } else {
-          okCurrent = await checkVerifier(curKek, v.verifier);
-        }
-      } catch {
-        okCurrent = false;
-      }
-      if (!okCurrent) return "That current passphrase isn't right.";
-
-      // Re-wrap the SAME DEK under a fresh salt + the new passphrase.
-      const salt = newSalt();
-      const kek = await deriveKeyFromSalt(next, salt, PBKDF2_ITERATIONS);
-      const updated: VaultMeta = {
-        ...v,
-        salt,
-        iterations: PBKDF2_ITERATIONS,
-        verifier: await makeVerifier(dek),
-        wrappedDEK: await wrapVaultKey(kek, dek),
-      };
+      // Verify the current passphrase + re-wrap the DEK, via the tested vault module.
+      const rewrapped = await rewrapVault(dek, current, next, v, VERIFIER_TEXT);
+      if (!rewrapped) return "That current passphrase isn't right.";
+      const updated: VaultMeta = { ...v, ...rewrapped };
       await saveVault(updated);
 
       // Propagate to the server so other devices require the new passphrase when
