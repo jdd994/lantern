@@ -4,3 +4,4 @@
 // (verifier text, app name) in thin adapters over these.
 export * from "./crypto";
 export * from "./biometric";
+export * from "./sync";
