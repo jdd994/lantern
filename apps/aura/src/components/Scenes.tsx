@@ -1,6 +1,8 @@
 // Scenes.tsx — the heart of the MVP. A scene is a saved vibe: one tap sets every
-// light back to how you liked it. Save the current room as a named scene, recall
-// it later, or remove one you've outgrown.
+// light back to how you liked it. Save the current lights as a named scene, recall
+// it later, or remove one you've outgrown. Two forms:
+//   • full  — a top-level "Whole home" section (its own heading).
+//   • compact — embedded inside a room block (the room name is already the heading).
 import { useState } from "react";
 import type { StoredScene } from "../lib/db";
 
@@ -11,6 +13,8 @@ export function Scenes({
   onApply,
   onSave,
   onRemove,
+  title = "Scenes",
+  compact = false,
 }: {
   scenes: StoredScene[];
   busy: boolean;
@@ -18,6 +22,8 @@ export function Scenes({
   onApply: (id: string) => void;
   onSave: (name: string) => void;
   onRemove: (id: string) => void;
+  title?: string;
+  compact?: boolean;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
@@ -28,16 +34,29 @@ export function Scenes({
     setNaming(false);
   }
 
+  const saveButton =
+    canSave && !naming ? (
+      <button className="btn btn-ghost btn-sm" onClick={() => setNaming(true)}>
+        Save current
+      </button>
+    ) : null;
+
+  // Compact form renders nothing at all until there's something to show.
+  if (compact && scenes.length === 0 && !canSave) return null;
+
   return (
-    <section className="scenes-section">
-      <div className="section-head">
-        <h2>Scenes</h2>
-        {canSave && !naming && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setNaming(true)}>
-            Save current
-          </button>
-        )}
-      </div>
+    <section className={compact ? "room-scenes" : "scenes-section"}>
+      {compact ? (
+        <div className="room-scenes-head">
+          <span className="micro-label">Scenes</span>
+          {saveButton}
+        </div>
+      ) : (
+        <div className="section-head">
+          <h2>{title}</h2>
+          {saveButton}
+        </div>
+      )}
 
       {naming && (
         <div className="scene-save">
@@ -61,7 +80,9 @@ export function Scenes({
       )}
 
       {scenes.length === 0 ? (
-        <p className="hint">Set your lights how you like them, then save the moment as a scene.</p>
+        compact ? null : (
+          <p className="hint">Set your lights how you like them, then save the moment as a scene.</p>
+        )
       ) : (
         <div className="scenes">
           {scenes.map((s) => (

@@ -30,12 +30,15 @@ export type StoredSource = { id: string; cred: string; connectedAt: number };
 type EncCred = { iv: Uint8Array<ArrayBuffer>; ct: ArrayBuffer };
 type SourceRecord = { id: string; connectedAt: number; enc?: EncCred; cred?: string };
 
-// A saved vibe: a name + the light state to restore for each device.
+// A saved vibe: a name + the light state to restore for each device. A scene scoped
+// to a room (roomId set) captures only that room's lights; a whole-home scene
+// (roomId undefined) captures everything.
 export type StoredScene = {
   id: string;
   name: string;
   createdAt: number;
   states: Record<string, LightState>; // deviceId → state
+  roomId?: string;
 };
 
 interface AuraDB extends DBSchema {
