@@ -12,3 +12,7 @@ dist/
 # Editor / OS
 .DS_Store
 *.log
+
+# Compiled Vite config (tsc -b artifact)
+apps/*/vite.config.js
+apps/*/vite.config.d.ts

@@ -1,0 +1,12 @@
+# Security headers, applied to every response. connect-src is the allowlist of
+# every host Aura may contact — currently just the Govee cloud APIs (which set
+# CORS headers, so the browser calls them directly). Adding a host here is a
+# security decision, not a config tweak.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://openapi.api.govee.com https://developer-api.govee.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
