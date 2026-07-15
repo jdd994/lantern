@@ -102,6 +102,17 @@ export default function App() {
                     ) : (
                       <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} />
                     )}
+                    {sec.room && (
+                      <Scenes
+                        compact
+                        scenes={aura.scenes.filter((s) => s.roomId === sec.room!.id)}
+                        busy={aura.busy}
+                        canSave={sec.devices.length > 0}
+                        onApply={aura.applyScene}
+                        onSave={(n) => aura.saveScene(n, sec.room!.id)}
+                        onRemove={aura.removeScene}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -109,11 +120,12 @@ export default function App() {
           </section>
 
           <Scenes
-            scenes={aura.scenes}
+            title={aura.rooms.length > 0 ? "Whole home" : "Scenes"}
+            scenes={aura.scenes.filter((s) => !s.roomId)}
             busy={aura.busy}
             canSave={aura.devices.length > 0}
             onApply={aura.applyScene}
-            onSave={aura.saveScene}
+            onSave={(n) => aura.saveScene(n)}
             onRemove={aura.removeScene}
           />
         </>

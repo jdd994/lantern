@@ -167,16 +167,26 @@ export function useAura() {
     };
   }, []);
 
-  // Save the current lights as a named vibe.
+  // Save the current lights as a named vibe. Scoped to a room (roomId) it captures
+  // only that room's lights; otherwise it captures the whole home.
   const saveScene = useCallback(
-    async (name: string) => {
+    async (name: string, roomId?: string) => {
+      const targetIds = roomId
+        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
+        : devices.map((d) => d.id);
       const snapshot: Record<string, LightState> = {};
-      for (const d of devices) if (states[d.id]) snapshot[d.id] = states[d.id];
-      const scene: StoredScene = { id: uid(), name: name.trim() || "Scene", createdAt: Date.now(), states: snapshot };
+      for (const id of targetIds) if (states[id]) snapshot[id] = states[id];
+      const scene: StoredScene = {
+        id: uid(),
+        name: name.trim() || "Scene",
+        createdAt: Date.now(),
+        states: snapshot,
+        ...(roomId ? { roomId } : {}),
+      };
       await db.putScene(scene);
       setScenes((prev) => [...prev, scene]);
     },
-    [devices, states]
+    [devices, rooms, states]
   );
 
   // Recall a vibe: push each saved state back to its device (best-effort).

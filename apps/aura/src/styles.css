@@ -188,6 +188,11 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .room-name { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .01em; color: var(--ink); }
 .room-master { display: flex; gap: 4px; }
 
+/* per-room scenes (compact, embedded in a room block) */
+.room-scenes { margin-top: 14px; }
+.room-scenes-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 26px; }
+.micro-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+
 /* room management (rooms sheet) */
 .room-rename { flex: 1; min-width: 0; padding: 6px 8px; margin-right: 10px; background: var(--bg-raised); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: inherit; font-size: 14px; }
 .assign-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
