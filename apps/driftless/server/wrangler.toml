@@ -1,0 +1,21 @@
+name = "driftless-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Fill database_id after: npx wrangler d1 create driftless
+[[d1_databases]]
+binding = "DB"
+database_name = "driftless"
+database_id = "93a4c55b-ce71-47fe-b86e-18402aa3913c"
+
+# Encrypted photo blobs (opaque ciphertext). See MEDIA_PLAN.md.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "driftless-media"
+
+[vars]
+# Comma-separated CORS allowlist of origins allowed to call this API. Both the
+# old Pages URL and the new custom domain are listed so sync keeps working on
+# either during/after the domain move. TOKEN_SECRET is a *secret*, set separately:
+#   npx wrangler secret put TOKEN_SECRET
+ALLOWED_ORIGIN = "https://driftless-8nc.pages.dev,https://driftless.page"
