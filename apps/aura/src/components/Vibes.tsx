@@ -5,11 +5,22 @@
 // will land once Aura joins the sync layer.
 import { VIBES } from "@lantern/core";
 
-export function Vibes({ busy, onApply }: { busy: boolean; onApply: (vibeId: string) => void }) {
+export function Vibes({
+  busy,
+  onApply,
+  onAuto,
+}: {
+  busy: boolean;
+  onApply: (vibeId: string) => void;
+  onAuto: () => void;
+}) {
   return (
     <section className="section vibes-section">
       <div className="section-head">
         <h2>Vibe</h2>
+        <button className="btn btn-ghost btn-sm" onClick={onAuto}>
+          Auto…
+        </button>
       </div>
       <div className="vibes">
         {VIBES.map((v) => (
