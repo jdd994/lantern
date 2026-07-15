@@ -5,6 +5,14 @@
   "type": "module",
   "description": "Shared server-side pieces for the lantern apps (Workers + D1). Stores opaque ciphertext only.",
   "exports": {
-    "./auth": "./src/auth.ts"
+    ".": "./src/index.ts",
+    "./auth": "./src/auth.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0"
   }
 }
