@@ -24,17 +24,20 @@ and neither can we — that's the whole point.
 
 ```
 packages/
-  core     @lantern/core   — headless crypto (envelope encryption, verifier,
-                             identity keys) + biometric quick-unlock. No UI.
-  server   @lantern/server — shared server pieces (auth). Stores opaque ciphertext.
+  core     @lantern/core   — headless: crypto (envelope encryption, verifier,
+                             identity), biometric quick-unlock, the vault lifecycle
+                             (pure, tested), the sync reconcile engine, the API client.
+  server   @lantern/server — Workers + D1: auth, and createServer() — the whole base
+                             sync server as a factory. Stores opaque ciphertext only.
+  ui       @lantern/ui     — Sheet, useTheme, ThemePicker, themed by each app's tokens.
 apps/
   driftless  ballast  hearth   — each supplies its own content, domain logic,
-                                  palette, and copy; imports the shared core.
+                                  palette, copy, and config; imports the shared core.
 ```
 
-An npm-workspaces monorepo. The shared spine (crypto, vault lifecycle, sync,
-account, server) lives in `packages/`; each app is its own flavor on top. See
-the design notes for the direction this is extracting toward.
+An npm-workspaces monorepo. The shared spine lives in `packages/`; each app is its
+own flavor on top. See **[ARCHITECTURE.md](ARCHITECTURE.md)** for how an app is built
+on the core, the per-app "taste" points, and what's deliberately not shared.
 
 ## Develop
 
