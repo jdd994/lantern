@@ -3,7 +3,7 @@
 import { Sheet } from "@lantern/ui";
 
 const ITEMS: { title: string; body: string }[] = [
-  { title: "Lights", body: "Tap a light to turn it on or off, drag to dim it, and tap the swatch to change its color." },
+  { title: "Lights", body: "Tap a light to turn it on or off and drag to dim it. Color bulbs show a swatch; white bulbs show a warm-to-cool temperature slider." },
   { title: "Vibe", body: "The row at the top sets a mood across everything in one tap. Make your own with + New, or open Auto… to let the room and time of day choose." },
   { title: "Scenes", body: "Set your lights how you like them, then Save current. One tap later brings that whole look back — per room, or the whole home." },
   { title: "Rooms", body: "Group lights by where they are. Each room has its own vibe and All on / All off. A light lives in one room, or none." },

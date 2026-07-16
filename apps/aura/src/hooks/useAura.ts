@@ -176,7 +176,13 @@ export function useAura() {
   // patch) pushes now; continuous changes (brightness/color) debounce.
   const setDevice = useCallback(
     (deviceId: string, patch: Partial<LightState>, immediate = false) => {
-      setStates((prev) => ({ ...prev, [deviceId]: { ...(prev[deviceId] ?? { on: true }), ...patch } }));
+      setStates((prev) => {
+        const merged: LightState = { ...(prev[deviceId] ?? { on: true }), ...patch };
+        // color and kelvin are mutually exclusive on a bulb — the last one set wins.
+        if (patch.color !== undefined) delete merged.kelvin;
+        if (patch.kelvin !== undefined) delete merged.color;
+        return { ...prev, [deviceId]: merged };
+      });
       pushPending.current[deviceId] = { ...(pushPending.current[deviceId] ?? {}), ...patch };
       clearTimeout(pushTimers.current[deviceId]);
       if (immediate || patch.on !== undefined) {
@@ -294,8 +300,8 @@ export function useAura() {
       // user-made custom vibe.
       const builtin = vibeById(vibeId);
       const custom = customVibes.find((c) => c.id === vibeId);
-      const target: { brightness: number; rgb: Color } | null = builtin
-        ? { brightness: builtin.light.brightness, rgb: builtin.light.rgb }
+      const target: { brightness: number; rgb: Color; kelvin?: number } | null = builtin
+        ? { brightness: builtin.light.brightness, rgb: builtin.light.rgb, kelvin: builtin.light.kelvin }
         : custom
           ? { brightness: custom.brightness, rgb: custom.rgb }
           : null;
@@ -308,7 +314,9 @@ export function useAura() {
         if (!device) continue;
         const patch: Partial<LightState> = { on: true };
         if (device.canBrightness) patch.brightness = target.brightness;
+        // Color bulbs take the vibe's hue; white-only bulbs take its temperature.
         if (device.canColor) patch.color = target.rgb;
+        else if (device.canColorTemp && target.kelvin) patch.kelvin = target.kelvin;
         setDevice(id, patch, true);
       }
     },

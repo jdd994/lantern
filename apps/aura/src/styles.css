@@ -166,7 +166,15 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .toggle-knob { position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: var(--off); transition: transform .2s, background .2s; }
 .toggle[aria-checked="true"] .toggle-knob { transform: translateX(19px); background: #1A1206; }
 
-.device-controls { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.device-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; margin-top: 14px; }
+.device-controls .dim, .device-controls .temp { min-width: 110px; }
+
+/* white temperature slider — warm to cool */
+.temp { -webkit-appearance: none; appearance: none; flex: 1; height: 6px; padding: 0; border: none; border-radius: 999px; background: linear-gradient(90deg, #FFB146, #FFEFD6 52%, #CFE0FF); }
+.temp:focus { box-shadow: 0 0 0 3px var(--glow-dim); }
+.temp::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+.temp::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid var(--surface); cursor: pointer; }
+.temp:disabled { opacity: .4; }
 
 /* brightness slider */
 .dim { -webkit-appearance: none; appearance: none; flex: 1; height: 6px; padding: 0; border: none; border-radius: 999px; background: var(--surface-2); box-shadow: none; }

@@ -126,6 +126,7 @@ export const hue: Connector = {
         sourceId: "hue",
         canBrightness: !!l.dimming,
         canColor: !!l.color,
+        canColorTemp: !!l.color_temperature,
         raw: { rid: l.id } satisfies HueRaw,
       })
     );
@@ -137,7 +138,13 @@ export const hue: Connector = {
     const l = data?.data?.[0] ?? {};
     const state: LightState = { on: !!l.on?.on };
     if (typeof l.dimming?.brightness === "number") state.brightness = l.dimming.brightness;
-    if (l.color?.xy) state.color = xyToRgb(l.color.xy, l.dimming?.brightness ?? 100);
+    // Hue reports color temperature as "mirek" (micro-reciprocal kelvin). When it's
+    // valid the light is in white mode; otherwise report its xy color.
+    if (l.color_temperature?.mirek_valid && typeof l.color_temperature.mirek === "number") {
+      state.kelvin = Math.round(1e6 / l.color_temperature.mirek);
+    } else if (l.color?.xy) {
+      state.color = xyToRgb(l.color.xy, l.dimming?.brightness ?? 100);
+    }
     return state;
   },
 
@@ -149,6 +156,10 @@ export const hue: Connector = {
       body.dimming = { brightness: Math.max(0, Math.min(100, Math.round(patch.brightness))) };
     }
     if (patch.color !== undefined) body.color = { xy: rgbToXy(patch.color) };
+    if (patch.kelvin !== undefined) {
+      // mirek is 1e6/kelvin, clamped to Hue's 153–500 range (~6535K–2000K).
+      body.color_temperature = { mirek: Math.max(153, Math.min(500, Math.round(1e6 / patch.kelvin))) };
+    }
     await call(cred, `/resource/light/${rid}`, { method: "PUT", body: JSON.stringify(body) });
   },
 };

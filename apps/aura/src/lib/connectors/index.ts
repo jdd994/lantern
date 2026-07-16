@@ -5,11 +5,14 @@
 
 export type Color = { r: number; g: number; b: number };
 
-// A light's state, normalized across brands. brightness is 0–100.
+// A light's state, normalized across brands. brightness is 0–100; kelvin is a white
+// color temperature (~2000 warm … 6500 cool). color and kelvin are mutually
+// exclusive on a bulb — setting one is what the light is doing.
 export type LightState = {
   on: boolean;
   brightness?: number;
   color?: Color;
+  kelvin?: number;
 };
 
 export type Device = {
@@ -18,6 +21,7 @@ export type Device = {
   sourceId: string; // which brand/source this belongs to
   canBrightness: boolean;
   canColor: boolean;
+  canColorTemp: boolean;
   // Brand-specific handle the connector needs to control it — opaque to the app.
   raw: unknown;
 };
