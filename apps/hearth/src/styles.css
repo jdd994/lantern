@@ -273,3 +273,11 @@ input::placeholder { color: var(--ink-faint); }
 .chip-x:hover { color: var(--ink); }
 .chip-btn { cursor: pointer; }
 .chip-btn.is-on { border-color: var(--ember); color: var(--ink); background: var(--ember-dim); }
+
+/* ---- shared kitchens ---- */
+.kitchen { border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg-raised); padding: 12px 13px; margin-bottom: 10px; }
+.kitchen-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.kitchen-name { flex: 1; font-size: 15px; color: var(--ink); }
+.kitchen-role { font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
+.kitchen-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.kitchen-row input { flex: 1; }

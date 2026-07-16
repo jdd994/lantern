@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   exportKeyRaw, importKeyRaw, openJSON, sealJSON, PBKDF2_ITERATIONS, VERIFIER_TEXT,
+  exportPublicKeyB64,
 } from "../lib/crypto";
 import { createVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
 import * as db from "../lib/db";
@@ -21,6 +22,9 @@ import {
 import type { Metric, MetricContent } from "../lib/metrics";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
+import { KITCHEN_META_ID, type Kitchen, type KitchenMeta } from "../lib/kitchen";
+import { unwrapPrivateKey, generateDEK } from "@lantern/core/crypto";
+import { wrapDEKForRecipient, unwrapDEK, importPublicKeyB64 } from "@lantern/core/sharing";
 
 export type Status = "loading" | "setup" | "locked" | "unlocked";
 
@@ -78,6 +82,16 @@ export type Hearth = {
   addPantryItem: (foodId: string, name: string) => Promise<void>;
   removePantryItem: (id: string) => Promise<void>;
 
+  // Shared kitchens — the only part of Hearth another person can see, opt-in per
+  // kitchen. Your log, body metrics and goals never enter one.
+  kitchens: Kitchen[];
+  kitchenBusy: boolean;
+  kitchenError: string | null;
+  createKitchen: (name: string) => Promise<void>;
+  inviteToKitchen: (strandId: string, email: string) => Promise<string | null>;
+  shareRecipe: (strandId: string, recipe: Recipe) => Promise<void>;
+  syncKitchens: () => Promise<void>;
+
   logMetric: (content: MetricContent, at?: number) => Promise<void>;
   removeMetric: (id: string) => Promise<void>;
 };
@@ -100,6 +114,13 @@ export function useHearth(): Hearth {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [plans, setPlans] = useState<PlanEntry[]>([]);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [kitchens, setKitchens] = useState<Kitchen[]>([]);
+  const [kitchenBusy, setKitchenBusy] = useState(false);
+  const [kitchenError, setKitchenError] = useState<string | null>(null);
+  // The identity keypair and each kitchen's key stay in refs — never in React
+  // state, never persisted in the clear. Same discipline as the vault key.
+  const identityRef = useRef<CryptoKeyPair | null>(null);
+  const kitchenKeys = useRef<Map<string, { dek: CryptoKey; dekEpoch: number }>>(new Map());
   const [canBiometric, setCanBiometric] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
 
@@ -274,6 +295,9 @@ export function useHearth(): Hearth {
     setMetrics([]);
     setPlans([]);
     setPantry([]);
+    setKitchens([]);
+    identityRef.current = null;
+    kitchenKeys.current.clear();
     setError(null);
     setStatus("locked");
   }, []);
@@ -600,6 +624,151 @@ export function useHearth(): Hearth {
   // ---- derived -----------------------------------------------------------
   const { from, to } = dayBounds(Date.now());
   const today = windowTotal(logs, from, to);
+  // ---- shared kitchens ----------------------------------------------------
+  // A kitchen has its own key. Its recipes are encrypted with THAT key, and every
+  // member holds a copy of it wrapped to their identity key — so the server (and
+  // anyone who breaches it) sees only ciphertext and membership, never a recipe.
+  //
+  // Nothing here is stored locally: a kitchen is pulled fresh each session and
+  // decrypted into memory. Sharing a kitchen shares RECIPES — never your food log,
+  // your body metrics, or your goals. Cooking one logs privately to you.
+
+  // The identity keypair, unwrapped with the vault key. It's what makes a kitchen's
+  // key deliverable to you and to nobody else.
+  const ensureIdentity = useCallback(async (): Promise<CryptoKeyPair | null> => {
+    if (identityRef.current) return identityRef.current;
+    const key = keyRef.current;
+    const vault = await db.getVault();
+    if (!key || !vault?.identityPublic || !vault?.identityPrivate) return null;
+    try {
+      identityRef.current = {
+        publicKey: await importPublicKeyB64(vault.identityPublic),
+        privateKey: await unwrapPrivateKey(key, vault.identityPrivate),
+      };
+      return identityRef.current;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const syncKitchens = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    const kp = await ensureIdentity();
+    if (!kp) return;
+    setKitchenBusy(true);
+    setKitchenError(null);
+    try {
+      const { strands } = await api.sharedMine(token);
+      const next: Kitchen[] = [];
+      for (const s of strands) {
+        let entry = kitchenKeys.current.get(s.strandId);
+        // New to us, or re-keyed because someone was removed — unwrap our copy again.
+        if (!entry || entry.dekEpoch !== s.dekEpoch) {
+          try {
+            entry = { dek: await unwrapDEK(kp.privateKey, s.ephemeralPub, s.wrappedDEK), dekEpoch: s.dekEpoch };
+            kitchenKeys.current.set(s.strandId, entry);
+          } catch {
+            continue; // can't unwrap our copy — skip rather than guess
+          }
+        }
+        const { changes } = await api.sharedPull(token, s.strandId, 0);
+        let name = "Kitchen";
+        const shared: Recipe[] = [];
+        for (const ch of changes) {
+          if (ch.deleted) continue;
+          try {
+            if (ch.kind === "meta") {
+              name = (await openJSON<KitchenMeta>(entry.dek, ch.content)).name || name;
+            } else if (ch.kind === "recipe") {
+              shared.push({ ...(await openJSON<RecipeContent>(entry.dek, ch.content)), id: ch.id });
+            }
+          } catch {
+            // one unreadable record shouldn't blank the whole kitchen
+          }
+        }
+        next.push({ strandId: s.strandId, ownerId: s.ownerId, role: s.role, dekEpoch: s.dekEpoch, name, recipes: shared });
+      }
+      setKitchens(next);
+    } catch (e) {
+      setKitchenError(e instanceof Error ? e.message : "Couldn't reach your kitchens just now.");
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, [ensureIdentity]);
+
+  const createKitchen = useCallback(async (name: string) => {
+    const token = tokenRef.current;
+    if (!token) { setKitchenError("Connect an account first — a kitchen is shared through it."); return; }
+    const kp = await ensureIdentity();
+    if (!kp) { setKitchenError("This vault has no identity key. Re-create it to share."); return; }
+    setKitchenBusy(true);
+    setKitchenError(null);
+    try {
+      const dek = await generateDEK();
+      const strandId = uid();
+      const mine = await wrapDEKForRecipient(await exportPublicKeyB64(kp.publicKey), dek);
+      await api.createShared(token, strandId, mine.ephemeralPub, mine.wrappedDEK);
+      kitchenKeys.current.set(strandId, { dek, dekEpoch: 1 });
+      const now = Date.now();
+      await api.sharedPush(token, strandId, [{
+        kind: "meta", id: KITCHEN_META_ID, createdAt: now, updatedAt: now,
+        deleted: false, dekEpoch: 1,
+        content: await sealJSON(dek, { name: name.trim() || "Our kitchen" } as KitchenMeta),
+      }]);
+      await syncKitchens();
+    } catch (e) {
+      setKitchenError(e instanceof Error ? e.message : "Couldn't make that kitchen.");
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, [ensureIdentity, syncKitchens]);
+
+  // Invite by an address you already know — there's no directory to browse. We
+  // fetch their public key and wrap THIS kitchen's key to it; the server only ever
+  // relays the wrapped copy.
+  const inviteToKitchen = useCallback(async (strandId: string, email: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    const entry = kitchenKeys.current.get(strandId);
+    if (!token || !entry) return "That kitchen isn't ready yet.";
+    setKitchenBusy(true);
+    try {
+      const { identityPublicKey } = await api.fetchKeys(token, email.trim().toLowerCase());
+      if (!identityPublicKey) return "They have an account, but no key to share with yet — ask them to open Hearth once.";
+      const wrapped = await wrapDEKForRecipient(identityPublicKey, entry.dek);
+      await api.inviteToStrand(token, strandId, email.trim().toLowerCase(), wrapped.ephemeralPub, wrapped.wrappedDEK, entry.dekEpoch);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't invite them just now.";
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, []);
+
+  // Put one of your recipes in a kitchen. It's copied in (encrypted with the
+  // kitchen's key); your own copy stays yours.
+  const shareRecipe = useCallback(async (strandId: string, recipe: Recipe) => {
+    const token = tokenRef.current;
+    const entry = kitchenKeys.current.get(strandId);
+    if (!token || !entry) return;
+    setKitchenBusy(true);
+    setKitchenError(null);
+    try {
+      const now = Date.now();
+      const { id: _id, ...content } = recipe;
+      await api.sharedPush(token, strandId, [{
+        kind: "recipe", id: uid(), createdAt: now, updatedAt: now,
+        deleted: false, dekEpoch: entry.dekEpoch,
+        content: await sealJSON(entry.dek, content as RecipeContent),
+      }]);
+      await syncKitchens();
+    } catch (e) {
+      setKitchenError(e instanceof Error ? e.message : "Couldn't share that recipe.");
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, [syncKitchens]);
+
   const progressFor = useCallback((g: Goal) => goalProgress(g, today), [today]);
 
   return {
@@ -611,6 +780,7 @@ export function useHearth(): Hearth {
     addRecipe, removeRecipe, logRecipeServing,
     addPlan, removePlan, cookPlan,
     addPantryItem, removePantryItem,
+    kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
     logMetric, removeMetric,
   };
 }
