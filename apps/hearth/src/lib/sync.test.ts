@@ -39,7 +39,7 @@ const blob = (n: number): CipherBlob => ({ iv: [n], data: [n, n] });
 
 async function wipeLocal() {
   const raw = await openDB("hearth", DB_VERSION);
-  for (const s of ["foodLogs", "metrics", "goals", "recipes", "mealPlans", "sync"]) {
+  for (const s of ["foodLogs", "metrics", "goals", "recipes", "mealPlans", "pantry", "sync"]) {
     if (raw.objectStoreNames.contains(s)) await raw.clear(s);
   }
   raw.close();

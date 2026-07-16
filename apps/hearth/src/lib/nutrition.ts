@@ -138,6 +138,9 @@ export type RecipeContent = {
   name: string;
   ingredients: RecipeIngredient[];
   servings: number; // how many servings the whole recipe makes (>= 1)
+  // Free-form moods/cuisines you choose ("asian", "quick", "comfort"). Yours, not
+  // an imposed taxonomy — the UI only ever offers back the tags you've used.
+  tags?: string[];
 };
 
 export type Recipe = RecipeContent & { id: string };

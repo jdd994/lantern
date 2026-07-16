@@ -11,7 +11,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob, WrappedKey } from "./crypto";
 
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export type VaultMeta = {
   id: "vault";
@@ -57,6 +57,10 @@ export type StoredRecipe = Syncable & { content: CipherBlob };
 // decrypting everything.
 export type StoredMealPlan = Syncable & { at: number; content: CipherBlob };
 
+// content encrypts a PantryContent ({ foodId, name }) — what's in your cupboard
+// is nobody's business either.
+export type StoredPantryItem = Syncable & { content: CipherBlob };
+
 export type SyncState = { id: "state"; cursor: number; token?: string; accountEmail?: string };
 
 export type DeviceEnrollment = {
@@ -73,6 +77,7 @@ interface HearthDB extends DBSchema {
   goals: { key: string; value: StoredGoal };
   recipes: { key: string; value: StoredRecipe };
   mealPlans: { key: string; value: StoredMealPlan; indexes: { byTime: number } };
+  pantry: { key: string; value: StoredPantryItem };
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
 }
@@ -97,6 +102,9 @@ function db() {
         if (oldVersion < 2) {
           const plans = database.createObjectStore("mealPlans", { keyPath: "id" });
           plans.createIndex("byTime", "at");
+        }
+        if (oldVersion < 3) {
+          database.createObjectStore("pantry", { keyPath: "id" });
         }
       },
     });
@@ -155,6 +163,14 @@ export async function putMealPlan(p: StoredMealPlan): Promise<void> {
   await (await db()).put("mealPlans", p);
 }
 
+// ---- pantry --------------------------------------------------------------
+export async function allPantry(): Promise<StoredPantryItem[]> {
+  return (await db()).getAll("pantry");
+}
+export async function putPantryItem(p: StoredPantryItem): Promise<void> {
+  await (await db()).put("pantry", p);
+}
+
 // ---- sync + device -------------------------------------------------------
 export async function getSyncState(): Promise<SyncState | undefined> {
   return (await db()).get("sync", "state");
@@ -193,12 +209,14 @@ export async function dirtyRecords(): Promise<{
 // These map a kind to its store and give get/put/clear-dirty/mark-all by kind,
 // so lib/sync.ts stays small.
 
-export type SyncKind = "foodLog" | "metric" | "goal" | "recipe" | "mealPlan";
-export type AnyStored = StoredFoodLog | StoredMetric | StoredGoal | StoredRecipe | StoredMealPlan;
-const KIND_STORE: Record<SyncKind, "foodLogs" | "metrics" | "goals" | "recipes" | "mealPlans"> = {
-  foodLog: "foodLogs", metric: "metrics", goal: "goals", recipe: "recipes", mealPlan: "mealPlans",
+export type SyncKind = "foodLog" | "metric" | "goal" | "recipe" | "mealPlan" | "pantryItem";
+export type AnyStored =
+  | StoredFoodLog | StoredMetric | StoredGoal | StoredRecipe | StoredMealPlan | StoredPantryItem;
+const KIND_STORE: Record<SyncKind, "foodLogs" | "metrics" | "goals" | "recipes" | "mealPlans" | "pantry"> = {
+  foodLog: "foodLogs", metric: "metrics", goal: "goals", recipe: "recipes",
+  mealPlan: "mealPlans", pantryItem: "pantry",
 };
-export const SYNC_KINDS: SyncKind[] = ["foodLog", "metric", "goal", "recipe", "mealPlan"];
+export const SYNC_KINDS: SyncKind[] = ["foodLog", "metric", "goal", "recipe", "mealPlan", "pantryItem"];
 
 export async function getStoredByKind(kind: SyncKind, id: string): Promise<AnyStored | undefined> {
   return (await db()).get(KIND_STORE[kind], id) as Promise<AnyStored | undefined>;
@@ -224,7 +242,7 @@ export async function markAllDirty(): Promise<void> {
   }
 }
 
-const ALL_STORES = ["vault", "foodLogs", "metrics", "goals", "recipes", "mealPlans", "sync", "device"] as const;
+const ALL_STORES = ["vault", "foodLogs", "metrics", "goals", "recipes", "mealPlans", "pantry", "sync", "device"] as const;
 
 // Wipe everything (forget this device). Without the passphrase nothing readable
 // remains anywhere anyway.
