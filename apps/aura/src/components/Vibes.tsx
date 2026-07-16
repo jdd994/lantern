@@ -1,18 +1,24 @@
-// Vibes.tsx — the shared vibe layer, made visible. These moods come from
-// @lantern/core (not Aura), so they're the same words Driftless and the others
-// speak; tapping one sets the whole space to that atmosphere. Today you set the
-// vibe here by hand; the same entry point is where a vibe arriving from another app
-// will land once Aura joins the sync layer.
+// Vibes.tsx — the shared vibe layer, made visible. The six built-in moods come from
+// @lantern/core (the same words the other apps speak); your own custom vibes sit
+// right beside them. Tapping one sets the whole space to that atmosphere.
 import { VIBES } from "@lantern/core";
+import { rgbToHex } from "../lib/color";
+import type { CustomVibe } from "../lib/db";
 
 export function Vibes({
   busy,
+  customVibes,
   onApply,
   onAuto,
+  onAddVibe,
+  onRemoveVibe,
 }: {
   busy: boolean;
+  customVibes: CustomVibe[];
   onApply: (vibeId: string) => void;
   onAuto: () => void;
+  onAddVibe: () => void;
+  onRemoveVibe: (id: string) => void;
 }) {
   return (
     <section className="section vibes-section">
@@ -35,6 +41,27 @@ export function Vibes({
             {v.label}
           </button>
         ))}
+
+        {customVibes.map((v) => (
+          <span className="vibe-wrap" key={v.id}>
+            <button className="vibe" disabled={busy} onClick={() => onApply(v.id)}>
+              <span className="vibe-dot" style={{ background: rgbToHex(v.rgb) }} />
+              {v.label}
+            </button>
+            <button
+              className="scene-x"
+              aria-label={`Remove ${v.label}`}
+              title="Remove"
+              onClick={() => onRemoveVibe(v.id)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+
+        <button className="vibe vibe-add" onClick={onAddVibe} title="Make your own vibe">
+          + New
+        </button>
       </div>
     </section>
   );

@@ -16,7 +16,8 @@ import {
   type Coords,
   type Trigger,
 } from "../lib/automations";
-import type { StoredScene, StoredSource } from "../lib/db";
+import type { Color } from "../lib/connectors";
+import type { CustomVibe, StoredScene, StoredSource } from "../lib/db";
 
 const GEO_KEY = "aura-geo";
 const readGeo = (): Coords | null => {
@@ -36,6 +37,7 @@ export function useAura() {
   const [scenes, setScenes] = useState<StoredScene[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
+  const [customVibes, setCustomVibes] = useState<CustomVibe[]>([]);
   const [coords, setCoords] = useState<Coords | null>(readGeo);
   const [states, setStates] = useState<Record<string, LightState>>({});
   const [busy, setBusy] = useState(false);
@@ -66,18 +68,20 @@ export function useAura() {
 
   useEffect(() => {
     (async () => {
-      const [srcs, devs, scns, rms, autos] = await Promise.all([
+      const [srcs, devs, scns, rms, autos, cvibes] = await Promise.all([
         db.allSources(),
         db.allDevices(),
         db.allScenes(),
         db.allRooms(),
         db.allAutomations(),
+        db.allCustomVibes(),
       ]);
       setSources(srcs);
       setDevices(devs);
       setScenes(scns.sort((a, b) => a.createdAt - b.createdAt));
       setRooms(rms);
       setAutomations(autos.sort((a, b) => a.name.localeCompare(b.name)));
+      setCustomVibes(cvibes.sort((a, b) => a.createdAt - b.createdAt));
       if (devs.length) void loadStates(devs, srcs);
     })();
   }, [loadStates]);
@@ -276,8 +280,16 @@ export function useAura() {
   // (brightness / color); the vibe stays medium-agnostic, Aura renders it in light.
   const applyVibe = useCallback(
     (vibeId: string, roomId?: string) => {
-      const v = vibeById(vibeId);
-      if (!v) return;
+      // Resolve the light target from either a built-in (@lantern/core) or a
+      // user-made custom vibe.
+      const builtin = vibeById(vibeId);
+      const custom = customVibes.find((c) => c.id === vibeId);
+      const target: { brightness: number; rgb: Color } | null = builtin
+        ? { brightness: builtin.light.brightness, rgb: builtin.light.rgb }
+        : custom
+          ? { brightness: custom.brightness, rgb: custom.rgb }
+          : null;
+      if (!target) return;
       const targetIds = roomId
         ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
         : devices.map((d) => d.id);
@@ -285,13 +297,24 @@ export function useAura() {
         const device = devices.find((d) => d.id === id);
         if (!device) continue;
         const patch: Partial<LightState> = { on: true };
-        if (device.canBrightness) patch.brightness = v.light.brightness;
-        if (device.canColor) patch.color = v.light.rgb;
+        if (device.canBrightness) patch.brightness = target.brightness;
+        if (device.canColor) patch.color = target.rgb;
         setDevice(id, patch, true);
       }
     },
-    [devices, rooms, setDevice]
+    [devices, rooms, customVibes, setDevice]
   );
+
+  const createCustomVibe = useCallback(async (label: string, rgb: Color, brightness: number) => {
+    const v: CustomVibe = { id: uid(), label: label.trim() || "My vibe", rgb, brightness, createdAt: Date.now() };
+    await db.putCustomVibe(v);
+    setCustomVibes((prev) => [...prev, v]);
+  }, []);
+
+  const removeCustomVibe = useCallback(async (id: string) => {
+    await db.deleteCustomVibe(id);
+    setCustomVibes((prev) => prev.filter((v) => v.id !== id));
+  }, []);
 
   // ---- automations: "when <trigger>, do <action>" -------------------------
   // Ask the OS for location, once, so sun-based triggers can be computed. Stored
@@ -383,10 +406,10 @@ export function useAura() {
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
-    sources, devices, scenes, rooms, automations, coords, states, busy, error, connected,
+    sources, devices, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
-    applyVibe,
+    applyVibe, createCustomVibe, removeCustomVibe,
   };
 }

@@ -8,6 +8,7 @@ import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
 import { Vibes } from "./components/Vibes";
+import { CustomVibeSheet } from "./components/CustomVibeSheet";
 import { AmbientSheet } from "./components/AmbientSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
@@ -27,6 +28,7 @@ export default function App() {
   const [managingRooms, setManagingRooms] = useState(false);
   const [automating, setAutomating] = useState(false);
   const [ambient, setAmbient] = useState(false);
+  const [creatingVibe, setCreatingVibe] = useState(false);
   const sections = groupByRoom(aura.devices, aura.rooms);
 
   return (
@@ -66,7 +68,14 @@ export default function App() {
       ) : (
         <>
           {aura.devices.length > 0 && (
-            <Vibes busy={aura.busy} onApply={(id) => aura.applyVibe(id)} onAuto={() => setAmbient(true)} />
+            <Vibes
+              busy={aura.busy}
+              customVibes={aura.customVibes}
+              onApply={(id) => aura.applyVibe(id)}
+              onAuto={() => setAmbient(true)}
+              onAddVibe={() => setCreatingVibe(true)}
+              onRemoveVibe={aura.removeCustomVibe}
+            />
           )}
 
           <section className="section">
@@ -171,6 +180,9 @@ export default function App() {
           onRemove={aura.removeAutomation}
           onClose={() => setAutomating(false)}
         />
+      )}
+      {creatingVibe && (
+        <CustomVibeSheet onCreate={aura.createCustomVibe} onClose={() => setCreatingVibe(false)} />
       )}
       {ambient && (
         <AmbientSheet onApplyVibe={(id) => aura.applyVibe(id)} onClose={() => setAmbient(false)} />
