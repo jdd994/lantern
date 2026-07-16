@@ -7,6 +7,7 @@ import { LogFood } from "./components/LogFood";
 import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
+import { Plan, AddPlan } from "./components/Plan";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Gear } from "./components/icons";
@@ -24,6 +25,8 @@ export default function App() {
   const [addingRecipe, setAddingRecipe] = useState(false);
   const [loggingMetric, setLoggingMetric] = useState(false);
   const [sync, setSync] = useState(false);
+  const [weekOf, setWeekOf] = useState(() => Date.now());
+  const [planningDay, setPlanningDay] = useState<number | null>(null);
   const [settings, setSettings] = useState(false);
   const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
 
@@ -118,6 +121,17 @@ export default function App() {
         />
       </section>
 
+      <Plan
+        plans={h.plans}
+        recipes={h.recipes}
+        busy={h.busy}
+        weekOf={weekOf}
+        onWeek={setWeekOf}
+        onCook={(e) => void h.cookPlan(e)}
+        onRemove={(id) => void h.removePlan(id)}
+        onAdd={(day) => setPlanningDay(day)}
+      />
+
       <section className="section">
         <div className="section-head">
           <h2 className="section-title">Eaten today</h2>
@@ -158,6 +172,14 @@ export default function App() {
       ) : null}
       {addingGoal ? <AddGoal onAdd={h.addGoal} onClose={() => setAddingGoal(false)} /> : null}
       {addingRecipe ? <AddRecipe onAdd={h.addRecipe} onClose={() => setAddingRecipe(false)} /> : null}
+      {planningDay !== null ? (
+        <AddPlan
+          day={planningDay}
+          recipes={h.recipes}
+          onAdd={h.addPlan}
+          onClose={() => setPlanningDay(null)}
+        />
+      ) : null}
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
       {settings ? (
         <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />

@@ -9,6 +9,7 @@ import "fake-indexeddb/auto";
 import { openDB } from "idb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CipherBlob } from "./crypto";
+import { DB_VERSION } from "./db";
 
 type Row = {
   kind: string; id: string; createdAt: number; updatedAt: number;
@@ -37,8 +38,8 @@ vi.mock("./api", () => ({
 const blob = (n: number): CipherBlob => ({ iv: [n], data: [n, n] });
 
 async function wipeLocal() {
-  const raw = await openDB("hearth", 1);
-  for (const s of ["foodLogs", "metrics", "goals", "recipes", "sync"]) {
+  const raw = await openDB("hearth", DB_VERSION);
+  for (const s of ["foodLogs", "metrics", "goals", "recipes", "mealPlans", "sync"]) {
     if (raw.objectStoreNames.contains(s)) await raw.clear(s);
   }
   raw.close();
@@ -119,7 +120,7 @@ describe("sync reconcile engine", () => {
 
     await wipeLocal();
     await pull("t");
-    const raw = await openDB("hearth", 1);
+    const raw = await openDB("hearth", DB_VERSION);
     const got = await raw.get("foodLogs", "f-1");
     raw.close();
     expect(got!.deleted).toBe(true);
