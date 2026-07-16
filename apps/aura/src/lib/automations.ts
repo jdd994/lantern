@@ -25,9 +25,18 @@ export type Automation = {
   name: string;
   enabled: boolean;
   trigger: Trigger;
-  action: Action;
+  actions?: Action[]; // one trigger can do several things
+  action?: Action; // legacy single action (pre-multi); read via actionsOf
+  days?: number[]; // weekdays it may fire on (0=Sun..6=Sat); empty/undefined = every day
   lastRun?: string; // "YYYY-MM-DD" (local) — once-per-day dedupe
 };
+
+// The actions to run, tolerant of the legacy single-action shape.
+export function actionsOf(a: Automation): Action[] {
+  return a.actions && a.actions.length ? a.actions : a.action ? [a.action] : [];
+}
+
+const allowedToday = (a: Automation, now: Date) => !a.days?.length || a.days.includes(now.getDay());
 
 export const ymd = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -57,6 +66,7 @@ export function dueAutomations(
   const graceMs = graceMinutes * 60_000;
   return list.filter((a) => {
     if (!a.enabled || a.lastRun === today) return false;
+    if (!allowedToday(a, now)) return false;
     const fire = fireTimeOn(a, now, coords);
     if (!fire) return false;
     const delta = now.getTime() - fire.getTime();
@@ -64,12 +74,15 @@ export function dueAutomations(
   });
 }
 
-// The next time this automation will fire (today if still ahead, else tomorrow) —
-// for display. null if it can't be computed (sun trigger without coords).
+// The next time this automation will fire — for display. Scans forward up to a week
+// to honor the weekday filter. null if it can't be computed (sun trigger, no coords).
 export function nextFire(a: Automation, now: Date, coords: Coords | null): Date | null {
-  const todayFire = fireTimeOn(a, now, coords);
-  if (todayFire && todayFire.getTime() > now.getTime()) return todayFire;
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  return fireTimeOn(a, tomorrow, coords);
+  for (let i = 0; i <= 8; i++) {
+    const day = new Date(now);
+    day.setDate(now.getDate() + i);
+    if (a.days?.length && !a.days.includes(day.getDay())) continue;
+    const fire = fireTimeOn(a, day, coords);
+    if (fire && fire.getTime() > now.getTime()) return fire;
+  }
+  return null;
 }

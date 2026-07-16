@@ -1,11 +1,18 @@
-// AutomationsSheet.tsx — "when <trigger>, do <action>." Calm and finite: a clock
-// time or a sun event, then a scene / room / all-off. Sun triggers need your
-// location once (for the maths); we ask only when you pick one. Honest note in the
-// footer: these run while Aura is open — background firing arrives with the desktop
-// app.
+// AutomationsSheet.tsx — "when <trigger> [on <days>], do <these things>." Calm and
+// finite: a clock time or a sun event, an optional weekday filter, and one or more
+// actions (scene / room / all off). Sun triggers need your location once (asked only
+// when you pick one). These run while Aura is open — background firing arrives with
+// the desktop app.
 import { useMemo, useState } from "react";
 import { Sheet } from "@lantern/ui";
-import { nextFire, type Action, type Automation, type Coords, type Trigger } from "../lib/automations";
+import {
+  actionsOf,
+  nextFire,
+  type Action,
+  type Automation,
+  type Coords,
+  type Trigger,
+} from "../lib/automations";
 import type { StoredScene } from "../lib/db";
 import type { Room } from "../lib/rooms";
 
@@ -20,6 +27,8 @@ const parseHHMM = (v: string): number => {
   return (h || 0) * 60 + (m || 0);
 };
 const offsetLabel = (o: number) => (o === 0 ? "" : o > 0 ? ` +${o}m` : ` −${Math.abs(o)}m`);
+const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function describeTrigger(t: Trigger): string {
   if (t.kind === "time") return fmtMinutes(t.minutes);
@@ -31,18 +40,31 @@ function describeAction(a: Action, scenes: StoredScene[], rooms: Room[]): string
   const room = rooms.find((r) => r.id === a.roomId)?.name ?? "Room";
   return `${room} ${a.on ? "on" : "off"}`;
 }
+function describeDays(days?: number[]): string {
+  if (!days?.length) return "";
+  const set = [...days].sort();
+  if (set.length === 7) return "";
+  if (set.join() === "1,2,3,4,5") return " · weekdays";
+  if (set.join() === "0,6") return " · weekends";
+  return " · " + set.map((d) => DAY_NAMES[d]).join(", ");
+}
 function describeNext(a: Automation, coords: Coords | null): string | null {
   const n = nextFire(a, new Date(), coords);
   if (!n) return null;
   const now = new Date();
-  const sameDay = n.toDateString() === now.toDateString();
   const tom = new Date(now);
   tom.setDate(now.getDate() + 1);
-  const when = sameDay ? "today" : n.toDateString() === tom.toDateString() ? "tomorrow" : "";
-  return `Next: ${when} ${fmtTime(n)}`.replace("  ", " ");
+  const when =
+    n.toDateString() === now.toDateString()
+      ? "today"
+      : n.toDateString() === tom.toDateString()
+        ? "tomorrow"
+        : DAY_NAMES[n.getDay()];
+  return `Next: ${when} ${fmtTime(n)}`;
 }
 
 type ActionChoice = "scene" | "roomOn" | "roomOff" | "allOff";
+type ActionRow = { kind: ActionChoice; sceneId: string; roomId: string };
 
 export function AutomationsSheet({
   automations,
@@ -60,7 +82,7 @@ export function AutomationsSheet({
   rooms: Room[];
   coords: Coords | null;
   onRequestLocation: () => Promise<Coords | null>;
-  onAdd: (name: string, trigger: Trigger, action: Action) => void;
+  onAdd: (name: string, trigger: Trigger, actions: Action[], days: number[]) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
@@ -68,9 +90,10 @@ export function AutomationsSheet({
   const [triggerKind, setTriggerKind] = useState<"time" | "sunset" | "sunrise">("sunset");
   const [timeValue, setTimeValue] = useState("18:00");
   const [offsetMin, setOffsetMin] = useState(0);
+  const [days, setDays] = useState<number[]>([]);
   const [locating, setLocating] = useState(false);
 
-  const actionChoices = useMemo<{ id: ActionChoice; label: string; disabled?: boolean }[]>(
+  const choices = useMemo<{ id: ActionChoice; label: string; disabled?: boolean }[]>(
     () => [
       { id: "scene", label: "Apply a scene", disabled: scenes.length === 0 },
       { id: "roomOff", label: "Turn a room off", disabled: rooms.length === 0 },
@@ -79,30 +102,39 @@ export function AutomationsSheet({
     ],
     [scenes.length, rooms.length]
   );
-  const [actionKind, setActionKind] = useState<ActionChoice>(scenes.length ? "scene" : "allOff");
-  const [sceneId, setSceneId] = useState(scenes[0]?.id ?? "");
-  const [roomId, setRoomId] = useState(rooms[0]?.id ?? "");
+  const [rows, setRows] = useState<ActionRow[]>([
+    { kind: scenes.length ? "scene" : "allOff", sceneId: scenes[0]?.id ?? "", roomId: rooms[0]?.id ?? "" },
+  ]);
 
   const needsLocation = triggerKind !== "time" && !coords;
 
-  function buildTrigger(): Trigger {
-    if (triggerKind === "time") return { kind: "time", minutes: parseHHMM(timeValue) };
-    return { kind: "sun", event: triggerKind, offsetMin };
-  }
-  function buildAction(): Action {
-    if (actionKind === "scene") return { kind: "scene", sceneId };
-    if (actionKind === "allOff") return { kind: "allOff" };
-    return { kind: "roomPower", roomId, on: actionKind === "roomOn" };
-  }
+  const buildTrigger = (): Trigger =>
+    triggerKind === "time"
+      ? { kind: "time", minutes: parseHHMM(timeValue) }
+      : { kind: "sun", event: triggerKind, offsetMin };
+
+  const rowToAction = (r: ActionRow): Action =>
+    r.kind === "scene"
+      ? { kind: "scene", sceneId: r.sceneId }
+      : r.kind === "allOff"
+        ? { kind: "allOff" }
+        : { kind: "roomPower", roomId: r.roomId, on: r.kind === "roomOn" };
+
+  const toggleDay = (d: number) =>
+    setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  const updateRow = (i: number, patch: Partial<ActionRow>) =>
+    setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const addRow = () =>
+    setRows((prev) => [...prev, { kind: "allOff", sceneId: scenes[0]?.id ?? "", roomId: rooms[0]?.id ?? "" }]);
+  const removeRow = (i: number) => setRows((prev) => prev.filter((_, j) => j !== i));
 
   async function useLocation() {
     setLocating(true);
     await onRequestLocation();
     setLocating(false);
   }
-
   function add() {
-    onAdd("", buildTrigger(), buildAction());
+    onAdd("", buildTrigger(), rows.map(rowToAction), days);
   }
 
   return (
@@ -114,9 +146,14 @@ export function AutomationsSheet({
           {automations.map((a) => (
             <li className={"auto-row" + (a.enabled ? "" : " off")} key={a.id}>
               <div className="auto-main">
-                <span className="auto-when">{describeTrigger(a.trigger)}</span>
+                <span className="auto-when">
+                  {describeTrigger(a.trigger)}
+                  <span className="auto-days">{describeDays(a.days)}</span>
+                </span>
                 <span className="auto-arrow">→</span>
-                <span className="auto-do">{describeAction(a.action, scenes, rooms)}</span>
+                <span className="auto-do">
+                  {actionsOf(a).map((x) => describeAction(x, scenes, rooms)).join(" + ")}
+                </span>
                 {a.enabled && describeNext(a, coords) && (
                   <span className="auto-next">{describeNext(a, coords)}</span>
                 )}
@@ -186,42 +223,64 @@ export function AutomationsSheet({
           </div>
         )}
 
-        <label className="field">
-          <span className="label">Do</span>
-          <select value={actionKind} onChange={(e) => setActionKind(e.target.value as ActionChoice)}>
-            {actionChoices.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.disabled}>
-                {c.label}
-              </option>
+        <div className="field">
+          <span className="label">On days (none = every day)</span>
+          <div className="days">
+            {DAY_LETTERS.map((letter, d) => (
+              <button
+                key={d}
+                type="button"
+                className="day"
+                aria-pressed={days.includes(d)}
+                aria-label={DAY_NAMES[d]}
+                onClick={() => toggleDay(d)}
+              >
+                {letter}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
 
-        {actionKind === "scene" && scenes.length > 0 && (
-          <label className="field">
-            <span className="label">Scene</span>
-            <select value={sceneId} onChange={(e) => setSceneId(e.target.value)}>
-              {scenes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {(actionKind === "roomOn" || actionKind === "roomOff") && rooms.length > 0 && (
-          <label className="field">
-            <span className="label">Room</span>
-            <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <div className="field">
+          <span className="label">Do</span>
+          {rows.map((row, i) => (
+            <div className="action-row" key={i}>
+              <select value={row.kind} onChange={(e) => updateRow(i, { kind: e.target.value as ActionChoice })}>
+                {choices.map((c) => (
+                  <option key={c.id} value={c.id} disabled={c.disabled}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              {row.kind === "scene" && scenes.length > 0 && (
+                <select value={row.sceneId} onChange={(e) => updateRow(i, { sceneId: e.target.value })}>
+                  {scenes.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {(row.kind === "roomOn" || row.kind === "roomOff") && rooms.length > 0 && (
+                <select value={row.roomId} onChange={(e) => updateRow(i, { roomId: e.target.value })}>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {rows.length > 1 && (
+                <button className="chip-tool static" aria-label="Remove action" onClick={() => removeRow(i)}>
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <button className="btn btn-ghost btn-sm" onClick={addRow}>
+            + Add action
+          </button>
+        </div>
 
         <div className="sheet-actions">
           <button className="btn btn-primary" onClick={add} disabled={needsLocation}>
