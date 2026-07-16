@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTheme, type ThemeOption } from "@lantern/ui";
+import { useTheme, useAccent, type ThemeOption } from "@lantern/ui";
 import { useAura } from "./hooks/useAura";
 import { groupByRoom } from "./lib/rooms";
 import { ConnectSheet } from "./components/ConnectSheet";
@@ -22,6 +22,7 @@ const THEMES: ThemeOption[] = [
 
 export default function App() {
   const { mood, setMood } = useTheme("aura-mood", THEMES.map((t) => t.id), "warmth");
+  const { accent, setAccent, resetAccent } = useAccent("aura-accent");
   const aura = useAura();
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -192,6 +193,9 @@ export default function App() {
           themes={THEMES}
           mood={mood}
           onMood={setMood}
+          accent={accent}
+          onAccent={setAccent}
+          onResetAccent={resetAccent}
           sources={aura.sources}
           devices={aura.devices}
           onDisconnect={aura.disconnect}
