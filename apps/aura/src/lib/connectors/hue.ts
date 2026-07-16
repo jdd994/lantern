@@ -1,6 +1,7 @@
-// connectors/hue.ts — Philips Hue, via the LOCAL bridge (CLIP v2). STAGED, NOT YET
-// WIRED: this file typechecks and implements the full Connector, but it is
-// deliberately absent from the registry in ./index.ts. Here's the honest why.
+// connectors/hue.ts — Philips Hue, via the LOCAL bridge (CLIP v2). Registered ONLY
+// in the Tauri shell (see ./index.ts): requests go through platform.httpFetch, which
+// under Tauri uses native HTTP and so can reach a LAN bridge. In a plain browser this
+// connector isn't offered, because the browser can't reach it at all. Here's why.
 //
 // Hue has two APIs:
 //   • Local bridge (this file): https://<bridge-ip>/clip/v2 with an application key
@@ -22,6 +23,7 @@
 // "<bridge-ip>|<application-key>".
 import type { Connector, Device, LightState } from "./index";
 import type { Color } from "./index";
+import { httpFetch } from "../platform";
 
 type HueRaw = { rid: string };
 type HueXY = { x: number; y: number };
@@ -66,7 +68,7 @@ function parse(cred: string): { base: string; key: string } {
 
 async function call(cred: string, path: string, init?: RequestInit): Promise<any> {
   const { base, key } = parse(cred);
-  const res = await fetch(base + path, {
+  const res = await httpFetch(base + path, {
     ...init,
     headers: { "hue-application-key": key, "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
