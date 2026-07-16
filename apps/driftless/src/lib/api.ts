@@ -1,8 +1,9 @@
-// api.ts — Driftless's binding to the shared sync client (@lantern/core/api),
-// plus its own endpoints (identity, media, shared strands, invites, feedback)
-// built on the same fetch wrapper. Moves ciphertext + non-secret metadata only.
-import type { CipherBlob, WrappedKey } from "./crypto";
+// api.ts — Driftless's binding to the shared clients: sync (@lantern/core/api) and
+// sharing (@lantern/core/sharing-api). What's left below is genuinely Driftless's
+// own: media (R2 blobs) and the feedback box. Moves ciphertext + non-secret
+// metadata only.
 import { createApiClient, ApiError } from "@lantern/core/api";
+import { createSharingClient } from "@lantern/core/sharing-api";
 
 export { ApiError };
 export type { VaultMetaDTO } from "@lantern/core/api";
@@ -18,27 +19,17 @@ const req = client.req;
 
 export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
 
-// Set/update this account's identity keypair (migrate old accounts + rotation).
-export function setIdentity(
-  token: string,
-  identityPublicKey: string,
-  identityPrivWrapped: WrappedKey
-): Promise<{ ok: boolean }> {
-  return req("/identity", { method: "POST", token, body: { identityPublicKey, identityPrivWrapped } });
-}
-
-// This account's own user id (for authorship of shared pieces).
-export function fetchMe(token: string): Promise<{ userId: string }> {
-  return req("/me", { token });
-}
-
-// Public-key directory (for sharing invites).
-export function fetchKeys(
-  token: string,
-  email: string
-): Promise<{ identityPublicKey: string | null }> {
-  return req(`/keys?email=${encodeURIComponent(email)}`, { token });
-}
+// Sharing speaks the shared protocol (@lantern/core/sharing-api) — same names the
+// app has always imported, so nothing above this line had to change.
+export type {
+  SharedRecord, SharedStrandInfo, StrandMember, InviteInfo,
+} from "@lantern/core/sharing-api";
+export const {
+  setIdentity, fetchMe, fetchKeys,
+  createShared, inviteToStrand, sharedMembers, sharedMine,
+  sharedPush, sharedPull, sharedLeave, sharedRemove,
+  createInviteLink, listInvites, revokeInvite, joinClaim, joinFinish,
+} = createSharingClient(req);
 
 // ---- media (M1: encrypted photo blobs over R2) ----
 // Binary, not JSON. The object is iv(12) || ciphertext — already encrypted on
@@ -145,125 +136,3 @@ export function sendFeedback(
 }
 
 // ---- shared strands (S3) ----
-
-export type SharedRecord = {
-  kind: string; // 'piece' | 'meta'
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  deleted: boolean;
-  dekEpoch: number;
-  content: CipherBlob;
-};
-export type SharedStrandInfo = {
-  strandId: string;
-  ownerId: string;
-  role: string;
-  ephemeralPub: string;
-  wrappedDEK: WrappedKey;
-  dekEpoch: number;
-};
-export type StrandMember = { userId: string; role: string; email: string; identityPublicKey: string | null };
-
-export function createShared(
-  token: string,
-  strandId: string,
-  ephemeralPub: string,
-  wrappedDEK: WrappedKey
-): Promise<{ ok: boolean }> {
-  return req("/shared/create", { method: "POST", token, body: { strandId, ephemeralPub, wrappedDEK } });
-}
-
-export function inviteToStrand(
-  token: string,
-  strandId: string,
-  memberEmail: string,
-  ephemeralPub: string,
-  wrappedDEK: WrappedKey,
-  dekEpoch: number
-): Promise<{ ok: boolean; userId: string }> {
-  return req(`/shared/${strandId}/invite`, {
-    method: "POST",
-    token,
-    body: { memberEmail, ephemeralPub, wrappedDEK, dekEpoch },
-  });
-}
-
-export function sharedMembers(token: string, strandId: string): Promise<{ members: StrandMember[] }> {
-  return req(`/shared/${strandId}/members`, { token });
-}
-
-export function sharedMine(token: string): Promise<{ strands: SharedStrandInfo[] }> {
-  return req("/shared/mine", { token });
-}
-
-export function sharedPush(
-  token: string,
-  strandId: string,
-  changes: SharedRecord[]
-): Promise<{ applied: number; cursor: number }> {
-  return req(`/shared/${strandId}/push`, { method: "POST", token, body: { changes } });
-}
-
-export function sharedPull(
-  token: string,
-  strandId: string,
-  since: number
-): Promise<{ changes: SharedRecord[]; cursor: number; more: boolean }> {
-  return req(`/shared/${strandId}/pull?since=${since}`, { token });
-}
-
-// Leave a strand you're a member of (self-removal).
-export function sharedLeave(token: string, strandId: string): Promise<{ ok: boolean }> {
-  return req(`/shared/${strandId}/leave`, { method: "POST", token });
-}
-
-// Owner removes a member. Rotation (re-key) is driven client-side afterwards.
-export function sharedRemove(
-  token: string,
-  strandId: string,
-  userId: string
-): Promise<{ ok: boolean }> {
-  return req(`/shared/${strandId}/remove`, { method: "POST", token, body: { userId } });
-}
-
-// ---- invite links (S6) ----
-
-export function createInviteLink(
-  token: string,
-  strandId: string,
-  inviteId: string,
-  wrappedDEK: CipherBlob,
-  joinProofHash: string,
-  dekEpoch: number,
-  expiresAt: number,
-  maxUses: number
-): Promise<{ ok: boolean; inviteId: string }> {
-  return req(`/shared/${strandId}/invite-link`, {
-    method: "POST",
-    token,
-    body: { inviteId, wrappedDEK, joinProofHash, dekEpoch, expiresAt, maxUses },
-  });
-}
-
-export function joinClaim(
-  token: string,
-  inviteId: string,
-  joinProof: string
-): Promise<{ strandId: string; wrappedDEK: CipherBlob; dekEpoch: number }> {
-  return req("/shared/join/claim", { method: "POST", token, body: { inviteId, joinProof } });
-}
-
-export function joinFinish(
-  token: string,
-  inviteId: string,
-  joinProof: string,
-  ephemeralPub: string,
-  wrappedDEK: WrappedKey
-): Promise<{ ok: boolean; strandId: string }> {
-  return req("/shared/join/finish", {
-    method: "POST",
-    token,
-    body: { inviteId, joinProof, ephemeralPub, wrappedDEK },
-  });
-}
