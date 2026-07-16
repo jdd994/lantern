@@ -6,12 +6,16 @@ import { createSyncEngine, type SyncRecord } from "@lantern/core/sync";
 import { pushChanges, pullChanges } from "./api";
 import {
   dirtyRecords, getStoredByKind, putStoredByKind, clearDirtyByKind, getSyncState, saveSyncState,
-  type AnyStored, type SyncKind, type StoredFoodLog, type StoredMetric,
+  type AnyStored, type SyncKind, type StoredFoodLog, type StoredMetric, type StoredMealPlan,
 } from "./db";
 
+// `at` lives OUTSIDE the ciphertext (it's the day/time the record belongs to), so
+// it must travel as meta and be put back on the way in. A kind with an `at` that
+// isn't listed here loses its day on the round trip.
 function metaFor(kind: string, rec: AnyStored): Record<string, unknown> | undefined {
   if (kind === "foodLog") return { at: (rec as StoredFoodLog).at };
   if (kind === "metric") return { at: (rec as StoredMetric).at };
+  if (kind === "mealPlan") return { at: (rec as StoredMealPlan).at };
   return undefined;
 }
 
@@ -23,6 +27,7 @@ function fromRecord(rec: SyncRecord): AnyStored {
   const m = rec.meta ?? {};
   if (rec.kind === "foodLog") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredFoodLog;
   if (rec.kind === "metric") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredMetric;
+  if (rec.kind === "mealPlan") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredMealPlan;
   return base as AnyStored;
 }
 
@@ -34,6 +39,8 @@ const engine = createSyncEngine<AnyStored>({
       ...d.metrics.map((rec) => ({ kind: "metric", rec })),
       ...d.goals.map((rec) => ({ kind: "goal", rec })),
       ...d.recipes.map((rec) => ({ kind: "recipe", rec })),
+      ...d.mealPlans.map((rec) => ({ kind: "mealPlan", rec })),
+      ...d.pantry.map((rec) => ({ kind: "pantryItem", rec })),
     ];
   },
   getByKind: (kind, id) => getStoredByKind(kind as SyncKind, id),

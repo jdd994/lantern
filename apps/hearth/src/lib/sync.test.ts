@@ -73,6 +73,41 @@ describe("sync reconcile engine", () => {
     expect(stored!.dirty).toBe(false);
   });
 
+  // Regression: mealPlans and pantry were added as syncable kinds but left out of
+  // dirtyRecords/collectDirty, so they were marked dirty and never pushed — which
+  // looks exactly like working sync until a second device turns up empty. A meal
+  // plan's `at` (the planned day) lives outside the ciphertext, so it must survive
+  // as meta too, or the week loses its days.
+  it("pushes EVERY syncable kind, and carries a meal plan's day", async () => {
+    const db = await import("./db");
+    const { push } = await import("./sync");
+
+    await db.putFoodLog({ id: "f", at: 111, createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(1) });
+    await db.putMetric({ id: "m", at: 222, createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(2) });
+    await db.putGoal({ id: "g", createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(3) });
+    await db.putRecipe({ id: "r", createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(4) });
+    await db.putMealPlan({ id: "p", at: 999, createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(5) });
+    await db.putPantryItem({ id: "q", createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(6) });
+
+    await push("t");
+
+    expect([...new Set(server.rows.map((r) => r.kind))].sort()).toEqual(
+      ["foodLog", "goal", "mealPlan", "metric", "pantryItem", "recipe"]
+    );
+    expect(server.rows.find((r) => r.kind === "mealPlan")!.meta).toEqual({ at: 999 });
+  });
+
+  it("restores a meal plan's planned day on a pull", async () => {
+    const db = await import("./db");
+    const { push, pull } = await import("./sync");
+    await db.putMealPlan({ id: "p", at: 999, createdAt: 1, updatedAt: 1, deleted: false, dirty: true, content: blob(5) });
+    await push("t");
+    await wipeLocal(); // a second device
+    await pull("t");
+    const got = (await db.allMealPlans()).find((r) => r.id === "p");
+    expect(got?.at).toBe(999);
+  });
+
   it("materializes a second device's records from a pull, reconstructing `at`", async () => {
     const db = await import("./db");
     const { push, pull } = await import("./sync");

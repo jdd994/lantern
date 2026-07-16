@@ -189,11 +189,16 @@ export async function clearDevice(): Promise<void> {
 }
 
 // Records awaiting upload, including dirty tombstones.
+// Every syncable store must appear here — a store that's missing is a store whose
+// records are marked dirty and then never pushed, which looks exactly like
+// "sync is fine" until a second device is empty.
 export async function dirtyRecords(): Promise<{
   foodLogs: StoredFoodLog[];
   metrics: StoredMetric[];
   goals: StoredGoal[];
   recipes: StoredRecipe[];
+  mealPlans: StoredMealPlan[];
+  pantry: StoredPantryItem[];
 }> {
   const d = await db();
   return {
@@ -201,6 +206,8 @@ export async function dirtyRecords(): Promise<{
     metrics: (await d.getAll("metrics")).filter((r) => r.dirty),
     goals: (await d.getAll("goals")).filter((r) => r.dirty),
     recipes: (await d.getAll("recipes")).filter((r) => r.dirty),
+    mealPlans: (await d.getAll("mealPlans")).filter((r) => r.dirty),
+    pantry: (await d.getAll("pantry")).filter((r) => r.dirty),
   };
 }
 
