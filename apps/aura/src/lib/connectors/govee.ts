@@ -30,6 +30,13 @@ async function call(cred: string, path: string, body?: unknown): Promise<any> {
   return data;
 }
 
+// NOTE — Govee motion/presence sensors: not implemented yet, deliberately. The
+// normalized sensor layer is ready (listSensors/readSensor + a "motion" trigger),
+// and Hue's is wired; Govee's platform API surface for its presence sensors hasn't
+// been verified against a real device, and guessing at capability names would give
+// you a connector that silently never fires. To finish it: pair a Govee sensor, call
+// GET /user/devices, and check which capability type/instance reports occupancy —
+// then implement listSensors/readSensor here the same way Hue's does.
 export const govee: Connector = {
   id: "govee",
   label: "Govee",

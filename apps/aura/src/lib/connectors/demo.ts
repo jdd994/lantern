@@ -3,7 +3,7 @@
 // owning a single bulb or typing a key. On-brand for a calm app: try it before you
 // wire up real hardware (or on a plane, away from home). State resets on reload;
 // scenes you save still persist and still apply, because the device ids are fixed.
-import type { Connector, Device, LightState } from "./index";
+import type { Connector, Device, LightState, Sensor } from "./index";
 
 const mk = (slug: string, name: string, canColor: boolean, canColorTemp = false): Device => ({
   id: `demo:${slug}`,
@@ -28,6 +28,15 @@ const states = new Map<string, LightState>(SEED.map((s) => [s.device.id, { ...s.
 // A touch of latency so it feels like reaching a real bulb.
 const settle = <T,>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 90));
 
+// A make-believe motion sensor, so sensor automations can be built and felt with no
+// hardware. simulateDemoMotion() makes it "see" motion for a few seconds — long
+// enough for the poller to catch the edge.
+const DEMO_SENSOR: Sensor = { id: "demo:hall-motion", name: "Hallway motion (demo)", sourceId: "demo", raw: {} };
+let motionUntil = 0;
+export function simulateDemoMotion(): void {
+  motionUntil = Date.now() + 8000;
+}
+
 export const demo: Connector = {
   id: "demo",
   label: "Demo room",
@@ -47,5 +56,13 @@ export const demo: Connector = {
     const cur = states.get(device.id) ?? { on: false };
     states.set(device.id, { ...cur, ...patch });
     await settle(null);
+  },
+
+  async listSensors() {
+    return settle([DEMO_SENSOR]);
+  },
+
+  async readSensor() {
+    return { motion: Date.now() < motionUntil };
   },
 };

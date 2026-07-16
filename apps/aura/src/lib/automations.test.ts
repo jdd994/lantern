@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { actionsOf, dueAutomations, fireTimeOn, nextFire, ymd, type Automation } from "./automations";
+import {
+  actionsOf,
+  dueAutomations,
+  fireTimeOn,
+  nextFire,
+  sensorDue,
+  ymd,
+  type Automation,
+} from "./automations";
 
 const at = (h: number, m: number): Date => {
   const d = new Date(2021, 5, 1); // fixed local day
@@ -80,6 +88,40 @@ describe("weekday filter + multi-action", () => {
   it("actionsOf reads new list, falls back to legacy single action", () => {
     expect(actionsOf(timeAuto(0, { actions: [{ kind: "allOff" }, { kind: "allOff" }] }))).toHaveLength(2);
     expect(actionsOf(timeAuto(0))).toEqual([{ kind: "allOff" }]); // legacy `action`
+  });
+});
+
+describe("sensor (motion) triggers", () => {
+  const motionAuto = (over: Partial<Automation> = {}): Automation => ({
+    id: "m",
+    name: "hall",
+    enabled: true,
+    trigger: { kind: "sensor", sensorId: "demo:hall-motion" },
+    action: { kind: "allOff" },
+    ...over,
+  });
+
+  it("fires for its own sensor only", () => {
+    expect(sensorDue([motionAuto()], "demo:hall-motion", at(9, 0))).toHaveLength(1);
+    expect(sensorDue([motionAuto()], "other:sensor", at(9, 0))).toHaveLength(0);
+  });
+
+  it("respects enabled, weekdays, and the cooldown", () => {
+    expect(sensorDue([motionAuto({ enabled: false })], "demo:hall-motion", at(9, 0))).toHaveLength(0);
+    // 2021-06-01 is a Tuesday (day 2)
+    expect(sensorDue([motionAuto({ days: [1] })], "demo:hall-motion", at(9, 0))).toHaveLength(0);
+    const now = at(9, 0);
+    const justFired = motionAuto({ lastFiredAt: now.getTime() - 5_000 });
+    expect(sensorDue([justFired], "demo:hall-motion", now)).toHaveLength(0); // within 60s
+    const older = motionAuto({ lastFiredAt: now.getTime() - 120_000 });
+    expect(sensorDue([older], "demo:hall-motion", now)).toHaveLength(1);
+  });
+
+  it("is not time-scheduled: no fire time, no next, never in dueAutomations", () => {
+    const a = motionAuto();
+    expect(fireTimeOn(a, at(9, 0), null)).toBeNull();
+    expect(nextFire(a, at(9, 0), null)).toBeNull();
+    expect(dueAutomations([a], at(9, 0), null)).toHaveLength(0);
   });
 });
 

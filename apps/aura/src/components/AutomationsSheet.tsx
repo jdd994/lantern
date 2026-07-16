@@ -13,6 +13,7 @@ import {
   type Coords,
   type Trigger,
 } from "../lib/automations";
+import type { Sensor } from "../lib/connectors";
 import type { StoredScene } from "../lib/db";
 import type { Room } from "../lib/rooms";
 
@@ -30,8 +31,11 @@ const offsetLabel = (o: number) => (o === 0 ? "" : o > 0 ? ` +${o}m` : ` −${Ma
 const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function describeTrigger(t: Trigger): string {
+function describeTrigger(t: Trigger, sensors: Sensor[]): string {
   if (t.kind === "time") return fmtMinutes(t.minutes);
+  if (t.kind === "sensor") {
+    return `Motion · ${sensors.find((s) => s.id === t.sensorId)?.name ?? "sensor"}`;
+  }
   return (t.event === "sunset" ? "Sunset" : "Sunrise") + offsetLabel(t.offsetMin);
 }
 function describeAction(a: Action, scenes: StoredScene[], rooms: Room[]): string {
@@ -83,24 +87,29 @@ export function AutomationsSheet({
   automations,
   scenes,
   rooms,
+  sensors,
   coords,
   onRequestLocation,
   onAdd,
   onToggle,
   onRemove,
+  onSimulateMotion,
   onClose,
 }: {
   automations: Automation[];
   scenes: StoredScene[];
   rooms: Room[];
+  sensors: Sensor[];
   coords: Coords | null;
   onRequestLocation: () => Promise<Coords | null>;
   onAdd: (name: string, trigger: Trigger, actions: Action[], days: number[]) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
+  onSimulateMotion: () => void;
   onClose: () => void;
 }) {
-  const [triggerKind, setTriggerKind] = useState<"time" | "sunset" | "sunrise">("sunset");
+  const [triggerKind, setTriggerKind] = useState<"time" | "sunset" | "sunrise" | "motion">("sunset");
+  const [sensorId, setSensorId] = useState(sensors[0]?.id ?? "");
   const [timeValue, setTimeValue] = useState("18:00");
   const [offsetMin, setOffsetMin] = useState(0);
   const [days, setDays] = useState<number[]>([]);
@@ -128,12 +137,14 @@ export function AutomationsSheet({
     { ...blankRow(), kind: scenes.length ? "scene" : "allOff" },
   ]);
 
-  const needsLocation = triggerKind !== "time" && !coords;
+  const needsLocation = (triggerKind === "sunset" || triggerKind === "sunrise") && !coords;
 
   const buildTrigger = (): Trigger =>
     triggerKind === "time"
       ? { kind: "time", minutes: parseHHMM(timeValue) }
-      : { kind: "sun", event: triggerKind, offsetMin };
+      : triggerKind === "motion"
+        ? { kind: "sensor", sensorId }
+        : { kind: "sun", event: triggerKind, offsetMin };
 
   const rowToAction = (r: ActionRow): Action =>
     r.kind === "scene"
@@ -175,7 +186,7 @@ export function AutomationsSheet({
             <li className={"auto-row" + (a.enabled ? "" : " off")} key={a.id}>
               <div className="auto-main">
                 <span className="auto-when">
-                  {describeTrigger(a.trigger)}
+                  {describeTrigger(a.trigger, sensors)}
                   <span className="auto-days">{describeDays(a.days)}</span>
                 </span>
                 <span className="auto-arrow">→</span>
@@ -209,7 +220,7 @@ export function AutomationsSheet({
         <span className="label">New automation</span>
 
         <div className="seg">
-          {(["sunset", "sunrise", "time"] as const).map((k) => (
+          {(["sunset", "sunrise", "time", ...(sensors.length ? (["motion"] as const) : [])] as const).map((k) => (
             <button
               key={k}
               type="button"
@@ -222,7 +233,30 @@ export function AutomationsSheet({
           ))}
         </div>
 
-        {triggerKind === "time" ? (
+        {triggerKind === "motion" ? (
+          <>
+            <label className="field">
+              <span className="label">When this sees motion</span>
+              <select value={sensorId} onChange={(e) => setSensorId(e.target.value)}>
+                {sensors.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <span className="hint">
+                Fires the moment motion starts, then waits a minute before it can fire again.
+              </span>
+            </label>
+            {sensors.some((s) => s.sourceId === "demo") && (
+              <div className="sheet-actions" style={{ justifyContent: "flex-start" }}>
+                <button className="btn btn-sm" onClick={onSimulateMotion}>
+                  Simulate motion (demo)
+                </button>
+              </div>
+            )}
+          </>
+        ) : triggerKind === "time" ? (
           <label className="field">
             <span className="label">At</span>
             <input type="time" value={timeValue} onChange={(e) => setTimeValue(e.target.value)} />

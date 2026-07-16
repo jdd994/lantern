@@ -234,11 +234,13 @@ export default function App() {
           automations={aura.automations}
           scenes={aura.scenes}
           rooms={aura.rooms}
+          sensors={aura.sensors}
           coords={aura.coords}
           onRequestLocation={aura.requestLocation}
           onAdd={aura.addAutomation}
           onToggle={aura.toggleAutomation}
           onRemove={aura.removeAutomation}
+          onSimulateMotion={aura.simulateMotion}
           onClose={() => setAutomating(false)}
         />
       )}
