@@ -286,8 +286,12 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .days { display: flex; gap: 6px; }
 .day { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-raised); color: var(--ink-soft); font-size: 13px; }
 .day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1A1206; font-weight: 600; }
-.action-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-.action-row select { flex: 1; }
+.action-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.action-row select { flex: 1; min-width: 130px; }
+.fade-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1 1 100%; }
+.fade-fields select { flex: 1; }
+.mini { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-soft); }
+.mini input { width: 62px; padding: 7px 8px; font-size: 14px; }
 .loc-note { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px dashed var(--line); border-radius: var(--radius); }
 .loc-note p { margin: 0; }
 .auto-foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }

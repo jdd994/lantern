@@ -18,7 +18,11 @@ export type Trigger =
 export type Action =
   | { kind: "scene"; sceneId: string }
   | { kind: "roomPower"; roomId: string; on: boolean }
-  | { kind: "allOff" };
+  | { kind: "allOff" }
+  // Gently ramp brightness to a target over some minutes (wake-up = fade up;
+  // wind-down = fade to 0, which turns the lights off at the end). roomId omitted
+  // means every light.
+  | { kind: "fade"; roomId?: string; toBrightness: number; minutes: number };
 
 export type Automation = {
   id: string;
