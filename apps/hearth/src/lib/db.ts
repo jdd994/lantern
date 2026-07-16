@@ -11,7 +11,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob, WrappedKey } from "./crypto";
 
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export type VaultMeta = {
   id: "vault";
@@ -63,6 +63,18 @@ export type StoredPantryItem = Syncable & { content: CipherBlob };
 
 export type SyncState = { id: "state"; cursor: number; token?: string; accountEmail?: string };
 
+// A connected wearable. `content` encrypts a ConnectionContent — the OAuth tokens
+// and when we last looked. Tokens are secrets, so they're sealed with the vault
+// key like everything else: a stolen laptop with a locked vault yields nothing
+// that can read someone's Fitbit.
+//
+// DELIBERATELY NOT Syncable, and not for privacy reasons — for correctness.
+// Fitbit rotates the refresh token every time it's used, so two devices sharing
+// one grant would each invalidate the other's token on their next refresh, and
+// both would end up signed out. A connection is this device's grant. Connect each
+// device once; the READINGS sync normally, so you only ever import from one.
+export type StoredConnection = { id: string; connectedAt: number; content: CipherBlob };
+
 export type DeviceEnrollment = {
   id: "device";
   credentialId: number[];
@@ -80,6 +92,7 @@ interface HearthDB extends DBSchema {
   pantry: { key: string; value: StoredPantryItem };
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
+  connections: { key: string; value: StoredConnection };
 }
 
 let dbPromise: Promise<IDBPDatabase<HearthDB>> | null = null;
@@ -105,6 +118,9 @@ function db() {
         }
         if (oldVersion < 3) {
           database.createObjectStore("pantry", { keyPath: "id" });
+        }
+        if (oldVersion < 4) {
+          database.createObjectStore("connections", { keyPath: "id" });
         }
       },
     });
@@ -169,6 +185,20 @@ export async function allPantry(): Promise<StoredPantryItem[]> {
 }
 export async function putPantryItem(p: StoredPantryItem): Promise<void> {
   await (await db()).put("pantry", p);
+}
+
+// ---- connections (wearables) ---------------------------------------------
+export async function allConnections(): Promise<StoredConnection[]> {
+  return (await db()).getAll("connections");
+}
+export async function getConnection(id: string): Promise<StoredConnection | undefined> {
+  return (await db()).get("connections", id);
+}
+export async function putConnection(c: StoredConnection): Promise<void> {
+  await (await db()).put("connections", c);
+}
+export async function deleteConnection(id: string): Promise<void> {
+  await (await db()).delete("connections", id);
 }
 
 // ---- sync + device -------------------------------------------------------
@@ -249,7 +279,9 @@ export async function markAllDirty(): Promise<void> {
   }
 }
 
-const ALL_STORES = ["vault", "foodLogs", "metrics", "goals", "recipes", "mealPlans", "pantry", "sync", "device"] as const;
+const ALL_STORES = [
+  "vault", "foodLogs", "metrics", "goals", "recipes", "mealPlans", "pantry", "sync", "device", "connections",
+] as const;
 
 // Wipe everything (forget this device). Without the passphrase nothing readable
 // remains anywhere anyway.

@@ -129,6 +129,46 @@ per-use consent** to a cloud recognizer, it plugs in and the logging UI
 pre-fills — changing one file, not the app. A recognizer that ships a photo off
 the device silently is never a valid implementation. The CSP enforces it.
 
+### The wearable trust ladder (`lib/wearable/`)
+
+Body readings can come from a device you already wear. Same ladder, same rule:
+the tier is rendered next to the connection, and a provider that can't honestly
+justify its tier doesn't get merged. **Connecting is opt-in and only ever happens
+after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
+
+| Provider | Tier | Status | Who learns what |
+|---|---|---|---|
+| **Manual entry** | 0 | Always | **Nobody.** Type a reading; it never leaves. |
+| **Fitbit** | 2 | **BUILT** | **Nobody new.** Browser → Fitbit directly (CORS + OAuth2/PKCE, no client secret, no backend). Fitbit already holds these readings. |
+| Withings (scales) | 2–3 | Candidate | Data API sends `allow-origin: *`, but the token exchange wants a secret → would need a **token broker** (a server that sees a token, never a reading). |
+| Oura | — | **Blocked** | Sends **no `allow-origin`**, and killed personal access tokens Dec 2025. Only the legacy implicit flow remains (no refresh, ~30-day expiry). |
+| Garmin / Whoop | 3 | **Refused for now** | Both force a backend that sees **PLAINTEXT body data** (Garmin is webhook-push + partner approval; Whoop's docs say all requests must be server-side). That breaks "the server holds only noise" — an architecture decision, not a badge. |
+| Apple Health / Google Fit | — | Impossible here | Native-only. Would need a companion app (Aura's Tauri work proves the path exists). |
+
+**The escape hatch for every blocked vendor is CSV import (tier 0)** — Garmin,
+Whoop and Oura all let you export. Less magical; costs nothing and asks nobody.
+
+**Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and asserted
+in its test:
+1. **No calories burned.** Calories-out next to the food log silently becomes
+   deficit maths — the exact harm invariant 3 forbids. Fitbit's `activity` scope
+   grants it anyway; the promise is kept by never asking for the endpoint.
+2. **No scores.** Sleep efficiency, readiness, BMI — a grade for your body is not
+   a measurement of it. We take the hours slept, never the mark out of 100.
+
+**Setup:** set `VITE_FITBIT_CLIENT_ID` (a *public* PKCE client — not a secret; no
+client secret exists anywhere in this app). Register the redirect URI in the
+Fitbit app settings: `https://hearth.garden/` for production, plus your dev origin.
+Without the id, Connect stays disabled and says so.
+
+**⚠️ `ID_INFO` in `lib/wearable/index.ts` is a FROZEN parameter.** Imported
+readings dedupe on an HMAC of their natural key under your vault key — opaque, so
+the sync server never learns you use a Fitbit or which days you tracked (record
+ids are plaintext!), and deterministic, so a re-import updates instead of
+duplicating. Change the string and every id changes, silently duplicating a
+person's whole body history. Pinned by a golden vector. Same discipline as
+`VERIFIER_TEXT` and the sharing `InviteLabels`.
+
 ### Invariants — please preserve
 
 1. Plaintext (what you ate, your weight, your goals) never reaches storage, logs,
@@ -175,8 +215,10 @@ change it.
    ciphertext, LWW). Records already carry `deleted`/`dirty` + an identity key,
    built for it. Bake in the HARDENING.md protections (quotas, rate limits) from
    the first server commit.
-6. **Later / maybe:** wearables (Apple Health / Google Fit — a new data-source
-   trust tier; big, fiddly, per-platform); exercise (possibly a separate app);
+6. **Later / maybe:** more wearables — **Fitbit is done** (see the wearable trust
+   ladder above); next candidates are CSV import (tier 0, covers the vendors we
+   refuse) and Withings for scales. Apple Health / Google Fit stay native-only;
+   exercise (possibly a separate app);
    the FoodRecognizer becoming real; household/shared meal plans (uses the
    identity keys, like shared strands).
 

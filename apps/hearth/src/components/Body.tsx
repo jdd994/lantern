@@ -38,11 +38,14 @@ function Chart({ points }: { points: { at: number; value: number }[] }) {
 }
 
 export function Body({
-  metrics, onLog, onRemove,
+  metrics, onLog, onRemove, children,
 }: {
   metrics: Metric[];
   onLog: () => void;
   onRemove: (id: string) => void;
+  // Where readings can come from (a wearable), kept with the readings themselves
+  // rather than exiled to a settings screen.
+  children?: React.ReactNode;
 }) {
   // Which kinds actually have data (weight always shown as the default entry).
   const present = METRIC_KINDS.filter((k) => series(metrics, k).length > 0);
@@ -97,7 +100,12 @@ export function Body({
           <div className="metric-list">
             {[...s].reverse().slice(0, 6).map((m) => (
               <div className="metric-row" key={m.id}>
-                <span className="metric-row-val">{formatMetric(m.value, active, m.unit)}</span>
+                <span className="metric-row-val">
+                  {formatMetric(m.value, active, m.unit)}
+                  {/* Where it came from, stated plainly — a reading you typed and a
+                      reading your band recorded are not quite the same claim. */}
+                  {m.source ? <span className="tier-badge">Fitbit</span> : null}
+                </span>
                 <span className="metric-row-date">{new Date(m.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => onRemove(m.id)} title="Remove">×</button>
               </div>
@@ -105,6 +113,8 @@ export function Body({
           </div>
         </div>
       )}
+
+      {children}
     </section>
   );
 }
