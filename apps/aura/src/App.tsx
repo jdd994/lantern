@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme, useAccent, type ThemeOption } from "@lantern/ui";
+import { isTauri } from "./lib/platform";
 import { useAura } from "./hooks/useAura";
 import { groupByRoom, type Room } from "./lib/rooms";
 import type { CustomVibe } from "./lib/db";
@@ -45,6 +46,19 @@ export default function App() {
     }
   });
   const sections = groupByRoom(aura.devices, aura.rooms);
+
+  // The desktop tray's "All lights off" — a ref keeps the listener stable while
+  // still acting on the current devices.
+  const allOffRef = useRef<() => void>(() => {});
+  allOffRef.current = () => aura.setRoomPower(aura.devices.map((d) => d.id), false);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(async ({ listen }) => {
+      unlisten = await listen("aura://all-off", () => allOffRef.current());
+    });
+    return () => unlisten?.();
+  }, []);
 
   function dismissWelcome() {
     setWelcomed(true);

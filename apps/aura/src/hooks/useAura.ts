@@ -35,6 +35,10 @@ const readGeo = (): Coords | null => {
 
 const uid = () => crypto.randomUUID();
 
+// Recalling a scene or vibe should feel like a room easing, not a light switch.
+// Brands that fade natively (Hue) honor this; others simply snap.
+const SCENE_TRANSITION_MS = 800;
+
 // Merge two lists by id; items in `next` overwrite matching ones in `prev`.
 function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
   const m = new Map(prev.map((x) => [x.id, x]));
@@ -188,20 +192,25 @@ export function useAura() {
   // network push is coalesced per device and sent on a trailing debounce. On/off
   // (and scene apply) push immediately — those are single, deliberate taps.
   const pushTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const pushPending = useRef<Record<string, Partial<LightState>>>({});
+  const pushPending = useRef<Record<string, { patch: Partial<LightState>; transitionMs?: number }>>({});
 
   const flushPush = useCallback(
     async (deviceId: string) => {
-      const patch = pushPending.current[deviceId];
+      const entry = pushPending.current[deviceId];
       delete pushPending.current[deviceId];
-      if (!patch) return;
+      if (!entry) return;
       const device = devices.find((d) => d.id === deviceId);
       if (!device) return;
       const cred = credFor(device.sourceId);
       const conn = connectorFor(device.sourceId);
       if (!cred || !conn) return;
       try {
-        await conn.setState(cred, device, patch);
+        await conn.setState(
+          cred,
+          device,
+          entry.patch,
+          entry.transitionMs ? { transitionMs: entry.transitionMs } : undefined
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't reach that light.");
       }
@@ -212,7 +221,7 @@ export function useAura() {
   // Set one device's state and optimistically reflect it. `immediate` (or an on/off
   // patch) pushes now; continuous changes (brightness/color) debounce.
   const setDevice = useCallback(
-    (deviceId: string, patch: Partial<LightState>, immediate = false) => {
+    (deviceId: string, patch: Partial<LightState>, immediate = false, transitionMs?: number) => {
       setStates((prev) => {
         const merged: LightState = { ...(prev[deviceId] ?? { on: true }), ...patch };
         // color and kelvin are mutually exclusive on a bulb — the last one set wins.
@@ -220,7 +229,11 @@ export function useAura() {
         if (patch.kelvin !== undefined) delete merged.color;
         return { ...prev, [deviceId]: merged };
       });
-      pushPending.current[deviceId] = { ...(pushPending.current[deviceId] ?? {}), ...patch };
+      const prevEntry = pushPending.current[deviceId];
+      pushPending.current[deviceId] = {
+        patch: { ...(prevEntry?.patch ?? {}), ...patch },
+        transitionMs: transitionMs ?? prevEntry?.transitionMs,
+      };
       clearTimeout(pushTimers.current[deviceId]);
       if (immediate || patch.on !== undefined) {
         void flushPush(deviceId);
@@ -267,7 +280,7 @@ export function useAura() {
       if (!scene) return;
       setError(null);
       for (const [deviceId, state] of Object.entries(scene.states)) {
-        setDevice(deviceId, state, true);
+        setDevice(deviceId, state, true, SCENE_TRANSITION_MS);
       }
     },
     [scenes, setDevice]
@@ -354,7 +367,7 @@ export function useAura() {
         // Color bulbs take the vibe's hue; white-only bulbs take its temperature.
         if (device.canColor) patch.color = target.rgb;
         else if (device.canColorTemp && target.kelvin) patch.kelvin = target.kelvin;
-        setDevice(id, patch, true);
+        setDevice(id, patch, true, SCENE_TRANSITION_MS);
       }
     },
     [devices, rooms, customVibes, setDevice]

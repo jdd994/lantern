@@ -175,9 +175,11 @@ export const hue: Connector = {
     return { motion: !!(m?.motion?.motion_valid && m?.motion?.motion) };
   },
 
-  async setState(cred, device, patch) {
+  async setState(cred, device, patch, opts) {
     const { rid } = device.raw as HueRaw;
     const body: Record<string, unknown> = {};
+    // Hue fades natively — one call, the bridge does the ramp.
+    if (opts?.transitionMs) body.dynamics = { duration: Math.round(opts.transitionMs) };
     if (patch.on !== undefined) body.on = { on: patch.on };
     if (patch.brightness !== undefined) {
       body.dimming = { brightness: Math.max(0, Math.min(100, Math.round(patch.brightness))) };

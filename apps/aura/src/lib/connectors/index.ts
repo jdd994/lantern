@@ -52,7 +52,15 @@ export type Connector = {
   pair?(address: string): Promise<string>; // returns the credential to store
   listDevices(cred: string): Promise<Device[]>;
   getState(cred: string, device: Device): Promise<LightState>;
-  setState(cred: string, device: Device, patch: Partial<LightState>): Promise<void>;
+  // opts.transitionMs asks for a gentle fade *where the brand supports it natively*
+  // (Hue does; Govee doesn't and simply snaps). We never emulate it client-side —
+  // that would mean a burst of calls per light straight into a rate limit.
+  setState(
+    cred: string,
+    device: Device,
+    patch: Partial<LightState>,
+    opts?: { transitionMs?: number }
+  ): Promise<void>;
   // Optional: brands with motion/presence sensors implement these; the automation
   // engine polls them and fires on the moment motion starts.
   listSensors?(cred: string): Promise<Sensor[]>;
