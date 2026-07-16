@@ -85,6 +85,37 @@ export const hue: Connector = {
   credLabel: "Bridge address + key",
   credHint: '"<bridge-ip>|<application-key>" — from pressing the bridge link button.',
 
+  // Ask Hue's discovery service which bridges are on this network. Returns their LAN
+  // IPs (best-effort; the user can always type one in).
+  async discover() {
+    try {
+      const res = await httpFetch("https://discovery.meethue.com/");
+      const list = await res.json();
+      return Array.isArray(list) ? list.map((b: any) => b.internalipaddress).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  // Exchange a link-button press for an application key. The user presses the round
+  // button on the bridge, then we POST to the (v1) /api endpoint; the bridge answers
+  // with a username we use as the CLIP v2 application key.
+  async pair(address) {
+    const res = await httpFetch(`https://${address}/api`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ devicetype: "aura#desktop" }),
+    });
+    const data = await res.json();
+    const first = Array.isArray(data) ? data[0] : data;
+    if (first?.error) {
+      throw new Error(first.error.description || "Press the bridge's link button, then try again.");
+    }
+    const username = first?.success?.username;
+    if (!username) throw new Error("Pairing failed — press the link button and try again.");
+    return `${address}|${username}`;
+  },
+
   async listDevices(cred) {
     const data = await call(cred, "/resource/light");
     const lights: any[] = data?.data ?? [];

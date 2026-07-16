@@ -1,0 +1,63 @@
+name: Aura desktop build
+
+# Builds the Aura desktop app (Tauri) into installers for macOS, Windows, and Linux.
+# Run it by hand from the Actions tab (workflow_dispatch), or by pushing a tag like
+# "aura-v0.1.0". Artifacts are attached to the run — download the one for your OS.
+# Builds are UNSIGNED (fine for testing; see apps/aura/DESKTOP.md for how to open).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["aura-v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # Apple Silicon (M-series)
+            target: aarch64-apple-darwin
+          - os: macos-13 # Intel Macs
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: ""
+          - os: windows-latest
+            target: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libayatana-appindicator3-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/aura/src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the app
+        run: npm run tauri -w aura -- build ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-${{ matrix.os }}${{ matrix.target && format('-{0}', matrix.target) || '' }}
+          path: |
+            apps/aura/src-tauri/target/${{ matrix.target }}/release/bundle/**
+            apps/aura/src-tauri/target/release/bundle/**
+          if-no-files-found: warn

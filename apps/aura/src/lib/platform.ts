@@ -15,7 +15,13 @@ export function isTauri(): boolean {
 export async function httpFetch(input: string, init?: RequestInit): Promise<Response> {
   if (isTauri()) {
     const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-    return tauriFetch(input, init);
+    return tauriFetch(input, {
+      ...init,
+      // The Hue bridge presents a self-signed cert on a LAN IP (its CN is the bridge
+      // id, not the address), so both cert and hostname checks must be relaxed. This
+      // path only ever reaches a local device the user paired themselves.
+      danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
+    });
   }
   return window.fetch(input, init);
 }

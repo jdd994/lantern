@@ -30,6 +30,11 @@ export type Connector = {
   credHint: string;
   // When false, the connect sheet skips the key field (e.g. the Demo room).
   needsCred?: boolean;
+  // Optional pairing flow (e.g. Hue): find bridges on the network, then exchange a
+  // link-button press for a credential. When present, the connect sheet shows a
+  // pairing UI instead of a paste field.
+  discover?(): Promise<string[]>;
+  pair?(address: string): Promise<string>; // returns the credential to store
   listDevices(cred: string): Promise<Device[]>;
   getState(cred: string, device: Device): Promise<LightState>;
   setState(cred: string, device: Device, patch: Partial<LightState>): Promise<void>;
