@@ -78,7 +78,7 @@ async function maxSeq(db: D1Database, userId: string): Promise<number> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function isCipherBlob(x: any): boolean {
+export function isCipherBlob(x: any): boolean {
   return x && Array.isArray(x.iv) && Array.isArray(x.data);
 }
 
@@ -93,8 +93,8 @@ ON CONFLICT(user_id, kind, id) DO UPDATE SET
   seq        = excluded.seq
 WHERE excluded.updated_at >= objects.updated_at`;
 
-const PULL_LIMIT = 500;
-const MAX_PUSH = 1000;
+export const PULL_LIMIT = 500;
+export const MAX_PUSH = 1000;
 
 export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E>): Hono<{ Bindings: E; Variables: Vars }> {
   const app = new Hono<{ Bindings: E; Variables: Vars }>();
@@ -121,7 +121,10 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
   // device is untouched — this only clears the cloud copy. Irreversible.
   app.delete("/me", requireAuth, async (c) => {
     const userId = c.get("userId");
-    if (config.deleteAccount) return config.deleteAccount(c, userId);
+    // Hono's generic Context doesn't narrow to our ServerContext<E> alias (E is
+    // only bounded by BaseEnv), but at runtime this IS that context — same object,
+    // same bindings. The cast keeps the app-facing type honest without weakening it.
+    if (config.deleteAccount) return config.deleteAccount(c as unknown as ServerContext<E>, userId);
     await c.env.DB.batch([
       c.env.DB.prepare("DELETE FROM objects WHERE user_id = ?").bind(userId),
       c.env.DB.prepare("DELETE FROM vaults WHERE user_id = ?").bind(userId),
