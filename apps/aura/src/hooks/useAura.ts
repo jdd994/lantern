@@ -9,6 +9,7 @@ import { vibeById } from "@lantern/core";
 import { connectorFor, type Device, type LightState } from "../lib/connectors";
 import { assign, type Room } from "../lib/rooms";
 import {
+  actionsOf,
   dueAutomations,
   ymd,
   type Action,
@@ -377,11 +378,21 @@ export function useAura() {
     [applyScene, setRoomPower, devices, rooms]
   );
 
-  const addAutomation = useCallback(async (name: string, trigger: Trigger, action: Action) => {
-    const a: Automation = { id: uid(), name: name.trim() || "Automation", enabled: true, trigger, action };
-    await db.putAutomation(a);
-    setAutomations((prev) => [...prev, a].sort((x, y) => x.name.localeCompare(y.name)));
-  }, []);
+  const addAutomation = useCallback(
+    async (name: string, trigger: Trigger, actions: Action[], days?: number[]) => {
+      const a: Automation = {
+        id: uid(),
+        name: name.trim() || "Automation",
+        enabled: true,
+        trigger,
+        actions,
+        ...(days && days.length ? { days } : {}),
+      };
+      await db.putAutomation(a);
+      setAutomations((prev) => [...prev, a].sort((x, y) => x.name.localeCompare(y.name)));
+    },
+    []
+  );
 
   const toggleAutomation = useCallback(async (id: string) => {
     setAutomations((prev) => {
@@ -415,7 +426,7 @@ export function useAura() {
       if (!due.length) return;
       const stamp = ymd(now);
       for (const a of due) {
-        runRef.current(a.action);
+        for (const act of actionsOf(a)) runRef.current(act);
         const updated = { ...a, lastRun: stamp };
         void db.putAutomation(updated);
         setAutomations((prev) => prev.map((x) => (x.id === a.id ? updated : x)));

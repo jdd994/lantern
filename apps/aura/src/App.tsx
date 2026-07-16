@@ -129,9 +129,17 @@ export default function App() {
               <h2>Lights</h2>
               <div className="head-actions">
                 {aura.devices.length > 0 && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => setManagingRooms(true)}>
-                    Rooms
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => aura.setRoomPower(aura.devices.map((d) => d.id), false)}
+                    >
+                      All off
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setManagingRooms(true)}>
+                      Rooms
+                    </button>
+                  </>
                 )}
                 <button className="btn btn-ghost btn-sm" onClick={() => setConnecting(true)}>
                   Add

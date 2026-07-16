@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueAutomations, fireTimeOn, nextFire, ymd, type Automation } from "./automations";
+import { actionsOf, dueAutomations, fireTimeOn, nextFire, ymd, type Automation } from "./automations";
 
 const at = (h: number, m: number): Date => {
   const d = new Date(2021, 5, 1); // fixed local day
@@ -59,6 +59,27 @@ describe("sun triggers", () => {
     const t0 = fireTimeOn(base, day, coords)!;
     const t1 = fireTimeOn(early, day, coords)!;
     expect(t0.getTime() - t1.getTime()).toBe(15 * 60_000);
+  });
+});
+
+describe("weekday filter + multi-action", () => {
+  it("only fires on allowed weekdays (2021-06-01 is a Tuesday = day 2)", () => {
+    const tue = timeAuto(9 * 60, { days: [2] });
+    const monOnly = timeAuto(9 * 60, { days: [1] });
+    expect(dueAutomations([tue], at(9, 1), null)).toHaveLength(1);
+    expect(dueAutomations([monOnly], at(9, 1), null)).toHaveLength(0);
+    expect(dueAutomations([timeAuto(9 * 60, { days: [] })], at(9, 1), null)).toHaveLength(1); // empty = every day
+  });
+
+  it("nextFire skips disallowed weekdays", () => {
+    // On Tue 2021-06-01 08:00, a Wednesday-only 09:00 fires next day (the 2nd).
+    const wed = timeAuto(9 * 60, { days: [3] });
+    expect(nextFire(wed, at(8, 0), null)!.getDate()).toBe(2);
+  });
+
+  it("actionsOf reads new list, falls back to legacy single action", () => {
+    expect(actionsOf(timeAuto(0, { actions: [{ kind: "allOff" }, { kind: "allOff" }] }))).toHaveLength(2);
+    expect(actionsOf(timeAuto(0))).toEqual([{ kind: "allOff" }]); // legacy `action`
   });
 });
 
