@@ -48,6 +48,7 @@ export const govee: Connector = {
         sourceId: "govee",
         canBrightness: caps.some((c) => c.type === CAP_RANGE && c.instance === "brightness"),
         canColor: caps.some((c) => c.type === CAP_COLOR && c.instance === "colorRgb"),
+        canColorTemp: caps.some((c) => c.type === CAP_COLOR && c.instance === "colorTemperatureK"),
         raw: { sku: d.sku, device: d.device } satisfies GoveeRaw,
       };
     });
@@ -66,10 +67,14 @@ export const govee: Connector = {
     const power = find(CAP_ONOFF, "powerSwitch");
     const brightness = find(CAP_RANGE, "brightness");
     const colorRgb = find(CAP_COLOR, "colorRgb");
+    const colorTempK = find(CAP_COLOR, "colorTemperatureK");
 
     const state: LightState = { on: power === 1 || power === true };
     if (typeof brightness === "number") state.brightness = brightness;
-    if (typeof colorRgb === "number") state.color = intToRgb(colorRgb);
+    // A bulb is in one mode: prefer color temperature when it's actively set,
+    // otherwise report the RGB color.
+    if (typeof colorTempK === "number" && colorTempK > 0) state.kelvin = colorTempK;
+    else if (typeof colorRgb === "number") state.color = intToRgb(colorRgb);
     return state;
   },
 
@@ -87,5 +92,8 @@ export const govee: Connector = {
       await control(CAP_RANGE, "brightness", Math.max(0, Math.min(100, Math.round(patch.brightness))));
     }
     if (patch.color !== undefined) await control(CAP_COLOR, "colorRgb", rgbToInt(patch.color));
+    if (patch.kelvin !== undefined) {
+      await control(CAP_COLOR, "colorTemperatureK", Math.max(2000, Math.min(6500, Math.round(patch.kelvin))));
+    }
   },
 };

@@ -5,20 +5,21 @@
 // scenes you save still persist and still apply, because the device ids are fixed.
 import type { Connector, Device, LightState } from "./index";
 
-const mk = (slug: string, name: string, canColor: boolean): Device => ({
+const mk = (slug: string, name: string, canColor: boolean, canColorTemp = false): Device => ({
   id: `demo:${slug}`,
   name,
   sourceId: "demo",
   canBrightness: true,
   canColor,
+  canColorTemp,
   raw: { slug },
 });
 
 const SEED: { device: Device; state: LightState }[] = [
-  { device: mk("reading-lamp", "Reading lamp", true), state: { on: true, brightness: 55, color: { r: 231, g: 183, b: 90 } } },
+  { device: mk("reading-lamp", "Reading lamp", true, true), state: { on: true, brightness: 55, color: { r: 231, g: 183, b: 90 } } },
   { device: mk("desk-strip", "Desk strip", true), state: { on: false, brightness: 100, color: { r: 120, g: 170, b: 255 } } },
-  { device: mk("ceiling", "Ceiling", false), state: { on: true, brightness: 80 } },
-  { device: mk("candle", "Candle", true), state: { on: true, brightness: 22, color: { r: 255, g: 120, b: 40 } } },
+  { device: mk("ceiling", "Ceiling", false, true), state: { on: true, brightness: 80, kelvin: 3500 } },
+  { device: mk("candle", "Candle", true, true), state: { on: true, brightness: 22, color: { r: 255, g: 120, b: 40 } } },
 ];
 
 // Live state, seeded fresh each page load.

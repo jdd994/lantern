@@ -8,6 +8,7 @@ const dev = (id: string): Device => ({
   sourceId: "demo",
   canBrightness: true,
   canColor: false,
+  canColorTemp: false,
   raw: {},
 });
 

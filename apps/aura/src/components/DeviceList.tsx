@@ -31,7 +31,7 @@ export function DeviceList({
               </button>
             </div>
 
-            {(d.canBrightness || d.canColor) && (
+            {(d.canBrightness || d.canColor || d.canColorTemp) && (
               <div className="device-controls">
                 {d.canBrightness && (
                   <input
@@ -43,6 +43,19 @@ export function DeviceList({
                     disabled={!st.on}
                     aria-label={`${d.name} brightness`}
                     onChange={(e) => onSet(d.id, { brightness: Number(e.target.value) })}
+                  />
+                )}
+                {d.canColorTemp && (
+                  <input
+                    className="temp"
+                    type="range"
+                    min={2000}
+                    max={6500}
+                    step={100}
+                    value={st.kelvin ?? 3500}
+                    disabled={!st.on}
+                    aria-label={`${d.name} white temperature`}
+                    onChange={(e) => onSet(d.id, { kelvin: Number(e.target.value) })}
                   />
                 )}
                 {d.canColor && (
