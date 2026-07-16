@@ -32,6 +32,13 @@ const readGeo = (): Coords | null => {
 
 const uid = () => crypto.randomUUID();
 
+// Merge two lists by id; items in `next` overwrite matching ones in `prev`.
+function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
+  const m = new Map(prev.map((x) => [x.id, x]));
+  for (const x of next) m.set(x.id, x);
+  return [...m.values()];
+}
+
 export function useAura() {
   const [sources, setSources] = useState<StoredSource[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -445,6 +452,49 @@ export function useAura() {
     return () => clearInterval(id);
   }, []);
 
+  // ---- portability: move your setup between devices (no account) ----------
+  // Exports rooms/scenes/vibes/automations — but NOT credentials. Device ids are
+  // stable per physical light/bridge, so on a new device you re-pair your lights and
+  // your rooms and scenes line right back up.
+  const exportSetup = useCallback(
+    () =>
+      JSON.stringify(
+        { app: "aura", version: 1, exportedAt: new Date().toISOString(), rooms, scenes, customVibes, automations },
+        null,
+        2
+      ),
+    [rooms, scenes, customVibes, automations]
+  );
+
+  const importSetup = useCallback(async (text: string): Promise<{ ok: boolean; error?: string }> => {
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: "That file isn't valid JSON." };
+    }
+    if (data?.app !== "aura" || !data.version) {
+      return { ok: false, error: "That doesn't look like an Aura setup file." };
+    }
+    try {
+      const rms: Room[] = Array.isArray(data.rooms) ? data.rooms : [];
+      const scns: StoredScene[] = Array.isArray(data.scenes) ? data.scenes : [];
+      const cvs: CustomVibe[] = Array.isArray(data.customVibes) ? data.customVibes : [];
+      const autos: Automation[] = Array.isArray(data.automations) ? data.automations : [];
+      await db.putRooms(rms);
+      for (const s of scns) await db.putScene(s);
+      for (const v of cvs) await db.putCustomVibe(v);
+      for (const a of autos) await db.putAutomation(a);
+      setRooms((prev) => mergeById(prev, rms));
+      setScenes((prev) => mergeById(prev, scns).sort((a, b) => a.createdAt - b.createdAt));
+      setCustomVibes((prev) => mergeById(prev, cvs).sort((a, b) => a.createdAt - b.createdAt));
+      setAutomations((prev) => mergeById(prev, autos).sort((a, b) => a.name.localeCompare(b.name)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
+    }
+  }, []);
+
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
@@ -453,5 +503,6 @@ export function useAura() {
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
+    exportSetup, importSetup,
   };
 }

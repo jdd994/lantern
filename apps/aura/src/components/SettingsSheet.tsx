@@ -1,5 +1,6 @@
 // SettingsSheet.tsx — the app's own vibe, your connected brands, and a plain word
 // on how Aura works. No account, no vault: Aura is a controller for your lights.
+import { useRef, useState } from "react";
 import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 import { connectorFor, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
@@ -16,6 +17,8 @@ export function SettingsSheet({
   sources,
   devices,
   onDisconnect,
+  onExport,
+  onImport,
   onClose,
 }: {
   themes: ThemeOption[];
@@ -27,8 +30,29 @@ export function SettingsSheet({
   sources: StoredSource[];
   devices: Device[];
   onDisconnect: (sourceId: string) => void;
+  onExport: () => string;
+  onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [ioNote, setIoNote] = useState<string | null>(null);
+
+  function exportSetup() {
+    const blob = new Blob([onExport()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aura-setup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setIoNote("Setup exported.");
+  }
+
+  async function importSetup(file: File) {
+    const text = await file.text();
+    const res = await onImport(text);
+    setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+  }
   return (
     <Sheet onClose={onClose} ariaLabel="Settings">
       <h3>Settings</h3>
@@ -79,6 +103,34 @@ export function SettingsSheet({
             })}
           </ul>
         )}
+      </div>
+
+      <div className="set-section">
+        <span className="label">Your setup</span>
+        <p className="hint">
+          Move your rooms, scenes, and vibes to another device. The file holds no keys — you re-pair
+          your lights there, and everything lines back up.
+        </p>
+        <div className="io-row">
+          <button className="btn btn-sm" onClick={exportSetup}>
+            Export setup
+          </button>
+          <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
+            Import setup
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importSetup(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        {ioNote && <p className="hint io-note">{ioNote}</p>}
       </div>
 
       <div className="set-section">
