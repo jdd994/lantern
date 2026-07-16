@@ -17,6 +17,8 @@ export function SettingsSheet({
   sources,
   devices,
   onDisconnect,
+  adaptive,
+  onAdaptive,
   onExport,
   onImport,
   onClose,
@@ -30,6 +32,8 @@ export function SettingsSheet({
   sources: StoredSource[];
   devices: Device[];
   onDisconnect: (sourceId: string) => void;
+  adaptive: boolean;
+  onAdaptive: (on: boolean) => void;
   onExport: () => string;
   onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
@@ -78,6 +82,24 @@ export function SettingsSheet({
               Reset
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="set-section">
+        <div className="adaptive-row">
+          <div>
+            <span className="label">Adaptive white</span>
+            <p className="hint">Tunable-white bulbs follow the day — warm at dawn and dusk, cool at midday.</p>
+          </div>
+          <button
+            className="toggle"
+            role="switch"
+            aria-checked={adaptive}
+            aria-label="Adaptive white"
+            onClick={() => onAdaptive(!adaptive)}
+          >
+            <span className="toggle-knob" />
+          </button>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import * as db from "../lib/db";
 import { vibeById } from "@lantern/core";
 import { connectorFor, type Device, type LightState } from "../lib/connectors";
 import { assign, type Room } from "../lib/rooms";
+import { adaptiveKelvin } from "../lib/adaptive";
 import {
   actionsOf,
   dueAutomations,
@@ -47,6 +48,13 @@ export function useAura() {
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [customVibes, setCustomVibes] = useState<CustomVibe[]>([]);
   const [coords, setCoords] = useState<Coords | null>(readGeo);
+  const [adaptive, setAdaptiveState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("aura-adaptive") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [states, setStates] = useState<Record<string, LightState>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -536,6 +544,38 @@ export function useAura() {
     }
   }, []);
 
+  // Adaptive (circadian) white: nudge tunable-white bulbs toward the day's natural
+  // temperature every few minutes. Leaves color bulbs showing a color alone, and
+  // never turns a light on — it just shapes the whites already in use.
+  const setAdaptive = useCallback((on: boolean) => {
+    setAdaptiveState(on);
+    try {
+      localStorage.setItem("aura-adaptive", on ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  const devicesRef = useRef(devices);
+  devicesRef.current = devices;
+  useEffect(() => {
+    if (!adaptive) return;
+    const apply = () => {
+      const k = adaptiveKelvin(new Date(), coordsRef.current);
+      for (const d of devicesRef.current) {
+        if (!d.canColorTemp) continue;
+        const st = statesRef.current[d.id];
+        if (!st?.on) continue;
+        if (d.canColor && st.kelvin === undefined) continue; // in color mode — leave it
+        if (st.kelvin !== undefined && Math.abs(st.kelvin - k) < 60) continue; // already close
+        setDevice(d.id, { kelvin: k }, true);
+      }
+    };
+    apply();
+    const id = setInterval(apply, 5 * 60_000);
+    return () => clearInterval(id);
+  }, [adaptive, setDevice]);
+
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
@@ -544,6 +584,6 @@ export function useAura() {
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
-    exportSetup, importSetup,
+    exportSetup, importSetup, adaptive, setAdaptive,
   };
 }
