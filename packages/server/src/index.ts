@@ -2,3 +2,4 @@
 // Stores opaque ciphertext + non-secret metadata only.
 export * from "./auth";
 export * from "./server";
+export * from "./sharing";

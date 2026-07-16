@@ -14,6 +14,7 @@
 import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth";
+import { mountSharing } from "./sharing";
 
 export type BaseEnv = {
   DB: D1Database;
@@ -26,6 +27,10 @@ export type ServerContext<E extends BaseEnv = BaseEnv> = Context<{ Bindings: E; 
 export type ServerConfig<E extends BaseEnv = BaseEnv> = {
   kinds: readonly string[];
   service: string;
+  // Mount the sharing routes (/shared/*, /identity, /keys). Off by default: an app
+  // without it is exactly as private as before — no sharing tables are ever
+  // consulted. Requires the sharing tables (packages/server/schema.sharing.sql).
+  sharing?: boolean;
   maxUserObjects?: number;
   maxUserContentBytes?: number;
   // Override the account deletion (e.g. to also sweep object storage or shared
@@ -113,6 +118,8 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
       maxAge: 86400,
     })(c, next);
   });
+
+  if (config.sharing) mountSharing(app);
 
   app.get("/health", (c) => c.json({ ok: true, service: config.service }));
   app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));
