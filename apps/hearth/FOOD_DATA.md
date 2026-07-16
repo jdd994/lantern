@@ -19,9 +19,15 @@ food** — calories, macros, and key micros per unit weight. Two shapes of food:
 **Tier 0 (USDA) is DONE (2026-07-14).** `scripts/build-food-db.py` turns the SR
 Legacy CSV into `public/foods.json` — ~7,800 whole foods, 914 KB (251 KB
 gzipped), precached so search is fully offline. The small hand seed stays for its
-friendly portions and is searched first. Tier 1 (barcodes) and tier 2 (photo
-recognition) are still ahead. Known nicety for later: search has no stemming, so
-"sardines" misses "Fish, sardine, …" — search the singular for now.
+friendly portions and is searched first. **Tier 1 (barcodes) shipped 2026-07-16**:
+type a barcode in Log food and Open Food Facts is queried (`world.openfoodfacts.org`
+is now in `connect-src` — the app's first outbound food host, disclosed in the UI
+where it happens). Name search still never touches the network; the lookup only
+fires for something that actually looks like a barcode. Tier 2 (photo recognition)
+is still ahead and still an empty seam. Known nicety for later: search has no
+stemming, so "sardines" misses "Fish, sardine, …" — search the singular for now.
+Also still open: caching resolved barcode products locally so a repeat scan is
+offline.
 
 ## Tier 0 — bundle USDA FoodData Central (whole foods)
 
