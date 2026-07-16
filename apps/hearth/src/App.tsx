@@ -143,6 +143,8 @@ export default function App() {
         onShare={(id, r) => void h.shareRecipe(id, r)}
         onCook={(r) => void h.logRecipeServing(r)}
         onRefresh={() => void h.syncKitchens()}
+        onPlan={(id, c) => void h.sharePlan(id, c)}
+        onRemovePlan={(id, pid) => void h.removeSharedPlan(id, pid)}
       />
 
       <Plan

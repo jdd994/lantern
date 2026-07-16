@@ -11,6 +11,7 @@
 // their own identity key. The server stores ciphertext and membership; it can
 // never read an ingredient.
 import type { Recipe } from "./nutrition";
+import type { PlanContent } from "./mealplan";
 
 /** What a kitchen looks like to the UI. The key itself never lives here — it
  *  stays in a ref in the hook, like the vault key. */
@@ -21,10 +22,18 @@ export type Kitchen = {
   dekEpoch: number;
   name: string;
   recipes: Recipe[]; // shared, decrypted for display
+  plans: SharedPlan[]; // the week, co-authored
 };
 
+// A planned meal inside a kitchen. Unlike a personal plan — whose `at` is
+// plaintext meta so a week can be windowed without decrypting — a shared plan
+// carries `at` INSIDE the ciphertext. Shared records have no meta channel, and
+// it's the better default anyway: the server learns nothing about when you eat.
+export type SharedPlanContent = PlanContent & { at: number };
+export type SharedPlan = SharedPlanContent & { id: string };
+
 /** The record kinds that live inside a kitchen. */
-export type KitchenKind = "meta" | "recipe";
+export type KitchenKind = "meta" | "recipe" | "mealPlan";
 
 /** The kitchen's own details, stored as an encrypted record like everything else
  *  — so even its name is nobody else's business. */

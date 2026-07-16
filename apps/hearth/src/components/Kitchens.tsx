@@ -5,11 +5,17 @@
 // so it says plainly what is and isn't shared — and it never implies your log or
 // your body are part of the deal.
 import { useState } from "react";
-import type { Kitchen } from "../lib/kitchen";
+import type { Kitchen, SharedPlanContent } from "../lib/kitchen";
+import { MEAL_SLOTS, SLOT_LABEL, startOfDay, type MealSlot } from "../lib/mealplan";
 import type { Recipe } from "../lib/nutrition";
+
+const dayLabel = (ms: number) =>
+  new Date(ms).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+const toInputDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 export function Kitchens({
   kitchens, recipes, account, busy, error, onCreate, onInvite, onShare, onCook, onRefresh,
+  onPlan, onRemovePlan,
 }: {
   kitchens: Kitchen[];
   recipes: Recipe[]; // your own, to offer into a kitchen
@@ -21,12 +27,18 @@ export function Kitchens({
   onShare: (strandId: string, recipe: Recipe) => void;
   onCook: (r: Recipe) => void;
   onRefresh: () => void;
+  onPlan: (strandId: string, content: SharedPlanContent) => void;
+  onRemovePlan: (strandId: string, id: string) => void;
 }) {
   const [name, setName] = useState("");
   const [inviting, setInviting] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [sharing, setSharing] = useState<string | null>(null);
+  const [planning, setPlanning] = useState<string | null>(null);
+  const [pDate, setPDate] = useState(toInputDate(Date.now()));
+  const [pSlot, setPSlot] = useState<MealSlot>("dinner");
+  const [pRecipe, setPRecipe] = useState("");
 
   async function invite(strandId: string) {
     const err = await onInvite(strandId, email);
@@ -120,6 +132,72 @@ export function Kitchens({
                     </div>
                   ))
                 )}
+
+                {/* The kitchen's own week — planned together, from its shared recipes. */}
+                {k.recipes.length > 0 ? (
+                  <>
+                    <div className="kitchen-head" style={{ marginTop: 10 }}>
+                      <span className="micro-label">Together this week</span>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setPlanning(planning === k.strandId ? null : k.strandId);
+                          setPRecipe(k.recipes[0]?.id ?? "");
+                        }}
+                      >
+                        Plan a meal
+                      </button>
+                    </div>
+
+                    {planning === k.strandId ? (
+                      <div className="kitchen-row">
+                        <input type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} />
+                        <select value={pSlot} onChange={(e) => setPSlot(e.target.value as MealSlot)}>
+                          {MEAL_SLOTS.map((sl) => <option key={sl} value={sl}>{SLOT_LABEL[sl]}</option>)}
+                        </select>
+                        <select value={pRecipe} onChange={(e) => setPRecipe(e.target.value)}>
+                          {k.recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={busy || !pRecipe}
+                          onClick={() => {
+                            const r = k.recipes.find((x) => x.id === pRecipe);
+                            if (!r) return;
+                            onPlan(k.strandId, {
+                              at: startOfDay(new Date(pDate + "T12:00").getTime()),
+                              slot: pSlot, kind: "recipe", recipeId: r.id, name: r.name, servings: 1,
+                            });
+                            setPlanning(null);
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {k.plans.length === 0 ? (
+                      <p className="hint">Nothing planned together yet.</p>
+                    ) : (
+                      k.plans.map((pl) => {
+                        const r = pl.kind === "recipe" ? k.recipes.find((x) => x.id === pl.recipeId) : undefined;
+                        return (
+                          <div className="plan-entry" key={pl.id}>
+                            <span className="plan-slot">{dayLabel(pl.at)}</span>
+                            <span className="plan-slot">{SLOT_LABEL[pl.slot]}</span>
+                            <span className="plan-name">{pl.name}</span>
+                            {r ? (
+                              <button className="btn btn-sm" disabled={busy} onClick={() => onCook(r)} title="Cook it — logs privately to you">
+                                Cook
+                              </button>
+                            ) : null}
+                            <button className="btn btn-ghost btn-sm" onClick={() => onRemovePlan(k.strandId, pl.id)} title="Remove">×</button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </>
+                ) : null}
               </div>
             ))
           )}

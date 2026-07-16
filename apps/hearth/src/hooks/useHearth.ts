@@ -22,7 +22,7 @@ import {
 import type { Metric, MetricContent } from "../lib/metrics";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
-import { KITCHEN_META_ID, type Kitchen, type KitchenMeta } from "../lib/kitchen";
+import { KITCHEN_META_ID, type Kitchen, type KitchenMeta, type SharedPlan, type SharedPlanContent } from "../lib/kitchen";
 import { unwrapPrivateKey, generateDEK } from "@lantern/core/crypto";
 import { wrapDEKForRecipient, unwrapDEK, importPublicKeyB64 } from "@lantern/core/sharing";
 
@@ -88,6 +88,8 @@ export type Hearth = {
   kitchenBusy: boolean;
   kitchenError: string | null;
   createKitchen: (name: string) => Promise<void>;
+  sharePlan: (strandId: string, content: SharedPlanContent) => Promise<void>;
+  removeSharedPlan: (strandId: string, id: string) => Promise<void>;
   inviteToKitchen: (strandId: string, email: string) => Promise<string | null>;
   shareRecipe: (strandId: string, recipe: Recipe) => Promise<void>;
   syncKitchens: () => Promise<void>;
@@ -675,6 +677,7 @@ export function useHearth(): Hearth {
         const { changes } = await api.sharedPull(token, s.strandId, 0);
         let name = "Kitchen";
         const shared: Recipe[] = [];
+        const sharedPlans: SharedPlan[] = [];
         for (const ch of changes) {
           if (ch.deleted) continue;
           try {
@@ -682,12 +685,18 @@ export function useHearth(): Hearth {
               name = (await openJSON<KitchenMeta>(entry.dek, ch.content)).name || name;
             } else if (ch.kind === "recipe") {
               shared.push({ ...(await openJSON<RecipeContent>(entry.dek, ch.content)), id: ch.id });
+            } else if (ch.kind === "mealPlan") {
+              sharedPlans.push({ ...(await openJSON<SharedPlanContent>(entry.dek, ch.content)), id: ch.id });
             }
           } catch {
             // one unreadable record shouldn't blank the whole kitchen
           }
         }
-        next.push({ strandId: s.strandId, ownerId: s.ownerId, role: s.role, dekEpoch: s.dekEpoch, name, recipes: shared });
+        sharedPlans.sort((a, b) => a.at - b.at);
+        next.push({
+          strandId: s.strandId, ownerId: s.ownerId, role: s.role, dekEpoch: s.dekEpoch,
+          name, recipes: shared, plans: sharedPlans,
+        });
       }
       setKitchens(next);
     } catch (e) {
@@ -769,6 +778,47 @@ export function useHearth(): Hearth {
     }
   }, [syncKitchens]);
 
+  // Put a meal on the kitchen's week. Co-authored: anyone in the kitchen can add
+  // one, and everyone sees it. Still no nagging — you look at it when you want to.
+  const sharePlan = useCallback(async (strandId: string, content: SharedPlanContent) => {
+    const token = tokenRef.current;
+    const entry = kitchenKeys.current.get(strandId);
+    if (!token || !entry) return;
+    setKitchenBusy(true);
+    setKitchenError(null);
+    try {
+      const now = Date.now();
+      await api.sharedPush(token, strandId, [{
+        kind: "mealPlan", id: uid(), createdAt: now, updatedAt: now,
+        deleted: false, dekEpoch: entry.dekEpoch,
+        content: await sealJSON(entry.dek, content),
+      }]);
+      await syncKitchens();
+    } catch (e) {
+      setKitchenError(e instanceof Error ? e.message : "Couldn't add that to the plan.");
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, [syncKitchens]);
+
+  const removeSharedPlan = useCallback(async (strandId: string, id: string) => {
+    const token = tokenRef.current;
+    const entry = kitchenKeys.current.get(strandId);
+    if (!token || !entry) return;
+    setKitchenBusy(true);
+    try {
+      const now = Date.now();
+      await api.sharedPush(token, strandId, [{
+        kind: "mealPlan", id, createdAt: now, updatedAt: now,
+        deleted: true, dekEpoch: entry.dekEpoch,
+        content: await sealJSON(entry.dek, {} as SharedPlanContent),
+      }]);
+      await syncKitchens();
+    } finally {
+      setKitchenBusy(false);
+    }
+  }, [syncKitchens]);
+
   const progressFor = useCallback((g: Goal) => goalProgress(g, today), [today]);
 
   return {
@@ -781,6 +831,7 @@ export function useHearth(): Hearth {
     addPlan, removePlan, cookPlan,
     addPantryItem, removePantryItem,
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
+    sharePlan, removeSharedPlan,
     logMetric, removeMetric,
   };
 }
