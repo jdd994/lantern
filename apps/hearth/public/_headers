@@ -9,10 +9,21 @@
 #      honest cost: OFF learns *a barcode was looked up*, plus an IP. It never
 #      learns who you are or anything about your day, and what comes back is
 #      stored encrypted like any other food. Disclosed in the UI where you scan.
+#   3. api.fitbit.com — tier 2 wearable readings (added 2026-07-16), opt-in and
+#      only after an explicit in-app Accept. The honest cost: NOBODY NEW sees
+#      anything. Fitbit already holds these readings; the browser talks straight
+#      to them (they support CORS + PKCE, so there's no server in the middle and
+#      no client secret), and what comes back is encrypted here before it's
+#      stored or synced. Our own server still holds only noise — even the record
+#      ids are HMACs, so it never learns a Fitbit is connected. This host does
+#      nothing until someone connects one.
+#      NOT here, deliberately: Oura (sends no allow-origin), Garmin and Whoop
+#      (both would need a backend that sees PLAINTEXT body data — see
+#      lib/wearable/fitbit.ts).
 # Never an analytics host; there is no analytics, and nothing that could ever see
 # what someone eats.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://hearth-server.jdd994.workers.dev https://world.openfoodfacts.org; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://hearth-server.jdd994.workers.dev https://world.openfoodfacts.org https://api.fitbit.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

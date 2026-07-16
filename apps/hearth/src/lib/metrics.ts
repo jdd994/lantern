@@ -5,17 +5,33 @@
 // an "ideal weight", never a comparison to anyone, never a verdict. It just shows
 // you your own trend, so you can notice it with compassion.
 
-export type MetricKind = "weight" | "waist" | "bodyfat";
+export type MetricKind = "weight" | "waist" | "bodyfat" | "sleep" | "restingHR" | "steps";
 
 export const METRIC_META: Record<MetricKind, { label: string; units: string[]; canonical: string; dp: number }> = {
   weight: { label: "Weight", units: ["kg", "lb"], canonical: "kg", dp: 1 },
   waist: { label: "Waist", units: ["cm", "in"], canonical: "cm", dp: 1 },
   bodyfat: { label: "Body fat", units: ["%"], canonical: "%", dp: 1 },
+  // Kinds a wearable can fill in (and you can still type by hand). They're
+  // measurements, never grades — see lib/wearable/index.ts for why no score,
+  // and no calories burned, is ever one of these.
+  sleep: { label: "Sleep", units: ["h"], canonical: "h", dp: 1 },
+  restingHR: { label: "Resting heart rate", units: ["bpm"], canonical: "bpm", dp: 0 },
+  steps: { label: "Steps", units: ["steps"], canonical: "steps", dp: 0 },
 };
 
 export const METRIC_KINDS = Object.keys(METRIC_META) as MetricKind[];
 
-export type MetricContent = { kind: MetricKind; value: number; unit: string; note?: string };
+// Where a reading came from. Absent means you typed it — the ordinary case, and
+// the reason this is optional rather than defaulted.
+export type MetricSource = "fitbit";
+
+export type MetricContent = {
+  kind: MetricKind;
+  value: number;
+  unit: string;
+  note?: string;
+  source?: MetricSource;
+};
 export type Metric = MetricContent & { id: string; at: number };
 
 // Convert to/from each kind's canonical unit, so readings entered in kg and lb

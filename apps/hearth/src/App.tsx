@@ -7,6 +7,7 @@ import { LogFood } from "./components/LogFood";
 import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
+import { Wearables } from "./components/Wearables";
 import { Plan, AddPlan } from "./components/Plan";
 import { Pantry } from "./components/Pantry";
 import { Kitchens } from "./components/Kitchens";
@@ -187,7 +188,16 @@ export default function App() {
         )}
       </section>
 
-      <Body metrics={h.metrics} onLog={() => setLoggingMetric(true)} onRemove={(id) => void h.removeMetric(id)} />
+      <Body metrics={h.metrics} onLog={() => setLoggingMetric(true)} onRemove={(id) => void h.removeMetric(id)}>
+        <Wearables
+          connections={h.connections}
+          busy={h.wearableBusy}
+          error={h.wearableError}
+          onConnect={(p) => void h.connectWearable(p)}
+          onImport={(p) => void h.importWearable(p)}
+          onDisconnect={(p) => void h.disconnectWearable(p)}
+        />
+      </Body>
 
       {logging ? (
         <LogFood

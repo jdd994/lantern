@@ -20,6 +20,11 @@ import {
   type GoalProgress, type Nutrients, type Recipe, type RecipeContent,
 } from "../lib/nutrition";
 import type { Metric, MetricContent } from "../lib/metrics";
+import * as fitbit from "../lib/wearable/fitbit";
+import {
+  readingContent, tagger,
+  type ConnectionContent, type ProviderId, type WearableConnection,
+} from "../lib/wearable";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
 import { KITCHEN_META_ID, type Kitchen, type KitchenMeta, type SharedPlan, type SharedPlanContent } from "../lib/kitchen";
@@ -96,6 +101,15 @@ export type Hearth = {
 
   logMetric: (content: MetricContent, at?: number) => Promise<void>;
   removeMetric: (id: string) => Promise<void>;
+
+  // Wearables. Readings you already own, copied to you from a device you already
+  // wear — measurements only, never a score, and never calories burned.
+  connections: WearableConnection[];
+  wearableBusy: boolean;
+  wearableError: string | null;
+  connectWearable: (provider: ProviderId) => Promise<void>;
+  importWearable: (provider: ProviderId) => Promise<void>;
+  disconnectWearable: (provider: ProviderId) => Promise<void>;
 };
 
 const uid = () => crypto.randomUUID();
@@ -125,6 +139,9 @@ export function useHearth(): Hearth {
   const kitchenKeys = useRef<Map<string, { dek: CryptoKey; dekEpoch: number }>>(new Map());
   const [canBiometric, setCanBiometric] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
+  const [connections, setConnections] = useState<WearableConnection[]>([]);
+  const [wearableBusy, setWearableBusy] = useState(false);
+  const [wearableError, setWearableError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -218,6 +235,141 @@ export function useHearth(): Hearth {
     syncTimer.current = setTimeout(() => void runSync(), 1500);
   }, [runSync]);
 
+  // ---- wearables ----------------------------------------------------------
+  // Tier 2: the browser talks straight to the vendor, so nobody new sees anything
+  // and our own server still holds only noise. What comes back is encrypted here
+  // before it's stored, exactly like a reading you typed.
+  //
+  // The ids are the subtle part — see lib/wearable/index.ts. A reading's record id
+  // is PLAINTEXT (it's the sync server's key), so it's an HMAC under your vault
+  // key rather than "fitbit:steps:2026-07-15". Deterministic, so a re-import
+  // updates instead of duplicating; opaque, so the server never learns that you
+  // use a Fitbit or which days you tracked.
+
+  const loadConnections = useCallback(async (key: CryptoKey) => {
+    const rows = await db.allConnections();
+    const out: WearableConnection[] = [];
+    for (const r of rows) {
+      try {
+        const c = await openJSON<ConnectionContent>(key, r.content);
+        out.push({ id: r.id as ProviderId, connectedAt: r.connectedAt, lastImportAt: c.lastImportAt });
+      } catch {
+        // An unreadable connection is just one we can't use — don't blank the rest.
+      }
+    }
+    setConnections(out);
+  }, []);
+
+  const importFrom = useCallback(async (provider: ProviderId) => {
+    const key = keyRef.current;
+    if (!key) return;
+    setWearableBusy(true);
+    setWearableError(null);
+    try {
+      const stored = await db.getConnection(provider);
+      if (!stored) return;
+      const conn = await openJSON<ConnectionContent>(key, stored.content);
+      const tokens = await fitbit.ensureFresh(conn.tokens);
+      // Persist a refreshed token BEFORE going on to read. Fitbit rotates the
+      // refresh token on every use and kills the old one the instant the refresh
+      // succeeds — so if the read below failed (offline, rate limit) and we still
+      // held the token only in memory, we'd have thrown away the live one and
+      // kept a dead one. The connection would then be permanently broken by what
+      // was really just a blip.
+      if (tokens !== conn.tokens) {
+        await db.putConnection({
+          ...stored, content: await sealJSON(key, { ...conn, tokens } satisfies ConnectionContent),
+        });
+      }
+      const readings = await fitbit.fetchReadings(tokens);
+
+      const existing = new Map((await db.allMetrics()).map((r) => [r.id, r]));
+      const tag = await tagger(key);
+      const now = Date.now();
+      let wrote = 0;
+      for (const r of readings) {
+        const id = await tag(r.natural);
+        const prev = existing.get(id);
+        // You deleted this reading on purpose. An import does not argue with that.
+        if (prev?.deleted) continue;
+        const content = readingContent(r, provider);
+        if (prev) {
+          // Unchanged since last time — skip, so a refresh doesn't mark the whole
+          // history dirty and re-upload it.
+          const old = await openJSON<MetricContent>(key, prev.content);
+          if (old.kind === content.kind && old.value === content.value && prev.at === r.at) continue;
+        }
+        await db.putMetric({
+          id, at: r.at, createdAt: prev?.createdAt ?? now, updatedAt: now,
+          deleted: false, dirty: true, content: await sealJSON(key, content),
+        });
+        wrote++;
+      }
+
+      await db.putConnection({
+        ...stored,
+        content: await sealJSON(key, { ...conn, tokens, lastImportAt: now } satisfies ConnectionContent),
+      });
+      await loadConnections(key);
+      if (wrote > 0) {
+        await loadAll(key);
+        scheduleSync();
+      }
+    } catch (e) {
+      setWearableError(e instanceof Error ? e.message : "Couldn't bring those readings in just now.");
+    } finally {
+      setWearableBusy(false);
+    }
+  }, [loadAll, loadConnections, scheduleSync]);
+
+  // Coming back from the vendor's consent page. The vault has to be open before
+  // this can finish, because the tokens are sealed with the vault key — so a
+  // redirect lands on the lock screen and completes the moment you unlock.
+  const completePendingConnect = useCallback(async (key: CryptoKey) => {
+    // "No" is a complete answer, and gets said back to you.
+    const refused = fitbit.pendingError();
+    if (refused) {
+      setWearableError(refused);
+      fitbit.clearCallback();
+      return;
+    }
+    const code = fitbit.pendingCode();
+    if (!code) return;
+    setWearableBusy(true);
+    try {
+      const tokens = await fitbit.completeConnect(code);
+      await db.putConnection({
+        id: "fitbit", connectedAt: Date.now(),
+        content: await sealJSON(key, { tokens } satisfies ConnectionContent),
+      });
+      await loadConnections(key);
+      await importFrom("fitbit");
+    } catch (e) {
+      setWearableError(e instanceof Error ? e.message : "Couldn't finish connecting Fitbit.");
+    } finally {
+      fitbit.clearCallback();
+      setWearableBusy(false);
+    }
+  }, [loadConnections, importFrom]);
+
+  const connectWearable = useCallback(async (_provider: ProviderId) => {
+    setWearableError(null);
+    if (!fitbit.configured()) {
+      setWearableError("This build has no Fitbit app id, so it can't connect one.");
+      return;
+    }
+    await fitbit.beginConnect();
+  }, []);
+
+  // Forget the grant. The readings stay — they're yours, and they're already
+  // encrypted here; only the ability to fetch more is dropped.
+  const disconnectWearable = useCallback(async (provider: ProviderId) => {
+    setWearableError(null);
+    await db.deleteConnection(provider);
+    const key = keyRef.current;
+    if (key) await loadConnections(key);
+  }, [loadConnections]);
+
   const setup = useCallback(async (passphrase: string) => {
     setBusy(true);
     setError(null);
@@ -236,9 +388,13 @@ export function useHearth(): Hearth {
   const finishUnlock = useCallback(async (key: CryptoKey) => {
     keyRef.current = key;
     await loadAll(key);
+    await loadConnections(key);
     setStatus("unlocked");
     if (tokenRef.current) void runSync();
-  }, [loadAll, runSync]);
+    // If we've just come back from a vendor's consent page, finish that now that
+    // the vault is open.
+    void completePendingConnect(key);
+  }, [loadAll, loadConnections, runSync, completePendingConnect]);
 
   const unlock = useCallback(async (passphrase: string): Promise<boolean> => {
     setBusy(true);
@@ -298,6 +454,7 @@ export function useHearth(): Hearth {
     setPlans([]);
     setPantry([]);
     setKitchens([]);
+    setConnections([]);
     identityRef.current = null;
     kitchenKeys.current.clear();
     setError(null);
@@ -833,5 +990,7 @@ export function useHearth(): Hearth {
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
     sharePlan, removeSharedPlan,
     logMetric, removeMetric,
+    connections, wearableBusy, wearableError,
+    connectWearable, importWearable: importFrom, disconnectWearable,
   };
 }
