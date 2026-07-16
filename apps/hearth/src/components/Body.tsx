@@ -6,9 +6,32 @@
 
 import { useState } from "react";
 import {
-  METRIC_META, METRIC_KINDS, series, latest, change, chartPoints,
+  METRIC_META, METRIC_KINDS, series, latest, change, chartPoints, recentAverage,
   formatMetric, type Metric, type MetricContent, type MetricKind,
 } from "../lib/metrics";
+
+const AVG_DAYS = 14;
+
+// The one true sentence we can say about this series, in Hearth's voice: a fact,
+// never a verdict. Which fact depends on the kind — a slow-moving number (weight)
+// has a real change since you started; a daily one (sleep, steps) doesn't, and
+// gets its average instead. See METRIC_META.daily.
+function summarise(metrics: Metric[], kind: MetricKind): string {
+  const s = series(metrics, kind);
+  if (METRIC_META[kind].daily) {
+    const avg = recentAverage(metrics, kind, AVG_DAYS);
+    if (avg && avg.n > 1) {
+      return `${formatMetric(avg.value, kind, avg.unit)} on average, last ${AVG_DAYS} days`;
+    }
+    if (s.length > 1) return `nothing in the last ${AVG_DAYS} days`;
+    return "your first reading — the shape appears as more arrive";
+  }
+  const chg = change(metrics, kind);
+  if (!chg) return "your first reading — the trend appears with the next";
+  if (chg.delta === 0) return "steady since you started";
+  const since = new Date(s[0].at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${chg.delta < 0 ? "down" : "up"} ${Math.abs(chg.delta).toFixed(METRIC_META[kind].dp)} ${chg.unit} since ${since}`;
+}
 
 // A quiet inline line chart — no library, no axes clutter. Just the shape of the
 // trend. Ember line on the warm ground.
@@ -55,7 +78,6 @@ export function Body({
 
   const s = series(metrics, active);
   const cur = latest(metrics, active);
-  const chg = change(metrics, active);
   const points = chartPoints(metrics, active);
 
   return (
@@ -86,15 +108,7 @@ export function Body({
         <div className="metric-card">
           <div className="metric-now">
             <span className="metric-val">{cur ? formatMetric(cur.value, active, cur.unit) : "—"}</span>
-            {chg ? (
-              <span className="metric-change">
-                {chg.delta === 0
-                  ? "steady since you started"
-                  : `${chg.delta < 0 ? "down" : "up"} ${Math.abs(chg.delta).toFixed(METRIC_META[active].dp)} ${chg.unit} since ${new Date(s[0].at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
-              </span>
-            ) : (
-              <span className="metric-change">your first reading — the trend appears with the next</span>
-            )}
+            <span className="metric-change">{summarise(metrics, active)}</span>
           </div>
           <Chart points={points} />
           <div className="metric-list">
