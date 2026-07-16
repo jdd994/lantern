@@ -10,6 +10,9 @@ on:
   push:
     tags: ["aura-v*"]
 
+permissions:
+  contents: write # allow publishing a Release on tag builds
+
 jobs:
   build:
     strategy:
@@ -53,7 +56,7 @@ jobs:
       - name: Build the app
         run: npm run tauri -w aura -- build ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
 
-      - name: Upload installers
+      - name: Upload installers (as run artifacts)
         uses: actions/upload-artifact@v4
         with:
           name: aura-${{ matrix.os }}${{ matrix.target && format('-{0}', matrix.target) || '' }}
@@ -61,3 +64,22 @@ jobs:
             apps/aura/src-tauri/target/${{ matrix.target }}/release/bundle/**
             apps/aura/src-tauri/target/release/bundle/**
           if-no-files-found: warn
+
+      # On a version tag (aura-v*), also publish the installers to a public GitHub
+      # Release — a permanent, no-login download link to share.
+      - name: Publish to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Aura ${{ github.ref_name }}
+          body: |
+            Aura desktop — unsigned test builds. See apps/aura/DESKTOP.md for how to
+            open on macOS (right-click → Open) and pair your Hue bridge.
+          files: |
+            apps/aura/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            apps/aura/src-tauri/target/release/bundle/**/*.dmg
+            apps/aura/src-tauri/target/release/bundle/**/*.msi
+            apps/aura/src-tauri/target/release/bundle/**/*.exe
+            apps/aura/src-tauri/target/release/bundle/**/*.AppImage
+            apps/aura/src-tauri/target/release/bundle/**/*.deb
+          fail_on_unmatched_files: false
