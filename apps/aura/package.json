@@ -10,17 +10,20 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "tauri": "tauri",
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name aura --branch=production"
   },
   "dependencies": {
     "@lantern/core": "*",
     "@lantern/ui": "*",
+    "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-http": "^2.5.9",
     "idb": "^8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
