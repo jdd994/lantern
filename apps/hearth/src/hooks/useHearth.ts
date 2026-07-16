@@ -20,6 +20,7 @@ import {
 } from "../lib/nutrition";
 import type { Metric, MetricContent } from "../lib/metrics";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
+import type { PantryItem } from "../lib/pantry";
 
 export type Status = "loading" | "setup" | "locked" | "unlocked";
 
@@ -33,6 +34,7 @@ export type Hearth = {
   recipes: Recipe[];
   metrics: Metric[];
   plans: PlanEntry[];
+  pantry: PantryItem[];
 
   today: Nutrients; // derived: today's running total
   progressFor: (g: Goal) => GoalProgress;
@@ -73,6 +75,9 @@ export type Hearth = {
   removePlan: (id: string) => Promise<void>;
   cookPlan: (entry: PlanEntry) => Promise<void>;
 
+  addPantryItem: (foodId: string, name: string) => Promise<void>;
+  removePantryItem: (id: string) => Promise<void>;
+
   logMetric: (content: MetricContent, at?: number) => Promise<void>;
   removeMetric: (id: string) => Promise<void>;
 };
@@ -94,6 +99,7 @@ export function useHearth(): Hearth {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [plans, setPlans] = useState<PlanEntry[]>([]);
+  const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [canBiometric, setCanBiometric] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
 
@@ -113,8 +119,8 @@ export function useHearth(): Hearth {
   }, []);
 
   const loadAll = useCallback(async (key: CryptoKey) => {
-    const [sl, sg, sr, sm, sp] = await Promise.all([
-      db.allFoodLogs(), db.allGoals(), db.allRecipes(), db.allMetrics(), db.allMealPlans(),
+    const [sl, sg, sr, sm, sp, spa] = await Promise.all([
+      db.allFoodLogs(), db.allGoals(), db.allRecipes(), db.allMetrics(), db.allMealPlans(), db.allPantry(),
     ]);
     const l = await Promise.all(
       sl.filter((r) => !r.deleted).map(async (r): Promise<FoodLog> => {
@@ -146,11 +152,18 @@ export function useHearth(): Hearth {
         return { ...c, id: r.id, at: r.at };
       })
     );
+    const pa = await Promise.all(
+      spa.filter((r) => !r.deleted).map(async (r): Promise<PantryItem> => {
+        const c = await openJSON<{ foodId: string; name: string }>(key, r.content);
+        return { ...c, id: r.id, addedAt: r.createdAt };
+      })
+    );
     setLogs(l);
     setGoals(g);
     setRecipes(rc);
     setMetrics(m);
     setPlans(pl);
+    setPantry(pa);
   }, []);
 
   // ---- sync ---------------------------------------------------------------
@@ -260,6 +273,7 @@ export function useHearth(): Hearth {
     setRecipes([]);
     setMetrics([]);
     setPlans([]);
+    setPantry([]);
     setError(null);
     setStatus("locked");
   }, []);
@@ -536,6 +550,31 @@ export function useHearth(): Hearth {
     scheduleSync();
   }, [recipes, logFood, scheduleSync]);
 
+  // ---- pantry ------------------------------------------------------------
+  // What's in the cupboard, so "what can I make?" can be answered offline. No
+  // quantities on purpose: a pantry that demands you weigh your rice is one
+  // nobody updates (see lib/pantry.ts).
+
+  const addPantryItem = useCallback(async (foodId: string, name: string) => {
+    const key = keyRef.current;
+    if (!key) return;
+    const id = uid();
+    const now = Date.now();
+    setPantry((prev) => [...prev, { id, foodId, name, addedAt: now }]);
+    await db.putPantryItem({
+      id, createdAt: now, updatedAt: now,
+      deleted: false, dirty: true, content: await sealJSON(key, { foodId, name }),
+    });
+    scheduleSync();
+  }, [scheduleSync]);
+
+  const removePantryItem = useCallback(async (id: string) => {
+    setPantry((prev) => prev.filter((p) => p.id !== id));
+    const stored = (await db.allPantry()).find((p) => p.id === id);
+    if (stored) await db.putPantryItem({ ...stored, deleted: true, dirty: true, updatedAt: Date.now() });
+    scheduleSync();
+  }, [scheduleSync]);
+
   // ---- body metrics ------------------------------------------------------
 
   const logMetric = useCallback(async (content: MetricContent, at?: number) => {
@@ -564,13 +603,14 @@ export function useHearth(): Hearth {
   const progressFor = useCallback((g: Goal) => goalProgress(g, today), [today]);
 
   return {
-    status, error, busy, logs, goals, recipes, metrics, plans, today, progressFor,
+    status, error, busy, logs, goals, recipes, metrics, plans, pantry, today, progressFor,
     canBiometric, hasBiometric,
     account, syncing, syncError, connectCreate, connectSignIn, disconnect, deleteAccount, changePassphrase, syncNow: runSync,
     setup, unlock, unlockWithBiometric, enableBiometric, lock,
     logFood, removeLog, addGoal, removeGoal,
     addRecipe, removeRecipe, logRecipeServing,
     addPlan, removePlan, cookPlan,
+    addPantryItem, removePantryItem,
     logMetric, removeMetric,
   };
 }

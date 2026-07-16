@@ -58,6 +58,7 @@ export function AddRecipe({
   onClose: () => void;
 }) {
   const [name, setName] = useState("");
+  const [tags, setTags] = useState("");
   const [servings, setServings] = useState(2);
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([]);
   const [query, setQuery] = useState("");
@@ -88,7 +89,13 @@ export function AddRecipe({
     e.preventDefault();
     if (!name.trim()) return setError("Give the recipe a name.");
     if (ingredients.length === 0) return setError("Add at least one ingredient.");
-    await onAdd({ name: name.trim(), servings: Math.max(1, servings), ingredients });
+    const tagList = tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    await onAdd({
+      name: name.trim(),
+      servings: Math.max(1, servings),
+      ingredients,
+      ...(tagList.length ? { tags: tagList } : {}),
+    });
     onClose();
   }
 
@@ -108,6 +115,20 @@ export function AddRecipe({
               <input type="number" min={1} value={servings} onChange={(e) => setServings(Math.max(1, Number(e.target.value) || 1))} />
             </label>
           </div>
+
+          <label className="field">
+            <span className="label">Moods (optional)</span>
+            <input
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="asian, quick, comfort"
+            />
+            <span className="hint">
+              Comma-separated, and entirely yours — used to find “something asian” from what's in
+              your pantry. Nothing is inferred about you.
+            </span>
+          </label>
 
           {/* current ingredients */}
           {ingredients.length > 0 ? (

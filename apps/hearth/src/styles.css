@@ -264,3 +264,12 @@ input::placeholder { color: var(--ink-faint); }
 
 /* Tier badge — names the source honestly where a result comes from a provider. */
 .tier-badge { font-size: 10.5px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; margin-left: 6px; white-space: nowrap; }
+
+/* ---- pantry chips + moods ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chips.moods { margin-bottom: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-raised); font-size: 13px; color: var(--ink-soft); }
+.chip-x { border: none; background: none; color: var(--ink-faint); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
+.chip-x:hover { color: var(--ink); }
+.chip-btn { cursor: pointer; }
+.chip-btn.is-on { border-color: var(--ember); color: var(--ink); background: var(--ember-dim); }

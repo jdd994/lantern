@@ -8,6 +8,7 @@ import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Plan, AddPlan } from "./components/Plan";
+import { Pantry } from "./components/Pantry";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Gear } from "./components/icons";
@@ -120,6 +121,15 @@ export default function App() {
           onRemove={(id) => void h.removeRecipe(id)}
         />
       </section>
+
+      <Pantry
+        pantry={h.pantry}
+        recipes={h.recipes}
+        busy={h.busy}
+        onAdd={(foodId, name) => void h.addPantryItem(foodId, name)}
+        onRemove={(id) => void h.removePantryItem(id)}
+        onCook={(r) => void h.logRecipeServing(r)}
+      />
 
       <Plan
         plans={h.plans}
