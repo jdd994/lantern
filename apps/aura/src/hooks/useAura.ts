@@ -234,6 +234,15 @@ export function useAura() {
     setScenes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  const renameScene = useCallback(async (id: string, name: string) => {
+    setScenes((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, name: name.trim() || s.name } : s));
+      const changed = next.find((s) => s.id === id);
+      if (changed) void db.putScene(changed);
+      return next;
+    });
+  }, []);
+
   // ---- rooms: named groups of devices in one physical place ---------------
   const createRoom = useCallback(async (name: string) => {
     const room: Room = { id: uid(), name: name.trim() || "Room", deviceIds: [], createdAt: Date.now() };
@@ -315,6 +324,20 @@ export function useAura() {
     await db.deleteCustomVibe(id);
     setCustomVibes((prev) => prev.filter((v) => v.id !== id));
   }, []);
+
+  const updateCustomVibe = useCallback(
+    async (id: string, label: string, rgb: Color, brightness: number) => {
+      setCustomVibes((prev) => {
+        const next = prev.map((v) =>
+          v.id === id ? { ...v, label: label.trim() || v.label, rgb, brightness } : v
+        );
+        const changed = next.find((v) => v.id === id);
+        if (changed) void db.putCustomVibe(changed);
+        return next;
+      });
+    },
+    []
+  );
 
   // ---- automations: "when <trigger>, do <action>" -------------------------
   // Ask the OS for location, once, so sun-based triggers can be computed. Stored
@@ -410,6 +433,6 @@ export function useAura() {
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
-    applyVibe, createCustomVibe, removeCustomVibe,
+    applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
   };
 }

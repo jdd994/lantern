@@ -13,6 +13,7 @@ export function Scenes({
   onApply,
   onSave,
   onRemove,
+  onRename,
   title = "Scenes",
   compact = false,
 }: {
@@ -22,11 +23,13 @@ export function Scenes({
   onApply: (id: string) => void;
   onSave: (name: string) => void;
   onRemove: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   title?: string;
   compact?: boolean;
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function save() {
     onSave(name);
@@ -85,21 +88,46 @@ export function Scenes({
         )
       ) : (
         <div className="scenes">
-          {scenes.map((s) => (
-            <div className="scene" key={s.id}>
-              <button className="scene-btn" disabled={busy} onClick={() => onApply(s.id)}>
-                {s.name}
-              </button>
-              <button
-                className="scene-x"
-                aria-label={`Remove ${s.name}`}
-                title="Remove"
-                onClick={() => onRemove(s.id)}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {scenes.map((s) =>
+            editingId === s.id ? (
+              <input
+                key={s.id}
+                className="field-input scene-rename"
+                defaultValue={s.name}
+                autoFocus
+                aria-label={`Rename ${s.name}`}
+                onBlur={(e) => {
+                  if (e.target.value.trim()) onRename(s.id, e.target.value);
+                  setEditingId(null);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              />
+            ) : (
+              <div className="scene" key={s.id}>
+                <button className="scene-btn" disabled={busy} onClick={() => onApply(s.id)}>
+                  {s.name}
+                </button>
+                <span className="chip-tools">
+                  <button
+                    className="chip-tool"
+                    aria-label={`Rename ${s.name}`}
+                    title="Rename"
+                    onClick={() => setEditingId(s.id)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="chip-tool"
+                    aria-label={`Remove ${s.name}`}
+                    title="Remove"
+                    onClick={() => onRemove(s.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )
+          )}
         </div>
       )}
     </section>

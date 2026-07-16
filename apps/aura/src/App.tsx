@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTheme, useAccent, type ThemeOption } from "@lantern/ui";
 import { useAura } from "./hooks/useAura";
-import { groupByRoom } from "./lib/rooms";
+import { groupByRoom, type Room } from "./lib/rooms";
+import type { CustomVibe } from "./lib/db";
 import { ConnectSheet } from "./components/ConnectSheet";
 import { DeviceList } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
@@ -9,6 +10,7 @@ import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
 import { Vibes } from "./components/Vibes";
 import { CustomVibeSheet } from "./components/CustomVibeSheet";
+import { VibePicker } from "./components/VibePicker";
 import { AmbientSheet } from "./components/AmbientSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
@@ -30,6 +32,8 @@ export default function App() {
   const [automating, setAutomating] = useState(false);
   const [ambient, setAmbient] = useState(false);
   const [creatingVibe, setCreatingVibe] = useState(false);
+  const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
+  const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
   const sections = groupByRoom(aura.devices, aura.rooms);
 
   return (
@@ -75,6 +79,7 @@ export default function App() {
               onApply={(id) => aura.applyVibe(id)}
               onAuto={() => setAmbient(true)}
               onAddVibe={() => setCreatingVibe(true)}
+              onEditVibe={(v) => setEditingVibe(v)}
               onRemoveVibe={aura.removeCustomVibe}
             />
           )}
@@ -106,6 +111,11 @@ export default function App() {
                       <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
                       {sec.devices.length > 0 && (
                         <div className="room-master">
+                          {sec.room && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => setVibeRoom(sec.room)}>
+                              Vibe
+                            </button>
+                          )}
                           <button
                             className="btn btn-ghost btn-sm"
                             onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), false)}
@@ -135,6 +145,7 @@ export default function App() {
                         onApply={aura.applyScene}
                         onSave={(n) => aura.saveScene(n, sec.room!.id)}
                         onRemove={aura.removeScene}
+                        onRename={aura.renameScene}
                       />
                     )}
                   </div>
@@ -151,6 +162,7 @@ export default function App() {
             onApply={aura.applyScene}
             onSave={(n) => aura.saveScene(n)}
             onRemove={aura.removeScene}
+            onRename={aura.renameScene}
           />
         </>
       )}
@@ -182,8 +194,27 @@ export default function App() {
           onClose={() => setAutomating(false)}
         />
       )}
-      {creatingVibe && (
-        <CustomVibeSheet onCreate={aura.createCustomVibe} onClose={() => setCreatingVibe(false)} />
+      {(creatingVibe || editingVibe) && (
+        <CustomVibeSheet
+          initial={editingVibe ?? undefined}
+          onSubmit={(label, rgb, brightness) =>
+            editingVibe
+              ? aura.updateCustomVibe(editingVibe.id, label, rgb, brightness)
+              : aura.createCustomVibe(label, rgb, brightness)
+          }
+          onClose={() => {
+            setCreatingVibe(false);
+            setEditingVibe(null);
+          }}
+        />
+      )}
+      {vibeRoom && (
+        <VibePicker
+          title={vibeRoom.name}
+          customVibes={aura.customVibes}
+          onPick={(id) => aura.applyVibe(id, vibeRoom.id)}
+          onClose={() => setVibeRoom(null)}
+        />
       )}
       {ambient && (
         <AmbientSheet onApplyVibe={(id) => aura.applyVibe(id)} onClose={() => setAmbient(false)} />
