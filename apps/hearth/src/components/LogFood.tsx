@@ -1,10 +1,15 @@
 // LogFood.tsx
 // Search the bundled food database, pick a portion (or type grams), log it.
-// Fully local — the provider-learns-nothing rung. The camera/recognize seam is
-// noted for later; today it's search-first.
+// Search is fully local — the provider-learns-nothing rung.
+//
+// Type a barcode instead and we ask Open Food Facts (tier 1). That's the one
+// outbound food request the app makes, so it says so, right where it happens:
+// OFF learns a barcode was looked up and nothing else. The camera/recognize seam
+// (tier 2) is still empty by design.
 
 import { useEffect, useMemo, useState } from "react";
 import { searchFoods, foodDbReady } from "../lib/fooddata";
+import { isBarcode, lookupBarcode } from "../lib/fooddata/off";
 import { scale, type Food } from "../lib/nutrition";
 
 export function LogFood({
@@ -23,6 +28,27 @@ export function LogFood({
 
   const results = useMemo(() => searchFoods(query), [query, ready]);
 
+  // Barcode path (tier 1). Only fires for something that actually looks like a
+  // barcode, so ordinary searching never touches the network.
+  const scanning = isBarcode(query);
+  const [offFood, setOffFood] = useState<Food | null>(null);
+  const [offBusy, setOffBusy] = useState(false);
+  const [offMiss, setOffMiss] = useState(false);
+  const [offError, setOffError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scanning) { setOffFood(null); setOffMiss(false); setOffError(null); return; }
+    const ac = new AbortController();
+    setOffBusy(true);
+    setOffMiss(false);
+    setOffError(null);
+    lookupBarcode(query, ac.signal)
+      .then((f) => { setOffFood(f); setOffMiss(f === null); })
+      .catch((e) => { if (!ac.signal.aborted) setOffError(e instanceof Error ? e.message : "Lookup failed."); })
+      .finally(() => { if (!ac.signal.aborted) setOffBusy(false); });
+    return () => ac.abort();
+  }, [query, scanning]);
+
   function pick(food: Food) {
     setPicked(food);
     setGrams(food.portions[0]?.grams ?? 100);
@@ -40,14 +66,40 @@ export function LogFood({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search — oats, banana, chicken…"
+              placeholder="Search a food, or type a barcode"
               autoFocus
+              inputMode="text"
             />
+            {scanning ? (
+              <div className="results">
+                {offBusy ? <p className="hint" style={{ padding: "10px 2px" }}>Looking that barcode up…</p> : null}
+                {offError ? <div className="error">{offError}</div> : null}
+                {offFood ? (
+                  <button className="result" onClick={() => pick(offFood)}>
+                    <span className="result-name">
+                      {offFood.name} <span className="tier-badge">Open Food Facts</span>
+                    </span>
+                    <span className="result-kcal">{Math.round(offFood.per100g.kcal)} kcal/100g</span>
+                  </button>
+                ) : null}
+                {offMiss && !offBusy ? (
+                  <p className="hint" style={{ padding: "10px 2px" }}>
+                    Open Food Facts doesn't have that one — common for local products. Search for it
+                    by name instead, and it'll log just the same.
+                  </p>
+                ) : null}
+                <p className="hint" style={{ padding: "8px 2px" }}>
+                  Barcodes are looked up at Open Food Facts, so they learn a barcode was looked up
+                  (and your IP) — never who you are or what else you ate. Everything else in Hearth
+                  stays on this device. Data © Open Food Facts contributors (ODbL).
+                </p>
+              </div>
+            ) : (
             <div className="results">
               {query && results.length === 0 ? (
                 <p className="hint" style={{ padding: "10px 2px" }}>
                   No matches — try a simpler or different name (e.g. "rice", "chicken breast").
-                  Barcode scanning for packaged foods is coming.
+                  For a packaged product, type its barcode instead.
                 </p>
               ) : (
                 results.map((f) => (
@@ -58,6 +110,7 @@ export function LogFood({
                 ))
               )}
             </div>
+            )}
             <div className="sheet-actions">
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
             </div>
