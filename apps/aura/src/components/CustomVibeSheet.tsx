@@ -3,28 +3,31 @@
 // Calm and small on purpose — a swatch and a slider, not a color-theory lab.
 import { useState } from "react";
 import { Sheet } from "@lantern/ui";
-import { hexToRgb } from "../lib/color";
+import { hexToRgb, rgbToHex } from "../lib/color";
 import type { Color } from "../lib/connectors";
+import type { CustomVibe } from "../lib/db";
 
 export function CustomVibeSheet({
-  onCreate,
+  initial,
+  onSubmit,
   onClose,
 }: {
-  onCreate: (label: string, rgb: Color, brightness: number) => void;
+  initial?: CustomVibe;
+  onSubmit: (label: string, rgb: Color, brightness: number) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [hex, setHex] = useState("#E7B75A");
-  const [brightness, setBrightness] = useState(60);
+  const [name, setName] = useState(initial?.label ?? "");
+  const [hex, setHex] = useState(initial ? rgbToHex(initial.rgb) : "#E7B75A");
+  const [brightness, setBrightness] = useState(initial?.brightness ?? 60);
 
   function save() {
-    onCreate(name, hexToRgb(hex), brightness);
+    onSubmit(name, hexToRgb(hex), brightness);
     onClose();
   }
 
   return (
-    <Sheet onClose={onClose} ariaLabel="New vibe">
-      <h3>New vibe</h3>
+    <Sheet onClose={onClose} ariaLabel={initial ? "Edit vibe" : "New vibe"}>
+      <h3>{initial ? "Edit vibe" : "New vibe"}</h3>
 
       <div className="vibe-preview">
         <span

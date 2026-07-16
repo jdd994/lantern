@@ -11,6 +11,7 @@ export function Vibes({
   onApply,
   onAuto,
   onAddVibe,
+  onEditVibe,
   onRemoveVibe,
 }: {
   busy: boolean;
@@ -18,6 +19,7 @@ export function Vibes({
   onApply: (vibeId: string) => void;
   onAuto: () => void;
   onAddVibe: () => void;
+  onEditVibe: (v: CustomVibe) => void;
   onRemoveVibe: (id: string) => void;
 }) {
   return (
@@ -48,14 +50,19 @@ export function Vibes({
               <span className="vibe-dot" style={{ background: rgbToHex(v.rgb) }} />
               {v.label}
             </button>
-            <button
-              className="scene-x"
-              aria-label={`Remove ${v.label}`}
-              title="Remove"
-              onClick={() => onRemoveVibe(v.id)}
-            >
-              ×
-            </button>
+            <span className="chip-tools">
+              <button className="chip-tool" aria-label={`Edit ${v.label}`} title="Edit" onClick={() => onEditVibe(v)}>
+                ✎
+              </button>
+              <button
+                className="chip-tool"
+                aria-label={`Remove ${v.label}`}
+                title="Remove"
+                onClick={() => onRemoveVibe(v.id)}
+              >
+                ×
+              </button>
+            </span>
           </span>
         ))}
 
