@@ -11,7 +11,6 @@
 
 import { useState } from "react";
 import { PROVIDERS, type ProviderId, type WearableConnection } from "../lib/wearable";
-import { configured } from "../lib/wearable/fitbit";
 
 function whenLabel(at: number): string {
   const mins = Math.round((Date.now() - at) / 60_000);
@@ -63,11 +62,14 @@ export function ConnectWearable({
 }
 
 export function Wearables({
-  connections, busy, error, onConnect, onImport, onDisconnect,
+  connections, busy, error, canConnect, onConnect, onImport, onDisconnect,
 }: {
   connections: WearableConnection[];
   busy: boolean;
   error: string | null;
+  // Whether this build can start a connection at all (it needs an app id). The
+  // hook knows; the component doesn't need to reach into a connector to find out.
+  canConnect: boolean;
   onConnect: (p: ProviderId) => void;
   onImport: (p: ProviderId) => void;
   onDisconnect: (p: ProviderId) => void;
@@ -102,8 +104,8 @@ export function Wearables({
             ) : (
               <button
                 className="btn btn-sm"
-                disabled={busy || !configured()}
-                title={configured() ? undefined : "This build has no Fitbit app id."}
+                disabled={busy || !canConnect}
+                title={canConnect ? undefined : `This build can't connect ${p.label}.`}
                 onClick={() => setAsking(id)}
               >
                 Connect
