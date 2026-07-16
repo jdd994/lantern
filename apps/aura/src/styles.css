@@ -82,6 +82,20 @@ body {
 
 .wrap { max-width: var(--maxw); margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 22px 120px; }
 
+/* welcome (first run) */
+.welcome { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8vh 8px 0; gap: 4px; }
+.welcome-mark { width: 96px; height: 96px; border-radius: 50%; margin-bottom: 22px;
+  background: radial-gradient(circle at 50% 44%, #F7D588, var(--accent) 55%, #8a5f1f 100%);
+  box-shadow: 0 0 60px -6px var(--accent), 0 0 0 1px var(--line-soft); }
+.welcome-title { font-size: 26px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink); margin: 0; }
+.welcome-title span { color: var(--accent); }
+.welcome-lede { font-size: 17px; color: var(--ink-soft); margin: 6px 0 18px; }
+.welcome-body { font-size: 15px; line-height: 1.65; color: var(--ink-soft); max-width: 34ch; margin: 0 0 10px; }
+.welcome-body em { color: var(--ink); font-style: normal; }
+.welcome-soft { color: var(--ink-faint); }
+.welcome-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; width: 100%; max-width: 280px; }
+.welcome-actions .btn { padding: 13px 15px; }
+
 /* header */
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
 .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }

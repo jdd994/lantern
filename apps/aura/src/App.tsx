@@ -12,6 +12,8 @@ import { Vibes } from "./components/Vibes";
 import { CustomVibeSheet } from "./components/CustomVibeSheet";
 import { VibePicker } from "./components/VibePicker";
 import { AmbientSheet } from "./components/AmbientSheet";
+import { Welcome } from "./components/Welcome";
+import { HelpSheet } from "./components/HelpSheet";
 import { SettingsSheet } from "./components/SettingsSheet";
 
 // Aura's own vibes — the app dogfoods the shared theme system. Each id maps to a
@@ -34,7 +36,42 @@ export default function App() {
   const [creatingVibe, setCreatingVibe] = useState(false);
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
+  const [helping, setHelping] = useState(false);
+  const [welcomed, setWelcomed] = useState(() => {
+    try {
+      return localStorage.getItem("aura-welcomed") === "1";
+    } catch {
+      return true;
+    }
+  });
   const sections = groupByRoom(aura.devices, aura.rooms);
+
+  function dismissWelcome() {
+    setWelcomed(true);
+    try {
+      localStorage.setItem("aura-welcomed", "1");
+    } catch {
+      /* private mode */
+    }
+  }
+
+  if (!welcomed) {
+    return (
+      <div className="wrap">
+        <Welcome
+          busy={aura.busy}
+          onConnect={() => {
+            dismissWelcome();
+            setConnecting(true);
+          }}
+          onDemo={async () => {
+            dismissWelcome();
+            await aura.connect("demo", "demo");
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="wrap">
@@ -53,6 +90,9 @@ export default function App() {
               </button>
             </>
           )}
+          <button className="icon-btn" aria-label="Help" onClick={() => setHelping(true)}>
+            ?
+          </button>
           <button className="icon-btn" aria-label="Settings" onClick={() => setSettings(true)}>
             ⚙
           </button>
@@ -219,6 +259,7 @@ export default function App() {
       {ambient && (
         <AmbientSheet onApplyVibe={(id) => aura.applyVibe(id)} onClose={() => setAmbient(false)} />
       )}
+      {helping && <HelpSheet onClose={() => setHelping(false)} />}
       {settings && (
         <SettingsSheet
           themes={THEMES}
