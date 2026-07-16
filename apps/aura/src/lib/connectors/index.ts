@@ -37,12 +37,13 @@ export type Connector = {
 
 import { govee } from "./govee";
 import { demo } from "./demo";
-// Staged: Philips Hue (local CLIP v2). Implemented in ./hue.ts but not registered —
-// a browser PWA can't reach a LAN bridge (mixed-content/TLS/CORS). Add it here once
-// Aura ships as Tauri (native HTTP), plus a discovery + link-button pairing step.
-// import { hue } from "./hue";
+import { hue } from "./hue";
+import { isTauri } from "../platform";
 
-export const connectors: Connector[] = [govee, demo];
+// Philips Hue (local CLIP v2) is only offered in the Tauri shell — a browser PWA
+// can't reach a LAN bridge (mixed-content/TLS/CORS), but native HTTP can. In the
+// web build it's simply absent from the picker.
+export const connectors: Connector[] = isTauri() ? [govee, demo, hue] : [govee, demo];
 
 export function connectorFor(sourceId: string): Connector | undefined {
   return connectors.find((c) => c.id === sourceId);
