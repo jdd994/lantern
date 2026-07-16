@@ -19,8 +19,12 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Device, LightState } from "./connectors";
 import type { Room } from "./rooms";
 import type { Automation } from "./automations";
+import type { Color } from "./connectors";
 
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
+
+// A user-made vibe: a named color mood you can apply like the built-in ones.
+export type CustomVibe = { id: string; label: string; rgb: Color; brightness: number; createdAt: number };
 
 // A connected brand, app-facing. id is the connector id ("govee"); cred is its API
 // key in the clear (decrypted on read, encrypted on write — see below).
@@ -48,6 +52,7 @@ interface AuraDB extends DBSchema {
   scenes: { key: string; value: StoredScene };
   rooms: { key: string; value: Room };
   automations: { key: string; value: Automation };
+  customVibes: { key: string; value: CustomVibe };
   keyring: { key: string; value: { id: string; key: CryptoKey } };
 }
 
@@ -69,6 +74,9 @@ function db() {
         }
         if (oldVersion < 4) {
           d.createObjectStore("automations", { keyPath: "id" });
+        }
+        if (oldVersion < 5) {
+          d.createObjectStore("customVibes", { keyPath: "id" });
         }
       },
     });
@@ -193,4 +201,15 @@ export async function putAutomation(a: Automation): Promise<void> {
 }
 export async function deleteAutomation(id: string): Promise<void> {
   await (await db()).delete("automations", id);
+}
+
+// ---- custom vibes --------------------------------------------------------
+export async function allCustomVibes(): Promise<CustomVibe[]> {
+  return (await db()).getAll("customVibes");
+}
+export async function putCustomVibe(v: CustomVibe): Promise<void> {
+  await (await db()).put("customVibes", v);
+}
+export async function deleteCustomVibe(id: string): Promise<void> {
+  await (await db()).delete("customVibes", id);
 }

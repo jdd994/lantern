@@ -206,6 +206,14 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .vibe:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glow); }
 .vibe:disabled { opacity: .5; cursor: default; }
 .vibe-dot { width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 8px -1px currentColor; }
+.vibe-wrap { position: relative; display: inline-flex; }
+.vibe-add { border-style: dashed; color: var(--ink-faint); }
+.vibe-add:hover { color: var(--ink); }
+
+/* custom-vibe creator */
+.vibe-preview { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.vibe-preview-dot { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 20px -2px currentColor; }
+.swatch.big { width: 52px; height: 44px; }
 
 /* ---- ambient / vibe engine ---- */
 .dim.wide { width: 100%; flex: none; }
