@@ -5,9 +5,10 @@
   "description": "Driftless sync server \u2014 stores opaque ciphertext only. See ../SYNC_PLAN.md.",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run typecheck && wrangler deploy",
     "db:init": "wrangler d1 execute driftless --remote --file=schema.sql",
-    "db:init:local": "wrangler d1 execute driftless --local --file=schema.sql"
+    "db:init:local": "wrangler d1 execute driftless --local --file=schema.sql",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@lantern/server": "*",

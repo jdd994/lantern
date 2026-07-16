@@ -2,12 +2,13 @@
   "name": "ballast-server",
   "private": true,
   "type": "module",
-  "description": "Ballast sync server — stores opaque ciphertext only. Ported from Driftless.",
+  "description": "Ballast sync server \u2014 stores opaque ciphertext only. Ported from Driftless.",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run typecheck && wrangler deploy",
     "db:init": "wrangler d1 execute ballast --remote --file=schema.sql",
-    "db:init:local": "wrangler d1 execute ballast --local --file=schema.sql"
+    "db:init:local": "wrangler d1 execute ballast --local --file=schema.sql",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@lantern/server": "*",
