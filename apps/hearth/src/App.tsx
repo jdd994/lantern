@@ -9,6 +9,7 @@ import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Plan, AddPlan } from "./components/Plan";
 import { Pantry } from "./components/Pantry";
+import { Kitchens } from "./components/Kitchens";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Gear } from "./components/icons";
@@ -129,6 +130,19 @@ export default function App() {
         onAdd={(foodId, name) => void h.addPantryItem(foodId, name)}
         onRemove={(id) => void h.removePantryItem(id)}
         onCook={(r) => void h.logRecipeServing(r)}
+      />
+
+      <Kitchens
+        kitchens={h.kitchens}
+        recipes={h.recipes}
+        account={h.account}
+        busy={h.kitchenBusy}
+        error={h.kitchenError}
+        onCreate={(n) => void h.createKitchen(n)}
+        onInvite={h.inviteToKitchen}
+        onShare={(id, r) => void h.shareRecipe(id, r)}
+        onCook={(r) => void h.logRecipeServing(r)}
+        onRefresh={() => void h.syncKitchens()}
       />
 
       <Plan
