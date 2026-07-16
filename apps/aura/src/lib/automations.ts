@@ -13,7 +13,10 @@ export type Coords = { lat: number; lon: number };
 
 export type Trigger =
   | { kind: "time"; minutes: number } // minutes since local midnight
-  | { kind: "sun"; event: "sunrise" | "sunset"; offsetMin: number };
+  | { kind: "sun"; event: "sunrise" | "sunset"; offsetMin: number }
+  // Event-driven: fires the moment a sensor sees motion (not time-scheduled, so it
+  // never appears in dueAutomations — the sensor poller drives it via sensorDue).
+  | { kind: "sensor"; sensorId: string };
 
 export type Action =
   | { kind: "scene"; sceneId: string }
@@ -32,7 +35,8 @@ export type Automation = {
   actions?: Action[]; // one trigger can do several things
   action?: Action; // legacy single action (pre-multi); read via actionsOf
   days?: number[]; // weekdays it may fire on (0=Sun..6=Sat); empty/undefined = every day
-  lastRun?: string; // "YYYY-MM-DD" (local) — once-per-day dedupe
+  lastRun?: string; // "YYYY-MM-DD" (local) — once-per-day dedupe for timed triggers
+  lastFiredAt?: number; // epoch ms — cooldown for sensor (event) triggers
 };
 
 // The actions to run, tolerant of the legacy single-action shape.
@@ -53,9 +57,29 @@ export function fireTimeOn(a: Automation, day: Date, coords: Coords | null): Dat
     t.setHours(0, a.trigger.minutes, 0, 0);
     return t;
   }
+  if (a.trigger.kind !== "sun") return null; // sensor triggers aren't time-scheduled
   if (!coords) return null;
   const base = sunTime(day, coords.lat, coords.lon, a.trigger.event);
   return base ? new Date(base.getTime() + a.trigger.offsetMin * 60_000) : null;
+}
+
+// Automations to fire when `sensorId` sees motion: enabled, watching that sensor,
+// allowed today, and past their cooldown (motion repeats — a daily dedupe would be
+// wrong, so sensor triggers use a short cooldown instead).
+export function sensorDue(
+  list: Automation[],
+  sensorId: string,
+  now: Date,
+  cooldownSec = 60
+): Automation[] {
+  return list.filter(
+    (a) =>
+      a.enabled &&
+      a.trigger.kind === "sensor" &&
+      a.trigger.sensorId === sensorId &&
+      allowedToday(a, now) &&
+      (!a.lastFiredAt || now.getTime() - a.lastFiredAt >= cooldownSec * 1000)
+  );
 }
 
 // Automations due to fire right now: enabled, not already run today, and `now` sits

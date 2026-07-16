@@ -21,7 +21,7 @@
 // uses its own scheme, not the web CSP), and provide a bridge-discovery + link-button
 // pairing step to obtain { ip, applicationKey }. Credential format here is
 // "<bridge-ip>|<application-key>".
-import type { Connector, Device, LightState } from "./index";
+import type { Connector, Device, LightState, Sensor } from "./index";
 import type { Color } from "./index";
 import { httpFetch } from "../platform";
 
@@ -146,6 +146,33 @@ export const hue: Connector = {
       state.color = xyToRgb(l.color.xy, l.dimming?.brightness ?? 100);
     }
     return state;
+  },
+
+  // Hue motion sensors live at /resource/motion; each belongs to a device, so we
+  // look up the device list once to give them their real names.
+  async listSensors(cred) {
+    const [motion, devices] = await Promise.all([
+      call(cred, "/resource/motion"),
+      call(cred, "/resource/device").catch(() => ({ data: [] })),
+    ]);
+    const names = new Map<string, string>(
+      (devices?.data ?? []).map((d: any) => [d.id, d.metadata?.name as string])
+    );
+    return (motion?.data ?? []).map(
+      (m: any): Sensor => ({
+        id: `hue:motion:${m.id}`,
+        name: names.get(m.owner?.rid) ?? "Hue motion",
+        sourceId: "hue",
+        raw: { rid: m.id } satisfies HueRaw,
+      })
+    );
+  },
+
+  async readSensor(cred, sensor) {
+    const { rid } = sensor.raw as HueRaw;
+    const data = await call(cred, `/resource/motion/${rid}`);
+    const m = data?.data?.[0];
+    return { motion: !!(m?.motion?.motion_valid && m?.motion?.motion) };
   },
 
   async setState(cred, device, patch) {

@@ -6,12 +6,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { vibeById } from "@lantern/core";
-import { connectorFor, type Device, type LightState } from "../lib/connectors";
+import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
+import { simulateDemoMotion } from "../lib/connectors/demo";
 import { assign, type Room } from "../lib/rooms";
 import { adaptiveKelvin } from "../lib/adaptive";
 import {
   actionsOf,
   dueAutomations,
+  sensorDue,
   ymd,
   type Action,
   type Automation,
@@ -43,6 +45,7 @@ function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
 export function useAura() {
   const [sources, setSources] = useState<StoredSource[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
   const [scenes, setScenes] = useState<StoredScene[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
@@ -82,6 +85,22 @@ export function useAura() {
     });
   }, []);
 
+  // Discover each connected brand's sensors (best-effort — brands without any, or a
+  // failing call, simply contribute none).
+  const loadSensors = useCallback(async (srcs: StoredSource[]) => {
+    const out: Sensor[] = [];
+    for (const s of srcs) {
+      const conn = connectorFor(s.id);
+      if (!conn?.listSensors) continue;
+      try {
+        out.push(...(await conn.listSensors(s.cred)));
+      } catch {
+        /* a brand's sensor list failing shouldn't break the others */
+      }
+    }
+    setSensors(out);
+  }, []);
+
   useEffect(() => {
     (async () => {
       const [srcs, devs, scns, rms, autos, cvibes] = await Promise.all([
@@ -99,8 +118,9 @@ export function useAura() {
       setAutomations(autos.sort((a, b) => a.name.localeCompare(b.name)));
       setCustomVibes(cvibes.sort((a, b) => a.createdAt - b.createdAt));
       if (devs.length) void loadStates(devs, srcs);
+      if (srcs.length) void loadSensors(srcs);
     })();
-  }, [loadStates]);
+  }, [loadStates, loadSensors]);
 
   // Connect a brand by validating its credential (a successful device list = valid).
   const connect = useCallback(
@@ -119,6 +139,7 @@ export function useAura() {
         setSources(nextSources);
         setDevices(nextDevices);
         void loadStates(devs, nextSources);
+        void loadSensors(nextSources);
         return null;
       } catch (e) {
         return e instanceof Error ? e.message : "Couldn't connect that source.";
@@ -126,7 +147,7 @@ export function useAura() {
         setBusy(false);
       }
     },
-    [sources, devices, loadStates]
+    [sources, devices, loadStates, loadSensors]
   );
 
   const disconnect = useCallback(async (sourceId: string) => {
@@ -134,6 +155,7 @@ export function useAura() {
     await db.deleteDevicesForSource(sourceId);
     setSources((prev) => prev.filter((s) => s.id !== sourceId));
     setDevices((prev) => prev.filter((d) => d.sourceId !== sourceId));
+    setSensors((prev) => prev.filter((s) => s.sourceId !== sourceId));
   }, []);
 
   const refresh = useCallback(async () => {
@@ -544,6 +566,48 @@ export function useAura() {
     }
   }, []);
 
+  // Sensor poller: watch each motion sensor and fire on the *edge* — the moment
+  // motion starts — not for as long as it keeps seeing you. Sensor automations use a
+  // cooldown rather than the once-a-day dedupe that timed ones use.
+  const sensorsRef = useRef(sensors);
+  sensorsRef.current = sensors;
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
+  const prevMotion = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const tick = async () => {
+      for (const sensor of sensorsRef.current) {
+        const conn = connectorFor(sensor.sourceId);
+        const cred = sourcesRef.current.find((s) => s.id === sensor.sourceId)?.cred;
+        if (!conn?.readSensor || cred === undefined) continue;
+        let motion = false;
+        try {
+          motion = (await conn.readSensor(cred, sensor)).motion;
+        } catch {
+          continue; // an unreachable sensor shouldn't stop the others
+        }
+        const was = prevMotion.current[sensor.id] ?? false;
+        prevMotion.current[sensor.id] = motion;
+        if (was || !motion) continue; // only the false → true edge
+
+        const now = new Date();
+        for (const a of sensorDue(autoRef.current, sensor.id, now)) {
+          for (const act of actionsOf(a)) runRef.current(act);
+          const updated = { ...a, lastFiredAt: now.getTime() };
+          void db.putAutomation(updated);
+          setAutomations((prev) => prev.map((x) => (x.id === a.id ? updated : x)));
+        }
+      }
+    };
+    const id = setInterval(() => void tick(), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Make the demo sensor "see" motion, so sensor automations can be felt with no
+  // hardware.
+  const simulateMotion = useCallback(() => simulateDemoMotion(), []);
+
   // Adaptive (circadian) white: nudge tunable-white bulbs toward the day's natural
   // temperature every few minutes. Leaves color bulbs showing a color alone, and
   // never turns a light on — it just shapes the whites already in use.
@@ -579,11 +643,11 @@ export function useAura() {
   const connected = useMemo(() => sources.length > 0, [sources]);
 
   return {
-    sources, devices, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
+    sources, devices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
-    exportSetup, importSetup, adaptive, setAdaptive,
+    exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
   };
 }

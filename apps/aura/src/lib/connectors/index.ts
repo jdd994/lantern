@@ -26,6 +26,17 @@ export type Device = {
   raw: unknown;
 };
 
+// A sensor, normalized across brands (motion/presence for now). Like devices, the
+// app never sees a brand's API shape — just this.
+export type Sensor = {
+  id: string;
+  name: string;
+  sourceId: string;
+  raw: unknown;
+};
+
+export type SensorReading = { motion: boolean };
+
 export type Connector = {
   id: string;
   label: string;
@@ -42,6 +53,10 @@ export type Connector = {
   listDevices(cred: string): Promise<Device[]>;
   getState(cred: string, device: Device): Promise<LightState>;
   setState(cred: string, device: Device, patch: Partial<LightState>): Promise<void>;
+  // Optional: brands with motion/presence sensors implement these; the automation
+  // engine polls them and fires on the moment motion starts.
+  listSensors?(cred: string): Promise<Sensor[]>;
+  readSensor?(cred: string, sensor: Sensor): Promise<SensorReading>;
 };
 
 import { govee } from "./govee";
