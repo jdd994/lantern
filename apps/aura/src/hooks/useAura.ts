@@ -381,16 +381,57 @@ export function useAura() {
     });
   }, []);
 
+  // A gentle brightness ramp over minutes (wake-up / wind-down). Runs while the app
+  // is open, stepping every 20s; fading to 0 turns the lights off at the end.
+  const statesRef = useRef(states);
+  statesRef.current = states;
+  const activeFades = useRef<ReturnType<typeof setInterval>[]>([]);
+  const startFade = useCallback(
+    (action: Extract<Action, { kind: "fade" }>) => {
+      const ids = (action.roomId ? (rooms.find((r) => r.id === action.roomId)?.deviceIds ?? []) : devices.map((d) => d.id)).filter(
+        (id) => devices.find((d) => d.id === id)?.canBrightness
+      );
+      if (!ids.length) return;
+      const to = Math.max(0, Math.min(100, action.toBrightness));
+      const cur = statesRef.current;
+      const starts: Record<string, number> = {};
+      for (const id of ids) {
+        starts[id] = cur[id]?.on ? (cur[id]?.brightness ?? 100) : 0;
+        if (to > 0) setDevice(id, { on: true, brightness: Math.max(1, Math.round(starts[id] || 1)) }, true);
+      }
+      const stepMs = 20_000;
+      const steps = Math.max(1, Math.min(120, Math.round((action.minutes * 60_000) / stepMs)));
+      let i = 0;
+      const timer = setInterval(() => {
+        i++;
+        const done = i >= steps;
+        for (const id of ids) {
+          const b = Math.round(starts[id] + (to - starts[id]) * (i / steps));
+          if (done && to <= 0) setDevice(id, { on: false }, true);
+          else setDevice(id, { brightness: Math.max(1, Math.min(100, b)) }, true);
+        }
+        if (done) {
+          clearInterval(timer);
+          activeFades.current = activeFades.current.filter((t) => t !== timer);
+        }
+      }, stepMs);
+      activeFades.current.push(timer);
+    },
+    [devices, rooms, setDevice]
+  );
+  useEffect(() => () => activeFades.current.forEach(clearInterval), []);
+
   const runAction = useCallback(
     (action: Action) => {
       if (action.kind === "scene") applyScene(action.sceneId);
       else if (action.kind === "allOff") setRoomPower(devices.map((d) => d.id), false);
+      else if (action.kind === "fade") startFade(action);
       else if (action.kind === "roomPower") {
         const room = rooms.find((r) => r.id === action.roomId);
         if (room) setRoomPower(room.deviceIds, action.on);
       }
     },
-    [applyScene, setRoomPower, devices, rooms]
+    [applyScene, setRoomPower, startFade, devices, rooms]
   );
 
   const addAutomation = useCallback(

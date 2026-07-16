@@ -37,6 +37,12 @@ function describeTrigger(t: Trigger): string {
 function describeAction(a: Action, scenes: StoredScene[], rooms: Room[]): string {
   if (a.kind === "allOff") return "All off";
   if (a.kind === "scene") return scenes.find((s) => s.id === a.sceneId)?.name ?? "Scene";
+  if (a.kind === "fade") {
+    const scope = a.roomId ? (rooms.find((r) => r.id === a.roomId)?.name ?? "a room") : "all lights";
+    return a.toBrightness <= 0
+      ? `Wind ${scope} down over ${a.minutes}m`
+      : `Fade ${scope} to ${a.toBrightness}% over ${a.minutes}m`;
+  }
   const room = rooms.find((r) => r.id === a.roomId)?.name ?? "Room";
   return `${room} ${a.on ? "on" : "off"}`;
 }
@@ -63,8 +69,15 @@ function describeNext(a: Automation, coords: Coords | null): string | null {
   return `Next: ${when} ${fmtTime(n)}`;
 }
 
-type ActionChoice = "scene" | "roomOn" | "roomOff" | "allOff";
-type ActionRow = { kind: ActionChoice; sceneId: string; roomId: string };
+type ActionChoice = "scene" | "roomOn" | "roomOff" | "allOff" | "fade";
+type ActionRow = {
+  kind: ActionChoice;
+  sceneId: string;
+  roomId: string;
+  fadeRoomId: string; // "" = all lights
+  fadeTo: number;
+  fadeMin: number;
+};
 
 export function AutomationsSheet({
   automations,
@@ -96,14 +109,23 @@ export function AutomationsSheet({
   const choices = useMemo<{ id: ActionChoice; label: string; disabled?: boolean }[]>(
     () => [
       { id: "scene", label: "Apply a scene", disabled: scenes.length === 0 },
+      { id: "fade", label: "Fade lights (wake / wind-down)" },
       { id: "roomOff", label: "Turn a room off", disabled: rooms.length === 0 },
       { id: "roomOn", label: "Turn a room on", disabled: rooms.length === 0 },
       { id: "allOff", label: "All off" },
     ],
     [scenes.length, rooms.length]
   );
+  const blankRow = (): ActionRow => ({
+    kind: "allOff",
+    sceneId: scenes[0]?.id ?? "",
+    roomId: rooms[0]?.id ?? "",
+    fadeRoomId: "",
+    fadeTo: 100,
+    fadeMin: 20,
+  });
   const [rows, setRows] = useState<ActionRow[]>([
-    { kind: scenes.length ? "scene" : "allOff", sceneId: scenes[0]?.id ?? "", roomId: rooms[0]?.id ?? "" },
+    { ...blankRow(), kind: scenes.length ? "scene" : "allOff" },
   ]);
 
   const needsLocation = triggerKind !== "time" && !coords;
@@ -118,14 +140,20 @@ export function AutomationsSheet({
       ? { kind: "scene", sceneId: r.sceneId }
       : r.kind === "allOff"
         ? { kind: "allOff" }
-        : { kind: "roomPower", roomId: r.roomId, on: r.kind === "roomOn" };
+        : r.kind === "fade"
+          ? {
+              kind: "fade",
+              ...(r.fadeRoomId ? { roomId: r.fadeRoomId } : {}),
+              toBrightness: Math.max(0, Math.min(100, r.fadeTo)),
+              minutes: Math.max(1, r.fadeMin),
+            }
+          : { kind: "roomPower", roomId: r.roomId, on: r.kind === "roomOn" };
 
   const toggleDay = (d: number) =>
     setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
   const updateRow = (i: number, patch: Partial<ActionRow>) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const addRow = () =>
-    setRows((prev) => [...prev, { kind: "allOff", sceneId: scenes[0]?.id ?? "", roomId: rooms[0]?.id ?? "" }]);
+  const addRow = () => setRows((prev) => [...prev, blankRow()]);
   const removeRow = (i: number) => setRows((prev) => prev.filter((_, j) => j !== i));
 
   async function useLocation() {
@@ -270,6 +298,40 @@ export function AutomationsSheet({
                   ))}
                 </select>
               )}
+              {row.kind === "fade" && (
+                <div className="fade-fields">
+                  <select value={row.fadeRoomId} onChange={(e) => updateRow(i, { fadeRoomId: e.target.value })}>
+                    <option value="">All lights</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="mini">
+                    to
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.fadeTo}
+                      onChange={(e) => updateRow(i, { fadeTo: Number(e.target.value) })}
+                    />
+                    %
+                  </label>
+                  <label className="mini">
+                    over
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={row.fadeMin}
+                      onChange={(e) => updateRow(i, { fadeMin: Number(e.target.value) })}
+                    />
+                    min
+                  </label>
+                </div>
+              )}
               {rows.length > 1 && (
                 <button className="chip-tool static" aria-label="Remove action" onClick={() => removeRow(i)}>
                   ×
@@ -277,6 +339,9 @@ export function AutomationsSheet({
               )}
             </div>
           ))}
+          {rows.some((r) => r.kind === "fade") && (
+            <p className="hint">Fade to 0% winds down and turns the lights off at the end.</p>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={addRow}>
             + Add action
           </button>
