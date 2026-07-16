@@ -245,6 +245,8 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .swatch.big { width: 52px; height: 44px; }
 .accent-row { display: flex; align-items: center; gap: 12px; }
 .accent-row .hint { flex: 1; }
+.io-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.io-note { margin-top: 8px; color: var(--glow); }
 
 /* ---- ambient / vibe engine ---- */
 .dim.wide { width: 100%; flex: none; }

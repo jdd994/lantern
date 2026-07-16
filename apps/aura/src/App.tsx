@@ -279,6 +279,8 @@ export default function App() {
           sources={aura.sources}
           devices={aura.devices}
           onDisconnect={aura.disconnect}
+          onExport={aura.exportSetup}
+          onImport={aura.importSetup}
           onClose={() => setSettings(false)}
         />
       )}
