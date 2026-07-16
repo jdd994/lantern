@@ -12,6 +12,7 @@
     "./api": "./src/api.ts",
     "./vault": "./src/vault.ts",
     "./sharing": "./src/sharing.ts",
+    "./sharing-api": "./src/sharing-api.ts",
     "./vibe": "./src/vibe.ts"
   }
 }

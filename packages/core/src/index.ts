@@ -8,4 +8,5 @@ export * from "./sync";
 export * from "./api";
 export * from "./vault";
 export * from "./sharing";
+export * from "./sharing-api";
 export * from "./vibe";
