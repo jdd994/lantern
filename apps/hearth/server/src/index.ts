@@ -3,6 +3,6 @@
 import { createServer } from "@lantern/server";
 
 export default createServer({
-  kinds: ["foodLog", "metric", "goal", "recipe"],
+  kinds: ["foodLog", "metric", "goal", "recipe", "mealPlan"],
   service: "hearth-server",
 });

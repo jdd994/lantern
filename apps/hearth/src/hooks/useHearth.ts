@@ -19,6 +19,7 @@ import {
   type GoalProgress, type Nutrients, type Recipe, type RecipeContent,
 } from "../lib/nutrition";
 import type { Metric, MetricContent } from "../lib/metrics";
+import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 
 export type Status = "loading" | "setup" | "locked" | "unlocked";
 
@@ -31,6 +32,7 @@ export type Hearth = {
   goals: Goal[];
   recipes: Recipe[];
   metrics: Metric[];
+  plans: PlanEntry[];
 
   today: Nutrients; // derived: today's running total
   progressFor: (g: Goal) => GoalProgress;
@@ -67,6 +69,10 @@ export type Hearth = {
   removeRecipe: (id: string) => Promise<void>;
   logRecipeServing: (recipe: Recipe) => Promise<void>;
 
+  addPlan: (content: PlanContent, at: number) => Promise<void>;
+  removePlan: (id: string) => Promise<void>;
+  cookPlan: (entry: PlanEntry) => Promise<void>;
+
   logMetric: (content: MetricContent, at?: number) => Promise<void>;
   removeMetric: (id: string) => Promise<void>;
 };
@@ -87,6 +93,7 @@ export function useHearth(): Hearth {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [plans, setPlans] = useState<PlanEntry[]>([]);
   const [canBiometric, setCanBiometric] = useState(false);
   const [hasBiometric, setHasBiometric] = useState(false);
 
@@ -106,8 +113,8 @@ export function useHearth(): Hearth {
   }, []);
 
   const loadAll = useCallback(async (key: CryptoKey) => {
-    const [sl, sg, sr, sm] = await Promise.all([
-      db.allFoodLogs(), db.allGoals(), db.allRecipes(), db.allMetrics(),
+    const [sl, sg, sr, sm, sp] = await Promise.all([
+      db.allFoodLogs(), db.allGoals(), db.allRecipes(), db.allMetrics(), db.allMealPlans(),
     ]);
     const l = await Promise.all(
       sl.filter((r) => !r.deleted).map(async (r): Promise<FoodLog> => {
@@ -133,10 +140,17 @@ export function useHearth(): Hearth {
         return { ...c, id: r.id, at: r.at };
       })
     );
+    const pl = await Promise.all(
+      sp.filter((r) => !r.deleted).map(async (r): Promise<PlanEntry> => {
+        const c = await openJSON<PlanContent>(key, r.content);
+        return { ...c, id: r.id, at: r.at };
+      })
+    );
     setLogs(l);
     setGoals(g);
     setRecipes(rc);
     setMetrics(m);
+    setPlans(pl);
   }, []);
 
   // ---- sync ---------------------------------------------------------------
@@ -245,6 +259,7 @@ export function useHearth(): Hearth {
     setGoals([]);
     setRecipes([]);
     setMetrics([]);
+    setPlans([]);
     setError(null);
     setStatus("locked");
   }, []);
@@ -458,6 +473,69 @@ export function useHearth(): Hearth {
     await logFood(food, food.portions[0].grams);
   }, [logFood]);
 
+  // ---- meal plans --------------------------------------------------------
+  // Planning is a PULL surface: you look at the week when you want to. Nothing
+  // here nags, and a day you didn't cook is not a failure — just a day.
+
+  const addPlan = useCallback(async (content: PlanContent, at: number) => {
+    const key = keyRef.current;
+    if (!key) return;
+    const id = uid();
+    const day = startOfDay(at);
+    setPlans((prev) => [...prev, { ...content, id, at: day }]);
+    await db.putMealPlan({
+      id, at: day, createdAt: Date.now(), updatedAt: Date.now(),
+      deleted: false, dirty: true, content: await sealJSON(key, content),
+    });
+    scheduleSync();
+  }, [scheduleSync]);
+
+  const removePlan = useCallback(async (id: string) => {
+    setPlans((prev) => prev.filter((p) => p.id !== id));
+    const stored = (await db.allMealPlans()).find((p) => p.id === id);
+    if (stored) await db.putMealPlan({ ...stored, deleted: true, dirty: true, updatedAt: Date.now() });
+    scheduleSync();
+  }, [scheduleSync]);
+
+  // Cooking a planned meal logs it through the ordinary food-log path (so the
+  // nutrients reproduce exactly), then marks the entry cooked so the week shows
+  // what's been made.
+  const cookPlan = useCallback(async (entry: PlanEntry) => {
+    const key = keyRef.current;
+    if (!key) return;
+    if (entry.kind === "recipe") {
+      const recipe = recipes.find((r) => r.id === entry.recipeId);
+      if (!recipe) {
+        setError("That recipe isn't here any more, so there's nothing to log.");
+        return;
+      }
+      const food = recipeAsFood(recipe);
+      await logFood(food, food.portions[0].grams * entry.servings);
+    } else {
+      await logFood(
+        {
+          id: entry.foodId,
+          name: entry.name,
+          source: "custom",
+          portions: [{ label: "planned", grams: entry.grams }],
+          per100g: entry.per100g,
+        },
+        entry.grams
+      );
+    }
+    const cookedAt = Date.now();
+    const { id: _id, at: _at, ...content } = entry;
+    const next: PlanContent = { ...content, cookedAt };
+    setPlans((prev) => prev.map((p) => (p.id === entry.id ? { ...p, cookedAt } : p)));
+    const stored = (await db.allMealPlans()).find((p) => p.id === entry.id);
+    if (stored) {
+      await db.putMealPlan({
+        ...stored, updatedAt: Date.now(), dirty: true, content: await sealJSON(key, next),
+      });
+    }
+    scheduleSync();
+  }, [recipes, logFood, scheduleSync]);
+
   // ---- body metrics ------------------------------------------------------
 
   const logMetric = useCallback(async (content: MetricContent, at?: number) => {
@@ -486,12 +564,13 @@ export function useHearth(): Hearth {
   const progressFor = useCallback((g: Goal) => goalProgress(g, today), [today]);
 
   return {
-    status, error, busy, logs, goals, recipes, metrics, today, progressFor,
+    status, error, busy, logs, goals, recipes, metrics, plans, today, progressFor,
     canBiometric, hasBiometric,
     account, syncing, syncError, connectCreate, connectSignIn, disconnect, deleteAccount, changePassphrase, syncNow: runSync,
     setup, unlock, unlockWithBiometric, enableBiometric, lock,
     logFood, removeLog, addGoal, removeGoal,
     addRecipe, removeRecipe, logRecipeServing,
+    addPlan, removePlan, cookPlan,
     logMetric, removeMetric,
   };
 }
