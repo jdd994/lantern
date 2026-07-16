@@ -7,16 +7,25 @@
 
 export type MetricKind = "weight" | "waist" | "bodyfat" | "sleep" | "restingHR" | "steps";
 
-export const METRIC_META: Record<MetricKind, { label: string; units: string[]; canonical: string; dp: number }> = {
+// `daily` marks the kinds that are a fresh quantity every day rather than a
+// slow-moving state. It decides which true thing we can say about a series:
+// your weight today genuinely compares to your weight in June, but last night's
+// sleep doesn't "compare" to some night a fortnight ago — see recentAverage.
+export const METRIC_META: Record<
+  MetricKind,
+  { label: string; units: string[]; canonical: string; dp: number; daily?: boolean }
+> = {
   weight: { label: "Weight", units: ["kg", "lb"], canonical: "kg", dp: 1 },
   waist: { label: "Waist", units: ["cm", "in"], canonical: "cm", dp: 1 },
   bodyfat: { label: "Body fat", units: ["%"], canonical: "%", dp: 1 },
   // Kinds a wearable can fill in (and you can still type by hand). They're
   // measurements, never grades — see lib/wearable/index.ts for why no score,
   // and no calories burned, is ever one of these.
-  sleep: { label: "Sleep", units: ["h"], canonical: "h", dp: 1 },
+  // Resting heart rate is NOT daily: like weight, it drifts slowly, so its
+  // change over months is a real fact about you.
+  sleep: { label: "Sleep", units: ["h"], canonical: "h", dp: 1, daily: true },
   restingHR: { label: "Resting heart rate", units: ["bpm"], canonical: "bpm", dp: 0 },
-  steps: { label: "Steps", units: ["steps"], canonical: "steps", dp: 0 },
+  steps: { label: "Steps", units: ["steps"], canonical: "steps", dp: 0, daily: true },
 };
 
 export const METRIC_KINDS = Object.keys(METRIC_META) as MetricKind[];
@@ -69,6 +78,30 @@ export function change(metrics: Metric[], kind: MetricKind): { delta: number; un
   const deltaCanonical =
     toCanonical(last.value, kind, last.unit) - toCanonical(first.value, kind, first.unit);
   return { delta: fromCanonical(deltaCanonical, kind, unit), unit };
+}
+
+// The mean of the last `days`, in the latest reading's display unit.
+//
+// This exists because `change` would lie about a daily kind. "Up 2,431 steps
+// since Jul 1" compares two arbitrary days and calls the difference a trend —
+// noise wearing the clothes of a finding. For a number that swings every day,
+// the quiet true thing is what it's been averaging. Still your own number, still
+// no target, still no verdict; just a steadier way of looking at it.
+//
+// Null when there's nothing in the window — better to say so than to widen the
+// window silently and average something else than what we claimed.
+export function recentAverage(
+  metrics: Metric[], kind: MetricKind, days = 14
+): { value: number; unit: string; n: number } | null {
+  const s = series(metrics, kind);
+  if (s.length === 0) return null;
+  const unit = s[s.length - 1].unit;
+  const cutoff = Date.now() - days * 86_400_000;
+  const recent = s.filter((m) => m.at >= cutoff);
+  if (recent.length === 0) return null;
+  const mean =
+    recent.reduce((total, m) => total + toCanonical(m.value, kind, m.unit), 0) / recent.length;
+  return { value: fromCanonical(mean, kind, unit), unit, n: recent.length };
 }
 
 // Points for a chart: {at, value} in the latest reading's display unit, so a
