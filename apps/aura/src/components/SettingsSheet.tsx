@@ -4,10 +4,15 @@ import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 import { connectorFor, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
 
+const DEFAULT_ACCENT = "#E7B75A";
+
 export function SettingsSheet({
   themes,
   mood,
   onMood,
+  accent,
+  onAccent,
+  onResetAccent,
   sources,
   devices,
   onDisconnect,
@@ -16,6 +21,9 @@ export function SettingsSheet({
   themes: ThemeOption[];
   mood: string;
   onMood: (id: string) => void;
+  accent: string | null;
+  onAccent: (hex: string) => void;
+  onResetAccent: () => void;
   sources: StoredSource[];
   devices: Device[];
   onDisconnect: (sourceId: string) => void;
@@ -28,6 +36,25 @@ export function SettingsSheet({
       <div className="set-section">
         <span className="label">Aura's vibe</span>
         <ThemePicker options={themes} current={mood} onSelect={onMood} />
+      </div>
+
+      <div className="set-section">
+        <span className="label">Accent color</span>
+        <div className="accent-row">
+          <input
+            className="swatch big"
+            type="color"
+            value={accent ?? DEFAULT_ACCENT}
+            aria-label="Accent color"
+            onChange={(e) => onAccent(e.target.value)}
+          />
+          <span className="hint">The signature glow — buttons, toggles, highlights.</span>
+          {accent && (
+            <button className="btn btn-ghost btn-sm" onClick={onResetAccent}>
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="set-section">

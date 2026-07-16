@@ -20,9 +20,12 @@
   --ink-soft:  #B6A98F;
   --ink-faint: #7C6E56;
 
-  /* Glow — the accent. A soft warm gold, like a lamp coming up on a dimmer. */
-  --glow:      #E7B75A;
-  --glow-dim:  rgba(231, 183, 90, 0.14);
+  /* Glow — the accent. A soft warm gold, like a lamp coming up on a dimmer.
+     --accent is the single source (so a custom accent via useAccent cascades);
+     --glow follows it, and --glow-dim is derived so tints track the accent too. */
+  --accent:    #E7B75A;
+  --glow:      var(--accent);
+  --glow-dim:  color-mix(in srgb, var(--accent) 14%, transparent);
 
   --off:       #6E6552; /* a light that's off — dim, never alarming */
 
@@ -31,9 +34,6 @@
 
   --maxw: 720px;
   --radius: 12px;
-
-  /* Canonical accent alias for shared @lantern/ui components. */
-  --accent: var(--glow);
 }
 
 /* ---- Vibes (presets). Default "Warmth" is the base above; these re-tint the
@@ -55,8 +55,7 @@
   --ink:       #2A2114;
   --ink-soft:  #5C4F3A;
   --ink-faint: #8A7C62;
-  --glow:      #B98A2A;
-  --glow-dim:  rgba(185, 138, 42, 0.12);
+  --accent:    #B98A2A;
 }
 
 * { box-sizing: border-box; }
@@ -214,6 +213,8 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .vibe-preview { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .vibe-preview-dot { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 0 20px -2px currentColor; }
 .swatch.big { width: 52px; height: 44px; }
+.accent-row { display: flex; align-items: center; gap: 12px; }
+.accent-row .hint { flex: 1; }
 
 /* ---- ambient / vibe engine ---- */
 .dim.wide { width: 100%; flex: none; }
