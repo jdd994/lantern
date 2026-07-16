@@ -79,8 +79,11 @@ with `sudo dpkg -i aura_*.deb`.
   the vibe from what it hears, dialed in by the time of day. Listening is on your
   device only — nothing is recorded or sent. (Simulate mode lets you try it without
   a mic.)
-- **Automations (⏱)** — "when sunset, apply Evening" or "at 11pm, all off." Note:
-  the desktop app must be running for these to fire.
+- **Automations (⏱)** — "when sunset, apply Evening", "at 11pm, all off", or "when
+  the hall sensor sees motion, …". Note: the desktop app must be running for these
+  to fire.
+- **Menu bar / tray** — Aura sits in your menu bar: click it for **All lights off**
+  or to bring the window back, without opening the app.
 
 ---
 
