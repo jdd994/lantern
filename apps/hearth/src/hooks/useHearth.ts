@@ -107,6 +107,7 @@ export type Hearth = {
   connections: WearableConnection[];
   wearableBusy: boolean;
   wearableError: string | null;
+  canConnectWearable: boolean;
   connectWearable: (provider: ProviderId) => Promise<void>;
   importWearable: (provider: ProviderId) => Promise<void>;
   disconnectWearable: (provider: ProviderId) => Promise<void>;
@@ -990,7 +991,7 @@ export function useHearth(): Hearth {
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
     sharePlan, removeSharedPlan,
     logMetric, removeMetric,
-    connections, wearableBusy, wearableError,
+    connections, wearableBusy, wearableError, canConnectWearable: fitbit.configured(),
     connectWearable, importWearable: importFrom, disconnectWearable,
   };
 }

@@ -193,6 +193,7 @@ export default function App() {
           connections={h.connections}
           busy={h.wearableBusy}
           error={h.wearableError}
+          canConnect={h.canConnectWearable}
           onConnect={(p) => void h.connectWearable(p)}
           onImport={(p) => void h.importWearable(p)}
           onDisconnect={(p) => void h.disconnectWearable(p)}
