@@ -19,11 +19,40 @@ export function TrustBadge({ tier, showLabel = true }: { tier: Tier; showLabel?:
   );
 }
 
-export function Disclosure({ tier, discloses }: { tier: Tier; discloses: string }) {
+export function Disclosure({
+  tier,
+  discloses,
+  takes,
+  refuses,
+}: {
+  tier: Tier;
+  discloses: string;
+  takes?: string[];
+  refuses?: string[];
+}) {
   return (
     <div className="disclosure">
       <TrustBadge tier={tier} />
       <p>{discloses}</p>
+      {takes && takes.length > 0 ? (
+        <ul className="disclosure-list disclosure-takes">
+          {takes.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      ) : null}
+      {refuses && refuses.length > 0 ? (
+        <>
+          {/* The refusals are the other half of consent: a promise made in
+              public, not a comment in a file. */}
+          <p className="disclosure-refuses-head">Deliberately not taken:</p>
+          <ul className="disclosure-list disclosure-refuses">
+            {refuses.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </div>
   );
 }
