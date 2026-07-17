@@ -109,6 +109,65 @@ export function recentAverage(
   return { value: fromCanonical(mean, kind, unit), unit, n: recent.length };
 }
 
+// ---- witnesses -------------------------------------------------------------
+// Source-aware aggregation. When more than one device (or your own hand) has
+// something to say about a metric, each is a separate witness: sources are
+// never averaged together silently, because the strap saying 58 while the ring
+// says 62 is information, not noise to smooth over. These helpers keep every
+// testimony separate; the display's job is to show them side by side.
+
+export type Witness = {
+  source?: MetricSource; // absent = typed by you, same convention as MetricContent
+  n: number;             // readings this witness contributed (window for daily kinds)
+  value: number;         // its own honest summary — never blended with another's
+  unit: string;
+};
+
+const bySource = (metrics: Metric[], kind: MetricKind): Map<MetricSource | undefined, Metric[]> => {
+  const groups = new Map<MetricSource | undefined, Metric[]>();
+  for (const m of series(metrics, kind)) {
+    const g = groups.get(m.source);
+    if (g) g.push(m);
+    else groups.set(m.source, [m]);
+  }
+  return groups;
+};
+
+/**
+ * Everyone who has testified about this kind, each summarised alone: the recent
+ * average for a daily kind, the latest reading for a slow-moving one — the same
+ * one-true-sentence rule as the single-source view, applied per witness. All
+ * values are stated in one shared unit (the series' latest display unit) so
+ * they can sit in a sentence together. Most recent testimony first.
+ */
+export function witnesses(metrics: Metric[], kind: MetricKind, days = 14): Witness[] {
+  const s = series(metrics, kind);
+  if (s.length === 0) return [];
+  const unit = s[s.length - 1].unit;
+  const cutoff = Date.now() - days * 86_400_000;
+  const out: { w: Witness; lastAt: number }[] = [];
+  for (const [source, group] of bySource(metrics, kind)) {
+    const lastAt = group[group.length - 1].at;
+    if (METRIC_META[kind].daily) {
+      const recent = group.filter((m) => m.at >= cutoff);
+      if (recent.length === 0) continue; // nothing recent to say — silence, not a stale number
+      const mean =
+        recent.reduce((total, m) => total + toCanonical(m.value, kind, m.unit), 0) / recent.length;
+      out.push({ w: { source, n: recent.length, value: fromCanonical(mean, kind, unit), unit }, lastAt });
+    } else {
+      const last = group[group.length - 1];
+      out.push({
+        w: {
+          source, n: group.length,
+          value: fromCanonical(toCanonical(last.value, kind, last.unit), kind, unit), unit,
+        },
+        lastAt,
+      });
+    }
+  }
+  return out.sort((a, b) => b.lastAt - a.lastAt).map((x) => x.w);
+}
+
 // Points for a chart: {at, value} in the latest reading's display unit, so a
 // mixed-unit history still draws one continuous line.
 export type Point = { at: number; value: number };
@@ -117,6 +176,30 @@ export function chartPoints(metrics: Metric[], kind: MetricKind): Point[] {
   if (s.length === 0) return [];
   const unit = s[s.length - 1].unit;
   return s.map((m) => ({ at: m.at, value: fromCanonical(toCanonical(m.value, kind, m.unit), kind, unit) }));
+}
+
+// One line per witness, never one line through all of them — a chart that
+// threads the strap's beats and the ring's into a single polyline is an average
+// drawn without admitting it. Every series shares one unit (the overall latest
+// display unit) so the lines are honestly comparable on one scale.
+export type SourceSeries = { source?: MetricSource; points: Point[] };
+export function chartSeries(metrics: Metric[], kind: MetricKind): SourceSeries[] {
+  const s = series(metrics, kind);
+  if (s.length === 0) return [];
+  const unit = s[s.length - 1].unit;
+  const out: SourceSeries[] = [];
+  for (const [source, group] of bySource(metrics, kind)) {
+    out.push({
+      source,
+      points: group.map((m) => ({
+        at: m.at, value: fromCanonical(toCanonical(m.value, kind, m.unit), kind, unit),
+      })),
+    });
+  }
+  // Most recent testimony last, so the liveliest line draws on top.
+  return out.sort(
+    (a, b) => a.points[a.points.length - 1].at - b.points[b.points.length - 1].at
+  );
 }
 
 export function formatMetric(value: number, kind: MetricKind, unit: string): string {

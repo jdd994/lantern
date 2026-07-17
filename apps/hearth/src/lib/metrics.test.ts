@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  series, latest, change, chartPoints, toCanonical, recentAverage, METRIC_META,
-  type Metric, type MetricKind,
+  series, latest, change, chartPoints, chartSeries, toCanonical, recentAverage,
+  witnesses, METRIC_META,
+  type Metric, type MetricKind, type MetricSource,
 } from "./metrics";
 
 const mk = (at: string, value: number, unit = "kg"): Metric => ({
@@ -9,8 +10,12 @@ const mk = (at: string, value: number, unit = "kg"): Metric => ({
 });
 
 // Readings `daysAgo` back, for the windowed average (which is relative to now).
-const ago = (daysAgo: number, value: number, kind: MetricKind = "steps", unit = "steps"): Metric => ({
-  id: `${kind}-${daysAgo}`, at: Date.now() - daysAgo * 86_400_000, kind, value, unit,
+const ago = (
+  daysAgo: number, value: number, kind: MetricKind = "steps", unit = "steps",
+  source?: MetricSource
+): Metric => ({
+  id: `${kind}-${source ?? "you"}-${daysAgo}`,
+  at: Date.now() - daysAgo * 86_400_000, kind, value, unit, source,
 });
 
 describe("metrics", () => {
@@ -73,6 +78,90 @@ describe("recentAverage", () => {
     const avg = recentAverage(ms, "weight", 14)!;
     expect(avg.unit).toBe("lb");
     expect(avg.value).toBeCloseTo((176.37 + 180) / 2, 1);
+  });
+});
+
+describe("witnesses", () => {
+  it("keeps every source's testimony separate — never one blended number", () => {
+    // Strap says ~58, ring says ~62. The honest output is both, not 60.
+    const ms = [
+      ago(2, 58, "restingHR", "bpm", "strap"),
+      ago(1, 59, "restingHR", "bpm", "strap"),
+      ago(1, 62, "restingHR", "bpm", "ring"),
+    ];
+    const w = witnesses(ms, "restingHR");
+    expect(w).toHaveLength(2);
+    const values = w.map((x) => x.value).sort((a, b) => a - b);
+    expect(values).toEqual([59, 62]); // latest per witness (restingHR is slow-moving)
+    expect(values).not.toContain(60.5); // the average nobody measured
+  });
+
+  it("averages per-witness for daily kinds, inside the window only", () => {
+    const ms = [
+      ago(1, 10_000, "steps", "steps", "fitbit"),
+      ago(3, 8_000, "steps", "steps", "fitbit"),
+      ago(2, 7_000, "steps", "steps"), // typed by you
+      ago(30, 100, "steps", "steps", "fitbit"), // outside the window
+    ];
+    const w = witnesses(ms, "steps", 14);
+    expect(w).toHaveLength(2);
+    const fitbit = w.find((x) => x.source === "fitbit")!;
+    const you = w.find((x) => x.source === undefined)!;
+    expect(fitbit.value).toBe(9_000);
+    expect(fitbit.n).toBe(2);
+    expect(you.value).toBe(7_000);
+  });
+
+  it("a witness with nothing recent to say about a daily kind stays silent", () => {
+    const ms = [
+      ago(1, 8, "sleep", "h", "fitbit"),
+      ago(40, 6, "sleep", "h"), // you, but long ago
+    ];
+    const w = witnesses(ms, "sleep", 14);
+    expect(w).toHaveLength(1);
+    expect(w[0].source).toBe("fitbit");
+  });
+
+  it("states every witness in one shared unit so they can sit in a sentence", () => {
+    const ms = [
+      ago(3, 80, "weight", "kg", "fitbit"),
+      ago(1, 180, "weight", "lb"), // yours, most recent → lb is the shared unit
+    ];
+    const w = witnesses(ms, "weight");
+    expect(w[0].unit).toBe("lb");
+    expect(w[1].unit).toBe("lb");
+    expect(w.find((x) => x.source === "fitbit")!.value).toBeCloseTo(176.37, 1);
+  });
+
+  it("most recent testimony speaks first", () => {
+    const ms = [
+      ago(5, 58, "restingHR", "bpm", "strap"),
+      ago(1, 62, "restingHR", "bpm", "ring"),
+    ];
+    expect(witnesses(ms, "restingHR").map((x) => x.source)).toEqual(["ring", "strap"]);
+  });
+});
+
+describe("chartSeries", () => {
+  it("draws one line per witness on one shared unit scale", () => {
+    const ms = [
+      ago(3, 80, "weight", "kg", "fitbit"),
+      ago(2, 81, "weight", "kg", "fitbit"),
+      ago(1, 180, "weight", "lb"),
+    ];
+    const lines = chartSeries(ms, "weight");
+    expect(lines).toHaveLength(2);
+    const fitbit = lines.find((l) => l.source === "fitbit")!;
+    expect(fitbit.points).toHaveLength(2);
+    expect(fitbit.points[0].value).toBeCloseTo(176.37, 1); // kg shown in the shared lb
+  });
+
+  it("one witness means one line — the single-source chart is unchanged", () => {
+    const ms = [mk("2026-07-01", 80), mk("2026-07-14", 79)];
+    const lines = chartSeries(ms, "weight");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].source).toBeUndefined();
+    expect(lines[0].points).toHaveLength(2);
   });
 });
 

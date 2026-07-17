@@ -150,6 +150,24 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 **The escape hatch for every blocked vendor is CSV import (tier 0)** — Garmin,
 Whoop and Oura all let you export. Less magical; costs nothing and asks nobody.
 
+### Source-aware aggregation (the witness stand)
+
+With several devices feeding one metric, each source is a separate **witness**
+(`witnesses()` / `chartSeries()` in `lib/metrics.ts`), and four rules hold:
+
+1. **Never average sources silently.** The strap saying 58 while the ring says
+   62 is information — the Body card states each testimony side by side and the
+   chart draws one line per source, never one line threaded through all of them.
+2. **Witness colours follow the entity, for life** (`--wit-*` in styles.css) —
+   validated for colour-vision separation (all pairs) and ≥3:1 contrast on both
+   surfaces. Change one → re-run the dataviz palette validator, don't eyeball.
+   Typed-by-you is quiet ink + a dashed line, named in the legend, never
+   identified by colour alone.
+3. **Uncertainty is part of the datum.** A sit's spread ("mostly 54–61") is
+   stored on the reading (`Reading.note`) and shown beside it forever.
+4. **Measurements and inferences never share a visual language** — currently
+   satisfied by refusing inferences entirely (no scores, no sleep stages).
+
 **Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and
 `lib/wearable/strap.ts`, asserted in their tests:
 1. **No calories burned.** Calories-out next to the food log silently becomes

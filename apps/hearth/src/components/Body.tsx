@@ -6,18 +6,42 @@
 
 import { useState } from "react";
 import {
-  METRIC_META, METRIC_KINDS, series, latest, change, chartPoints, recentAverage,
-  formatMetric, type Metric, type MetricContent, type MetricKind,
+  METRIC_META, METRIC_KINDS, series, latest, change, chartSeries, recentAverage,
+  witnesses, formatMetric,
+  type Metric, type MetricContent, type MetricKind, type MetricSource, type SourceSeries,
 } from "../lib/metrics";
 import { PROVIDERS } from "../lib/wearable";
 
 const AVG_DAYS = 14;
 
+// Each witness keeps one colour for life (see styles.css — the set is validated
+// for colour-vision separation on both the dark and light surfaces). Your own
+// typed readings are the baseline testimony: quiet ink and a dashed line, named
+// in the legend — never identified by colour alone.
+const stroke = (source?: MetricSource) => (source ? `var(--wit-${source})` : "var(--wit-you)");
+const dash = (source?: MetricSource) => (source ? undefined : "5 4");
+const witnessName = (source?: MetricSource) =>
+  source ? PROVIDERS[source].label.toLowerCase() : "typed by you";
+
 // The one true sentence we can say about this series, in Hearth's voice: a fact,
 // never a verdict. Which fact depends on the kind — a slow-moving number (weight)
 // has a real change since you started; a daily one (sleep, steps) doesn't, and
 // gets its average instead. See METRIC_META.daily.
+//
+// With more than one witness the sentence changes shape entirely: each source
+// is stated alone, side by side. Averaging the strap into the ring would be a
+// number nobody measured — if they disagree, the disagreement is shown, because
+// it's information.
 function summarise(metrics: Metric[], kind: MetricKind): string {
+  const wits = witnesses(metrics, kind, AVG_DAYS);
+  if (wits.length > 1) {
+    const each = wits
+      .map((w) => `${formatMetric(w.value, kind, w.unit)} ${witnessName(w.source)}`)
+      .join(" · ");
+    return METRIC_META[kind].daily
+      ? `${each} — each on average, last ${AVG_DAYS} days`
+      : `${each} — latest from each`;
+  }
   const s = series(metrics, kind);
   if (METRIC_META[kind].daily) {
     const avg = recentAverage(metrics, kind, AVG_DAYS);
@@ -35,29 +59,61 @@ function summarise(metrics: Metric[], kind: MetricKind): string {
 }
 
 // A quiet inline line chart — no library, no axes clutter. Just the shape of the
-// trend. Ember line on the warm ground.
-function Chart({ points }: { points: { at: number; value: number }[] }) {
+// trend. One witness draws the classic ember line; more than one draws a line
+// per source on one shared scale — never a single line threaded through
+// different devices' numbers, which would be an average drawn without admitting
+// it. Identity comes from the legend below, not from colour alone.
+function Chart({ series: all }: { series: SourceSeries[] }) {
   const W = 600, H = 120, pad = 10;
-  if (points.length === 0) return null;
-  const xs = points.map((p) => p.at);
-  const ys = points.map((p) => p.value);
+  const flat = all.flatMap((s) => s.points);
+  if (flat.length === 0) return null;
+  const solo = all.length === 1;
+  const xs = flat.map((p) => p.at);
+  const ys = flat.map((p) => p.value);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const spanX = maxX - minX || 1;
   const spanY = maxY - minY || 1;
   const px = (x: number) => pad + ((x - minX) / spanX) * (W - 2 * pad);
   const py = (y: number) => H - pad - ((y - minY) / spanY) * (H - 2 * pad);
-  const pts = points.map((p) => `${px(p.at).toFixed(1)},${py(p.value).toFixed(1)}`);
-  const last = points[points.length - 1];
 
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
-      {points.length > 1 ? (
-        <polyline points={pts.join(" ")} fill="none" stroke="var(--ember)" strokeWidth="2"
-          strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      ) : null}
-      <circle cx={px(last.at)} cy={py(last.value)} r="3.5" fill="var(--ember)" />
+      {all.map((s) => {
+        const colour = solo ? "var(--ember)" : stroke(s.source);
+        const last = s.points[s.points.length - 1];
+        return (
+          <g key={s.source ?? "you"}>
+            {s.points.length > 1 ? (
+              <polyline
+                points={s.points.map((p) => `${px(p.at).toFixed(1)},${py(p.value).toFixed(1)}`).join(" ")}
+                fill="none" stroke={colour} strokeWidth="2" strokeDasharray={solo ? undefined : dash(s.source)}
+                strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            ) : null}
+            <circle cx={px(last.at)} cy={py(last.value)} r="3.5" fill={colour} />
+          </g>
+        );
+      })}
     </svg>
+  );
+}
+
+// Who drew which line. Only appears when there's more than one witness — a lone
+// series needs no legend, the card's title already names it.
+function ChartLegend({ series: all }: { series: SourceSeries[] }) {
+  if (all.length < 2) return null;
+  return (
+    <div className="chart-legend">
+      {all.map((s) => (
+        <span className="legend-item" key={s.source ?? "you"}>
+          <svg width="18" height="4" aria-hidden="true">
+            <line x1="0" y1="2" x2="18" y2="2" stroke={stroke(s.source)} strokeWidth="2"
+              strokeDasharray={dash(s.source)} />
+          </svg>
+          {witnessName(s.source)}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -79,7 +135,7 @@ export function Body({
 
   const s = series(metrics, active);
   const cur = latest(metrics, active);
-  const points = chartPoints(metrics, active);
+  const lines = chartSeries(metrics, active);
 
   return (
     <section className="section">
@@ -111,7 +167,8 @@ export function Body({
             <span className="metric-val">{cur ? formatMetric(cur.value, active, cur.unit) : "—"}</span>
             <span className="metric-change">{summarise(metrics, active)}</span>
           </div>
-          <Chart points={points} />
+          <Chart series={lines} />
+          <ChartLegend series={lines} />
           <div className="metric-list">
             {[...s].reverse().slice(0, 6).map((m) => (
               <div className="metric-row" key={m.id}>
@@ -121,7 +178,11 @@ export function Body({
                       reading your band recorded are not quite the same claim. */}
                   {m.source ? <span className="tier-badge">{PROVIDERS[m.source].label}</span> : null}
                 </span>
-                <span className="metric-row-date">{new Date(m.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                <span className="metric-row-date">
+                  {new Date(m.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  {/* The reading's own uncertainty, kept beside the number for life. */}
+                  {m.note ? ` — ${m.note}` : ""}
+                </span>
                 <button className="btn btn-ghost btn-sm" onClick={() => onRemove(m.id)} title="Remove">×</button>
               </div>
             ))}
