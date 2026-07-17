@@ -15,10 +15,18 @@
 //     back to the photo picker, which works exactly as it always has.
 
 import { useEffect, useRef, useState } from "react";
-import { assess, HINT_COPY, type Hint } from "../lib/scanassist";
+import { assess, HINT_COPY, type Hint, type Region } from "../lib/scanassist";
 
 const THUMB_W = 96; // detector thumbnail width — small on purpose
 const TICK_MS = 180;
+// Steadiness, so the assist reads as a companion rather than a twitch:
+// the outline GLIDES toward each new reading instead of jumping to it, and a
+// hint must hold its opinion for a few ticks before it may replace the current
+// one — hand jitter changes the assessment faster than a human can act on it,
+// and relaying every flicker is noise wearing the costume of honesty.
+const REGION_GLIDE = 0.35; // 0..1 — how far toward the new box per tick
+const REGION_PATIENCE = 5; // ticks without a region before the box fades
+const HINT_PATIENCE = 3; // ticks a new hint must persist before it's shown
 
 export function ScanCamera({
   onCapture,
@@ -36,6 +44,13 @@ export function ScanCamera({
   const streamRef = useRef<MediaStream | null>(null);
   const [hint, setHint] = useState<Hint>("searching");
   const [ready, setReady] = useState(false);
+  const smoothRef = useRef<Region | null>(null);
+  const missesRef = useRef(0);
+  const hintRef = useRef<{ shown: Hint; candidate: Hint; ticks: number }>({
+    shown: "searching",
+    candidate: "searching",
+    ticks: 0,
+  });
 
   useEffect(() => {
     let live = true;
@@ -71,23 +86,68 @@ export function ScanCamera({
           thumb.height = th;
           thumbCtx.drawImage(v, 0, 0, tw, th);
           const a = assess({ width: tw, height: th, data: thumbCtx.getImageData(0, 0, tw, th).data });
-          setHint(a.hint);
 
-          // Draw the outline over the live view: what it sees, shown honestly.
+          // Hint hysteresis: a new opinion must persist before it's voiced.
+          const hs = hintRef.current;
+          if (a.hint === hs.shown) {
+            hs.candidate = a.hint;
+            hs.ticks = 0;
+          } else if (a.hint === hs.candidate) {
+            hs.ticks += 1;
+            if (hs.ticks >= HINT_PATIENCE) {
+              hs.shown = a.hint;
+              hs.ticks = 0;
+              setHint(a.hint);
+            }
+          } else {
+            hs.candidate = a.hint;
+            hs.ticks = 1;
+          }
+
+          // Region smoothing: glide toward the new box; tolerate brief misses.
+          if (a.region) {
+            const prev = smoothRef.current;
+            smoothRef.current = prev
+              ? {
+                  x: prev.x + (a.region.x - prev.x) * REGION_GLIDE,
+                  y: prev.y + (a.region.y - prev.y) * REGION_GLIDE,
+                  w: prev.w + (a.region.w - prev.w) * REGION_GLIDE,
+                  h: prev.h + (a.region.h - prev.h) * REGION_GLIDE,
+                }
+              : a.region;
+            missesRef.current = 0;
+          } else {
+            missesRef.current += 1;
+            if (missesRef.current >= REGION_PATIENCE) smoothRef.current = null;
+          }
+
+          // Draw the outline over the live view — mapped onto the area the
+          // video actually occupies. object-fit: contain letterboxes the feed,
+          // and drawing frame-fractions across the whole overlay stretches the
+          // box past the receipt (to the top of the phone, on a tall screen).
+          // The overlay must tell the same truth the pixels do.
           overlay.width = overlay.clientWidth;
           overlay.height = overlay.clientHeight;
           const ctx = overlay.getContext("2d");
           if (!ctx) return;
           ctx.clearRect(0, 0, overlay.width, overlay.height);
-          if (a.region) {
-            ctx.strokeStyle = a.hint === "good" ? "rgba(143,191,163,0.95)" : "rgba(201,169,97,0.9)";
+          const r = smoothRef.current;
+          if (r) {
+            const fit = Math.min(overlay.width / v.videoWidth, overlay.height / v.videoHeight);
+            const dw = v.videoWidth * fit;
+            const dh = v.videoHeight * fit;
+            const dx = (overlay.width - dw) / 2;
+            const dy = (overlay.height - dh) / 2;
+            ctx.strokeStyle =
+              hs.shown === "good" ? "rgba(143,191,163,0.95)" : "rgba(201,169,97,0.9)";
             ctx.lineWidth = 3;
-            ctx.strokeRect(
-              a.region.x * overlay.width,
-              a.region.y * overlay.height,
-              a.region.w * overlay.width,
-              a.region.h * overlay.height
-            );
+            ctx.beginPath();
+            if (typeof ctx.roundRect === "function") {
+              ctx.roundRect(dx + r.x * dw, dy + r.y * dh, r.w * dw, r.h * dh, 10);
+            } else {
+              ctx.rect(dx + r.x * dw, dy + r.y * dh, r.w * dw, r.h * dh);
+            }
+            ctx.stroke();
           }
         }, TICK_MS);
       } catch {
