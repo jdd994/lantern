@@ -11,3 +11,4 @@ vite.config.d.ts
 # Never commit anyone's food/health data
 *.hearth
 backups/
+dev-dist
