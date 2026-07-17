@@ -1073,3 +1073,58 @@ input.mono, input[inputmode="decimal"] {
 .set-section:last-of-type { margin-bottom: 0.8rem; }
 .set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
 .set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
+
+/* ---------- receipt line items ---------- */
+/* Rows read off a receipt, under review in AddExpense. Deliberately quieter
+   than the main fields: this is a draft the user is checking, not the record. */
+.items-block { margin-bottom: 18px; }
+.items-head .label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 7px; }
+.item-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.item-row .item-label { flex: 1; min-width: 0; }
+.item-row .item-amount {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.item-row .item-category { width: 130px; flex: none; }
+.item-row input, .item-row select { padding: 7px 9px; font-size: 13.5px; }
+.items-block > .hint {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin-top: 7px;
+  line-height: 1.5;
+}
+
+/* Items on a saved transaction, folded away until asked for. */
+.txn-items { margin-top: 4px; }
+.txn-items summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  list-style: none;
+  width: fit-content;
+}
+.txn-items summary::before { content: "▸ "; }
+.txn-items[open] summary::before { content: "▾ "; }
+.txn-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  padding: 2px 0 2px 14px;
+}
+.txn-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txn-item-cat { color: var(--ink-faint); flex: none; }
+.txn-item-amount {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  flex: none;
+}

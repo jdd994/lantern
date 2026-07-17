@@ -15,3 +15,7 @@ backups/
 # Emitted by the composite tsc -b build (tsconfig.node.json)
 vite.config.js
 vite.config.d.ts
+
+# Vendored OCR engine — rebuilt from node_modules by scripts/ocr-assets.mjs.
+# Binaries stay out of git; they ship from our origin, not from a CDN.
+public/ocr/

@@ -1,12 +1,7 @@
 // receipt.ts
-// The seam where receipt reading will one day plug in — and, today, doesn't.
-//
-// ## Why this file exists while doing nothing
-//
-// Reading a receipt photo automatically is genuinely desirable: snap it, and the
-// amount, merchant and date fill themselves in. The reason Ballast doesn't do it
-// yet is not laziness, it's that every option available right now costs more than
-// it's worth:
+// The seam where receipt reading plugs in. For most of this file's life the
+// active reader was `noReader` and this seam did nothing, on purpose — the
+// history of that decision is worth keeping:
 //
 //   - **Cloud OCR** (Google Vision, AWS Textract) is accurate and completely
 //     unacceptable. It means uploading a photograph of your receipt — merchant,
@@ -15,56 +10,51 @@
 //     because at least an aggregator is a regulated financial institution. This
 //     is forbidden by invariant #6 and is not a trade-off we will revisit.
 //
-//   - **On-device OCR today** (Tesseract.js) keeps the data private, which is the
-//     part that matters, but it is a multi-megabyte WASM engine that is honestly
-//     mediocre at real receipts — thermal print, curl, glare, faded ink. Driftless
-//     already ran this experiment in a different guise: it added a WASM HEIC
-//     converter and then deleted it (commit 0ae3a1c) once the weight stopped
-//     justifying the result. We are not repeating that lesson.
+//   - **On-device OCR** keeps the data private, which is the part that matters.
+//     We held off while the only option was a heavy engine with mediocre results,
+//     and turned it on once the cost came down to something honest: the engine
+//     (ocr.ts) is lazy-loaded only when you actually photograph a receipt, every
+//     byte of it is served from our own origin, and the CSP needed no changes.
+//     The photo never leaves the device. The receipt-zone badge still says
+//     tier 0 because it is still true.
 //
-// So today: the photo IS the record, and you type the amount. That takes about
-// eight seconds, it is never wrong, and it works on the first day.
+// A read is a *draft*, never a fact. Every field lands in an editable form and
+// the user confirms, so a bad read costs the eight seconds of typing it tried to
+// save — never a corrupted ledger.
 //
-// ## What happens when this changes
-//
-// On-device receipt models are getting rapidly smaller and better. When a good
-// one is cheap — a compact vision model in WASM/WebGPU, or a native browser text
-// API worth having — this becomes real, and the ONLY thing that changes is this
-// file. Write a `ReceiptReader`, set it as the active one, and:
-//
-//   - `AddExpense` already calls `readReceipt()` and pre-fills whatever comes
-//     back, so the UI does not change at all.
-//   - Every field stays editable and the user still confirms, so a bad read is a
-//     nuisance rather than a corrupted ledger.
-//   - The categoriser (categorize.ts) already turns a merchant string into a
-//     category, so OCR only ever has to produce the string — the smart part is
-//     already built and already learning.
-//
-// The one rule that must survive that change: **the image never leaves the
-// device.** A `ReceiptReader` that makes a network call is not a valid
-// implementation of this interface, and the CSP in public/_headers will stop it
-// at the browser regardless of what the code says.
+// The one rule that must survive any future reader swap: **the image never
+// leaves the device.** A `ReceiptReader` that makes a network call is not a
+// valid implementation of this interface, and the CSP in public/_headers will
+// stop it at the browser regardless of what the code says.
 
 import type { Money } from "./money";
 
-// What a reader can offer. Everything is optional — a partial read is useful, and
-// a reader that only manages to find the total has still saved you the fiddliest
-// bit of typing.
+// A line item as read off the tape. No category here — the reader reports what
+// the paper says; deciding what it *means* happens in the form, by the human.
+export type ReceiptDraftItem = {
+  label: string;
+  amount: Money; // positive magnitude
+};
+
+// What a reader can offer. Everything is optional — a partial read is useful,
+// and a reader that only manages to find the total has still saved you the
+// fiddliest bit of typing.
 export type ReceiptDraft = {
-  amount?: Money;
+  amount?: Money; // positive magnitude; the form applies the sign
   merchant?: string;
   at?: number;
+  items?: ReceiptDraftItem[];
 };
 
 export type ReceiptReader = {
   name: string;
-  // Whether this reader can run here and now (model downloaded, WebGPU present…).
+  // Whether this reader can run here and now (WASM present, workers available…).
   available: () => Promise<boolean>;
   // Must be pure-local. See the note above.
   read: (image: Blob, currency: string) => Promise<ReceiptDraft>;
 };
 
-// Today's reader: honest about knowing nothing.
+// The honest fallback: knows nothing, says so.
 export const noReader: ReceiptReader = {
   name: "none",
   available: async () => false,
@@ -73,7 +63,7 @@ export const noReader: ReceiptReader = {
 
 let active: ReceiptReader = noReader;
 
-// The swap point. One call, one day.
+// The swap point. main.tsx sets the Tesseract reader here at startup.
 export function setReceiptReader(reader: ReceiptReader): void {
   active = reader;
 }
@@ -82,10 +72,9 @@ export function activeReader(): ReceiptReader {
   return active;
 }
 
-// Called by the capture flow. Returns an empty draft today, which means the form
-// simply opens blank and the user types — exactly as if this call weren't here.
-// That's the point: the seam is already load-bearing, so the day it starts
-// returning real values, nothing downstream needs to be rewritten.
+// Called by the capture flow. Returns whatever the active reader can defend —
+// possibly nothing, in which case the form simply opens blank and the user
+// types, exactly as before this feature existed.
 export async function readReceipt(image: Blob, currency: string): Promise<ReceiptDraft> {
   try {
     if (!(await active.available())) return {};

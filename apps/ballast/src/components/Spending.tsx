@@ -194,6 +194,22 @@ function Row({
             </>
           ) : null}
         </div>
+        {t.items && t.items.length > 0 ? (
+          <details className="txn-items">
+            <summary>
+              {t.items.length === 1 ? "1 item" : `${t.items.length} items`}
+            </summary>
+            {t.items.map((i, idx) => (
+              <div className="txn-item" key={idx}>
+                <span className="txn-item-label">{i.label}</span>
+                {i.category && i.category !== t.category ? (
+                  <span className="txn-item-cat">{CATEGORIES[i.category].label}</span>
+                ) : null}
+                <span className="txn-item-amount">{formatMoney(i.amount)}</span>
+              </div>
+            ))}
+          </details>
+        ) : null}
       </div>
 
       <div className={`txn-amount${out ? " is-below" : " is-above"}`}>

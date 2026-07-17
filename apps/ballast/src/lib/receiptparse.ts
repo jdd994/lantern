@@ -1,0 +1,223 @@
+// receiptparse.ts
+// Pure. OCR text in, a ReceiptDraft out. No IO, no DOM, no engine — which is why
+// this file is unit-tested and ocr.ts (the engine plumbing) barely needs to be.
+//
+// OCR output from a real receipt is messy in predictable ways: thermal print
+// drops characters, columns collapse into single lines, and the same dollar
+// figure appears three times (subtotal, total, amount tendered). The job here is
+// not to be clever — it is to extract only what we can defend, and to leave a
+// field blank rather than guess. Everything returned lands in an editable form
+// the user confirms, so a miss costs eight seconds of typing, exactly what the
+// feature replaced. A confident wrong answer would cost trust instead.
+
+import { minorDigits, type Money } from "./money";
+import type { ReceiptDraft, ReceiptDraftItem } from "./receipt";
+
+// Words that mean a line is arithmetic or payment, not a purchased item. If a
+// line says CHANGE 20.00, the twenty dollars is the cashier's, not the store's.
+const NOT_AN_ITEM =
+  /\b(SUB\s?-?\s?TOTAL|TOTAL|TAX|VAT|GST|HST|TIP|GRATUITY|CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PAYMENT|BALANCE|AMOUNT\s+DUE|AUTH|APPROVED|REFUND|SAVINGS?|SAVED|COUPON|DISCOUNT|LOYALTY|POINTS|REWARDS?|ROUNDING)\b/i;
+
+// Lines whose amount is the one we actually want.
+const TOTAL_LINE = /\b(TOTAL|AMOUNT\s+DUE|BALANCE\s+DUE|TO\s+PAY|GRAND\s+TOTAL)\b/i;
+// ...unless the same line disqualifies itself.
+const NOT_THE_TOTAL = /\b(SUB\s?-?\s?TOTAL|TAX|TIP|SAVINGS?|SAVED|ITEMS?\s+SOLD|POINTS|TENDER)\b/i;
+
+// Payment lines often repeat the total to the cent; change lines exceed it.
+// Neither may win the "largest amount" fallback.
+const PAYMENT_LINE =
+  /\b(CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|AUTH|APPROVED|BALANCE)\b/i;
+
+// A money figure at the end of a line: "4.99", "1,234.56", "12,34", with an
+// optional currency symbol and an optional trailing minus or column letter
+// ("4.99-" and "4.99 A" are both common register formats).
+const TRAILING_AMOUNT =
+  /(?:^|\s)[$£€]?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*(-)?\s*[A-Z*]?\s*$/;
+
+// OCR loves to read "$" as "S" or "5" glued to the number; strip a leading
+// currency-ish rune before parsing digits.
+function parseAmountMinor(raw: string, currency: string): number | null {
+  const digits = minorDigits(currency);
+  // Normalise "1.234,56" and "12,34" (comma-decimal) to dot-decimal.
+  let s = raw;
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma > lastDot) {
+    // Comma is the decimal separator.
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else {
+    s = s.replace(/,/g, "");
+  }
+  const m = s.match(/^(\d+)\.(\d{2})$/) ?? s.match(/^(\d+)$/);
+  if (!m) return null;
+  const whole = m[1];
+  const frac = (m[2] ?? "").padEnd(digits, "0").slice(0, digits);
+  const minor = Number(whole + frac);
+  return Number.isSafeInteger(minor) ? minor : null;
+}
+
+type MoneyLine = {
+  index: number;
+  text: string; // the line without its trailing amount
+  minor: number;
+};
+
+function moneyLines(lines: string[], currency: string): MoneyLine[] {
+  const out: MoneyLine[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(TRAILING_AMOUNT);
+    if (!m) continue;
+    const minor = parseAmountMinor(m[1], currency);
+    if (minor === null || minor === 0) continue;
+    out.push({
+      index: i,
+      text: lines[i].slice(0, lines[i].length - m[0].length).trim(),
+      minor,
+    });
+  }
+  return out;
+}
+
+// ---- The total -------------------------------------------------------------
+
+function findTotal(monied: MoneyLine[]): number | undefined {
+  // Prefer an explicit TOTAL line; take the LAST one, because "TOTAL" is often
+  // followed by payment lines but preceded by "SUBTOTAL" — and on long receipts
+  // a running total can appear mid-tape.
+  const explicit = monied.filter(
+    (l) => TOTAL_LINE.test(l.text) && !NOT_THE_TOTAL.test(l.text)
+  );
+  if (explicit.length > 0) return explicit[explicit.length - 1].minor;
+
+  // Fallback: the largest amount that isn't payment arithmetic. On most
+  // receipts that is the total, since it is the sum of everything above it.
+  const candidates = monied.filter((l) => !PAYMENT_LINE.test(l.text));
+  if (candidates.length === 0) return undefined;
+  return Math.max(...candidates.map((l) => l.minor));
+}
+
+// ---- The merchant ----------------------------------------------------------
+
+const MERCHANT_NOISE =
+  /\b(RECEIPT|INVOICE|WELCOME\s+TO|THANK\s+YOU|TEL|PHONE|FAX|WWW\.|HTTP|STORE\s*#?\d*|REG(ISTER)?\s*#?\d*|CASHIER|ORDER|SURVEY)\b/i;
+
+function findMerchant(lines: string[]): string | undefined {
+  // The name is almost always in the first few printed lines, above the
+  // address. Take the first early line that is mostly letters and isn't
+  // boilerplate, a street address, or a phone number.
+  for (const line of lines.slice(0, 5)) {
+    const letters = (line.match(/[A-Za-z]/g) ?? []).length;
+    if (letters < 3) continue;
+    if (MERCHANT_NOISE.test(line)) continue;
+    if (/\d{3,}/.test(line)) continue; // street numbers, zips, phones
+    if (TRAILING_AMOUNT.test(line)) continue;
+    const cleaned = line.replace(/[^A-Za-z0-9\s&'’.-]/g, " ").replace(/\s+/g, " ").trim();
+    if (cleaned.length >= 3) return cleaned;
+  }
+  return undefined;
+}
+
+// ---- The date --------------------------------------------------------------
+
+function findDate(text: string, now: number): number | undefined {
+  // ISO first — unambiguous.
+  const iso = text.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  let y: number | undefined, mo: number | undefined, d: number | undefined;
+  if (iso) {
+    y = Number(iso[1]); mo = Number(iso[2]); d = Number(iso[3]);
+  } else {
+    const slashed = text.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b/);
+    if (!slashed) return undefined;
+    const a = Number(slashed[1]);
+    const b = Number(slashed[2]);
+    y = Number(slashed[3]);
+    if (y < 100) y += 2000;
+    // "13/05" can only be day-first; "05/13" can only be month-first. When both
+    // readings are possible, month-first — and if that guess is wrong, the date
+    // sits right there in the form to correct.
+    if (a > 12) { d = a; mo = b; } else { mo = a; d = b; }
+  }
+  if (!y || !mo || !d || mo > 12 || d > 31 || y < 2000) return undefined;
+  const at = new Date(y, mo - 1, d, 12, 0, 0).getTime();
+  // A receipt from the future or the distant past is a misread, not a fact.
+  if (Number.isNaN(at) || at > now + 24 * 3600 * 1000) return undefined;
+  if (at < now - 10 * 365 * 24 * 3600 * 1000) return undefined;
+  return at;
+}
+
+// ---- The items -------------------------------------------------------------
+
+function findItems(
+  monied: MoneyLine[],
+  totalMinor: number | undefined,
+  currency: string
+): ReceiptDraftItem[] {
+  const items: ReceiptDraftItem[] = [];
+  for (const l of monied) {
+    if (NOT_AN_ITEM.test(l.text)) continue;
+    // An "item" priced above the receipt total is a misread (often the phone
+    // number). Better to drop it than to present it as something you bought.
+    if (totalMinor !== undefined && l.minor > totalMinor) continue;
+
+    // Strip register noise: leading quantity ("2 X", "3 @ 1.50"), SKU digits,
+    // trailing tax-column letters already went with the amount regex.
+    const label = l.text
+      .replace(/^\d+\s*[xX@]\s*/, "")
+      .replace(/^[\d\s#*-]+/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const letters = (label.match(/[A-Za-z]/g) ?? []).length;
+    if (letters < 2) continue;
+
+    items.push({ label, amount: { minor: l.minor, currency } });
+  }
+
+  // A receipt tape has a natural ceiling; hundreds of "items" means the read
+  // went wrong, and pre-filling a form with garbage is worse than a blank form.
+  if (items.length > 60) return [];
+
+  // If the items visibly disagree with the total (sum wildly above it), the
+  // read is untrustworthy — return the total alone and let the human type.
+  if (totalMinor !== undefined) {
+    const sum = items.reduce((a, i) => a + i.amount.minor, 0);
+    if (sum > totalMinor * 1.15) return [];
+  }
+  return items;
+}
+
+// ---- Entry point -----------------------------------------------------------
+
+export function parseReceiptText(
+  text: string,
+  currency: string,
+  now: number = Date.now()
+): ReceiptDraft {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return {};
+
+  const monied = moneyLines(lines, currency);
+  // A receipt with no readable amounts on it wasn't read — it was mangled. A
+  // merchant or date "found" in that wreckage is noise wearing a name tag, so
+  // return nothing and let the form open blank.
+  if (monied.length === 0) return {};
+
+  const totalMinor = findTotal(monied);
+
+  const draft: ReceiptDraft = {};
+  if (totalMinor !== undefined) {
+    // Spending is signed at the form boundary, so the draft carries magnitude.
+    draft.amount = { minor: totalMinor, currency } satisfies Money;
+  }
+  const merchant = findMerchant(lines);
+  if (merchant) draft.merchant = merchant;
+  const at = findDate(text, now);
+  if (at) draft.at = at;
+
+  const items = findItems(monied, totalMinor, currency);
+  if (items.length > 0) draft.items = items;
+
+  return draft;
+}
