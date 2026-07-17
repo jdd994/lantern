@@ -269,6 +269,57 @@ describe("honesty: the arithmetic of what wasn't read", () => {
   });
 });
 
+describe("the total's witnesses vote", () => {
+  it("outvotes a misread TOTAL with the card slip's copies — the field case", () => {
+    // A receipt states its total several times. The TOTAL line read 44.61 (a
+    // middle 8 became a 6), but the card slip's AMOUNT and the Visa line both
+    // read 44.81 — two independent readings against one. The lone one loses.
+    const d = parse(`
+GROCERY TOWN
+BREAD 5.00
+TOTAL 44.61
+AMOUNT: $44.81
+Visa 44.81
+`);
+    expect(d.amount).toEqual({ minor: 4481, currency: USD });
+    expect(d.amountCorroborated).toBe(true);
+  });
+
+  it("a tip does not fool the vote — items back the printed total", () => {
+    // Restaurant: the card was charged total+tip. The TOTAL line and the item
+    // arithmetic agree with each other; the card line is the odd one out.
+    const d = parse(`
+TAVERNA
+MOUSSAKA 30.00
+WINE 20.00
+TOTAL 50.00
+CARD 60.00
+`);
+    expect(d.amount).toEqual({ minor: 5000, currency: USD });
+  });
+
+  it("agreeing copies rescue a receipt whose TOTAL line never read", () => {
+    const d = parse(`
+SHOP
+BREAD 5.00
+AMOUNT: $12.40
+Visa 12.40
+`);
+    expect(d.amount).toEqual({ minor: 1240, currency: USD });
+    expect(d.amountCorroborated).toBe(true);
+  });
+
+  it("item arithmetic corroborates a lone TOTAL", () => {
+    const d = parse("SHOP\nBREAD 5.00\nMILK 4.00\nTOTAL 9.00");
+    expect(d.amountCorroborated).toBe(true);
+  });
+
+  it("cash gets no vote — tendered money is not the total", () => {
+    const d = parse("SHOP\nTEA 2.00\nSCONE 1.50\nTOTAL 3.50\nCASH 20.00\nCHANGE 16.50");
+    expect(d.amount).toEqual({ minor: 350, currency: USD });
+  });
+});
+
 describe("honesty: the engine's own confidence", () => {
   const scored = (rows: Array<[string, number]>) =>
     parseReceiptLines(rows.map(([text, confidence]) => ({ text, confidence })), USD, NOW);

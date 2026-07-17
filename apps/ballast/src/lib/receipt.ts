@@ -46,6 +46,9 @@ export type ReceiptDraft = {
   amount?: Money; // positive magnitude; the form applies the sign
   // The OCR read the total's digits shakily — worth a glance at the paper.
   amountUncertain?: boolean;
+  // Two independent readings of the total agreed (the receipt states it more
+  // than once, or two OCR passes concurred) — confidence earned, not assumed.
+  amountCorroborated?: boolean;
   merchant?: string;
   at?: number;
   items?: ReceiptDraftItem[];

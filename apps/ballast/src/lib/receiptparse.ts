@@ -42,6 +42,15 @@ const NOT_THE_TOTAL = new RegExp(
 const PAYMENT_LINE =
   /\b(CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|AUTH|APPROVED|BALANCE|PURCHASE)\b/i;
 
+// The subset of payment lines that MUST equal the total: a card is charged the
+// exact amount, always. (Cash is tendered over it and change comes back, so
+// CASH/CHANGE never get a vote.) These are the receipt's own extra copies of
+// the total, and each is an independent OCR read of the same number.
+const CARD_WITNESS =
+  /\b(VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PURCHASE)\b/i;
+
+const TAX_WORDS = /\b(TAX|VAT|GST|HST)\b/i;
+
 // A money figure at the end of a line: "4.99", "1,234.56", "12,34", with an
 // optional currency symbol, an optional trailing minus or tax-flag code —
 // "4.99-", "7.99 A" and "3.59 BF" are all common register formats (two-letter
@@ -122,65 +131,143 @@ const letterCount = (s: string) => (s.match(/[A-Za-z]/g) ?? []).length;
 // `index` is the line the figure was lifted from, when that line isn't a
 // normal money line — the caller must keep it out of the items, or a garbled
 // "Visa 14.90" that lent us the total shows up as something you bought.
-// `confidence` travels along so the form can say "worth a glance".
-type FoundTotal = { minor?: number; index?: number; confidence?: number };
+// `corroborated` = at least two independent readings agreed on this value.
+type FoundTotal = { minor?: number; index?: number; confidence?: number; corroborated?: boolean };
+
+// A reading of "the total" from one place on the tape. A receipt states its
+// total several times — the TOTAL line, the card slip's AMOUNT, the card
+// payment line, SUBTOTAL+TAX arithmetic — and each is an independent OCR read
+// of the same number. Digit misreads are random per instance, so when copies
+// agree, the agreement is evidence; when a lone TOTAL says 44.61 but AMOUNT
+// and Visa both say 44.81, the lone reading is the misread. Let them vote.
+type Witness = {
+  minor: number;
+  src: "total" | "arith" | "amount" | "card";
+  confidence?: number;
+  index?: number;
+};
+
+const SRC_RANK: Record<Witness["src"], number> = { total: 0, arith: 1, amount: 2, card: 3 };
 
 function findTotal(lines: ScoredLine[], monied: MoneyLine[], currency: string): FoundTotal {
   const byIndex = new Map(monied.map((l) => [l.index, l]));
+  const witnesses: Witness[] = [];
 
-  // Prefer an explicit TOTAL line; scan from the BOTTOM, because "TOTAL" is
-  // often preceded by "SUBTOTAL" — and on long receipts a running total can
-  // appear mid-tape.
+  // Every TOTAL-anchored reading, scanned from the BOTTOM ("TOTAL" is often
+  // preceded by "SUBTOTAL", and running totals appear mid-tape). The keyword is
+  // the anchor; the figure can be messier than a trailing amount — anywhere in
+  // the line (background clutter appends junk after it), or on the line below
+  // (registers and column-splitting OCR both do that).
   for (let i = lines.length - 1; i >= 0; i--) {
     if (!TOTAL_LINE.test(lines[i].text) || NOT_THE_TOTAL.test(lines[i].text)) continue;
     const on = byIndex.get(i);
-    if (on) return { minor: on.minor, confidence: on.confidence };
-    // The keyword is the anchor; the figure can be messier than a trailing
-    // amount. First try anywhere in the line — background clutter appends junk
-    // after the figure ("TOTAL usd 14.90 \ i Sie") — then the line below, for
-    // registers (and column-splitting OCR) that put the figure on its own line.
+    if (on) {
+      witnesses.push({ minor: on.minor, src: "total", confidence: on.confidence });
+      continue;
+    }
     const inLine = [...lines[i].text.matchAll(ANY_AMOUNT)]
       .map((m) => parseAmountMinor(m[1], currency))
       .filter((n): n is number => n !== null && n > 0);
     if (inLine.length > 0) {
-      return { minor: inLine[inLine.length - 1], index: i, confidence: lines[i].confidence };
+      witnesses.push({
+        minor: inLine[inLine.length - 1],
+        src: "total",
+        confidence: lines[i].confidence,
+        index: i,
+      });
+      continue;
     }
     const next = byIndex.get(i + 1);
     if (next && !PAYMENT_LINE.test(next.text) && letterCount(next.text) <= 2) {
-      return { minor: next.minor, index: next.index, confidence: next.confidence };
+      witnesses.push({ minor: next.minor, src: "total", confidence: next.confidence, index: next.index });
     }
   }
 
-  // SUBTOTAL + TAX, when the TOTAL itself went unread (Costco prints it in an
-  // inverted box the OCR cannot touch). Both lines are keyword-anchored and the
-  // arithmetic is exact — strictly more defensible than "largest number wins".
+  // SUBTOTAL + TAX: keyword-anchored, arithmetic exact. TAX may legitimately be
+  // absent (or 0.00, which moneyLines skips) — then the subtotal IS the total.
+  const taxMinor = monied.filter((l) => TAX_WORDS.test(l.text)).reduce((a, l) => a + l.minor, 0);
   const subtotal = monied.filter((l) => new RegExp(`\\b${FUZZY_SUBTOTAL}`, "i").test(l.text));
   if (subtotal.length > 0) {
     const sub = subtotal[subtotal.length - 1];
-    // TAX might legitimately be absent (or 0.00, which moneyLines skips as
-    // zero) — then the subtotal IS the total.
-    const taxLines = monied.filter((l) => /\bTAX|\bVAT|\bGST|\bHST/i.test(l.text));
-    const tax = taxLines.reduce((a, l) => a + l.minor, 0);
-    return { minor: sub.minor + tax, confidence: sub.confidence };
+    witnesses.push({ minor: sub.minor + taxMinor, src: "arith", confidence: sub.confidence });
   }
 
-  // Fallback: the largest amount that isn't payment arithmetic — usually the
-  // total, since the total is the sum of everything above it. But that logic
-  // cuts both ways: when the OTHER amounts on the tape add up to well over the
-  // candidate, it cannot be their total — it's just the priciest item, and the
-  // real total went unread. Claiming it would be confidently wrong (it reads as
-  // plausible and is off by the rest of the receipt), so claim nothing and let
-  // the items speak for themselves.
+  // The card slip's copies. Skip lines already counted as TOTAL-anchored.
+  for (const l of monied) {
+    const full = lines[l.index]?.text ?? "";
+    if (TOTAL_LINE.test(full) && !NOT_THE_TOTAL.test(full)) continue;
+    if (/\bAMOUNT\b/i.test(l.text)) {
+      witnesses.push({ minor: l.minor, src: "amount", confidence: l.confidence });
+    } else if (CARD_WITNESS.test(l.text)) {
+      witnesses.push({ minor: l.minor, src: "card", confidence: l.confidence });
+    }
+  }
+
+  // What the items themselves add up to — a CORROBORATOR only, never a winner:
+  // partial reads make it wrong too often to trust alone, but when it lands on
+  // the same number as a real witness, that number is solid. Echo lines
+  // (an "item" repeating an anchored value) are dropped the same way findItems
+  // drops them, unless the receipt is a single line (a latte's price IS the total).
+  const anchored = new Set(witnesses.map((w) => w.minor));
+  let itemish = monied.filter(
+    (l) =>
+      !PAYMENT_LINE.test(l.text) &&
+      !NOT_AN_ITEM.test(l.text) &&
+      letterCount(cleanLabel(l.text)) >= 2
+  );
+  if (itemish.length >= 2) itemish = itemish.filter((l) => !anchored.has(l.minor));
+  const itemsum = itemish.reduce((a, l) => a + l.minor, 0) + taxMinor;
+
+  // The vote. A value carried by two or more readings — including the item
+  // arithmetic — wins; ties break toward the better-anchored source.
+  const tally = new Map<number, { votes: number; best: Witness }>();
+  for (const w of witnesses) {
+    const t = tally.get(w.minor);
+    if (!t) tally.set(w.minor, { votes: 1, best: w });
+    else {
+      t.votes += 1;
+      if (SRC_RANK[w.src] < SRC_RANK[t.best.src]) t.best = w;
+    }
+  }
+  if (itemsum > 0) {
+    const t = tally.get(itemsum);
+    if (t) t.votes += 1;
+  }
+  const agreed = [...tally.values()]
+    .filter((t) => t.votes >= 2)
+    .sort((a, b) => b.votes - a.votes || SRC_RANK[a.best.src] - SRC_RANK[b.best.src]);
+  if (agreed.length > 0) {
+    const w = agreed[0].best;
+    return { minor: w.minor, index: w.index, confidence: w.confidence, corroborated: true };
+  }
+
+  // No agreement: fall back to the best-anchored single reading, in source
+  // order. Honest uncertainty rides along — the form says "worth a glance"
+  // when the reading was shaky and nothing corroborated it.
+  const ranked = [...witnesses].sort((a, b) => SRC_RANK[a.src] - SRC_RANK[b.src]);
+  if (ranked.length > 0) {
+    const w = ranked[0];
+    return { minor: w.minor, index: w.index, confidence: w.confidence };
+  }
+
+  // Nothing anchored anywhere: the largest amount that isn't payment
+  // arithmetic — usually the total, since the total is the sum of everything
+  // above it. But that logic cuts both ways: when the OTHER amounts add up to
+  // well over the candidate, it cannot be their total — it's just the priciest
+  // item, and the real total went unread. Claim nothing; the items speak.
   const candidates = monied.filter((l) => !PAYMENT_LINE.test(l.text));
   if (candidates.length === 0) return {};
   const max = Math.max(...candidates.map((l) => l.minor));
-  const itemish = candidates.filter((l) => !NOT_AN_ITEM.test(l.text));
   const rest =
     itemish.reduce((a, l) => a + l.minor, 0) -
     (itemish.some((l) => l.minor === max) ? max : 0);
   if (rest > 0 && max < rest * 0.8) return {};
   const winner = candidates.find((l) => l.minor === max);
-  return { minor: max, confidence: winner?.confidence };
+  return {
+    minor: max,
+    confidence: winner?.confidence,
+    ...(itemsum === max && itemish.length > 1 ? { corroborated: true } : {}),
+  };
 }
 
 // ---- The merchant ----------------------------------------------------------
@@ -338,7 +425,10 @@ export function parseReceiptLines(
   if (total.minor !== undefined) {
     // Spending is signed at the form boundary, so the draft carries magnitude.
     draft.amount = { minor: total.minor, currency } satisfies Money;
-    if (total.confidence !== undefined && total.confidence < SHAKY) {
+    if (total.corroborated) {
+      // Two independent readings agreed — confidence earned, not assumed.
+      draft.amountCorroborated = true;
+    } else if (total.confidence !== undefined && total.confidence < SHAKY) {
       draft.amountUncertain = true;
     }
   }
@@ -353,7 +443,7 @@ export function parseReceiptLines(
 
   // Tax, as read — it explains the gap between the items and the total.
   const taxMinor = monied
-    .filter((l) => /\b(TAX|VAT|GST|HST)\b/i.test(l.text) && l.index !== total.index)
+    .filter((l) => TAX_WORDS.test(l.text) && l.index !== total.index)
     .reduce((a, l) => a + l.minor, 0);
   if (taxMinor > 0) draft.tax = { minor: taxMinor, currency };
 

@@ -53,7 +53,15 @@ function scoredLines(blocks: TesseractBlocks | null | undefined): ScoredLine[] |
 // pass was good enough to stop, and which pass won. The total is worth the
 // most — it's the number the whole feature exists to save typing.
 function score(d: ReceiptDraft): number {
-  return (d.amount ? 4 : 0) + Math.min(d.items?.length ?? 0, 5) + (d.merchant ? 1 : 0) + (d.at ? 1 : 0);
+  return (
+    (d.amount ? 4 : 0) +
+    // A corroborated total (two readings agreed) outranks a lone one — this is
+    // what makes the best-draft choice prefer the pass where the vote worked.
+    (d.amountCorroborated ? 2 : 0) +
+    Math.min(d.items?.length ?? 0, 5) +
+    (d.merchant ? 1 : 0) +
+    (d.at ? 1 : 0)
+  );
 }
 const GOOD_ENOUGH = 5; // total + at least one item — stop looking
 
@@ -106,6 +114,7 @@ export const tesseractReader: ReceiptReader = {
 
       let best: ReceiptDraft = {};
       let bestScore = -1;
+      const drafts: ReceiptDraft[] = [];
       for (const pass of passes) {
         // SINGLE_BLOCK, not SINGLE_COLUMN: column detection splits a receipt
         // into a labels column and a prices column read separately, which
@@ -121,12 +130,29 @@ export const tesseractReader: ReceiptReader = {
           ? parseReceiptLines(lines, currency)
           : parseReceiptText(data.text, currency);
         const draft: ReceiptDraft = { ...parsed, rawText: data.text };
+        drafts.push(draft);
         const s = score(draft);
         if (s > bestScore) {
           best = draft;
           bestScore = s;
         }
-        if (bestScore >= GOOD_ENOUGH) break;
+        // THE SECOND-WITNESS RULE: don't stop on a total only one reading has
+        // vouched for. Either the receipt corroborated it (it states its total
+        // several times) or a second pass must — a digit misread survives a
+        // single reading easily and two independent ones almost never.
+        if (bestScore >= GOOD_ENOUGH && best.amountCorroborated) break;
+      }
+
+      // Cross-pass corroboration: two passes agreeing on the total is the same
+      // evidence as the receipt agreeing with itself.
+      if (best.amount && !best.amountCorroborated) {
+        const agree = drafts.some(
+          (d) => d !== best && d.amount?.minor === best.amount?.minor
+        );
+        if (agree) {
+          best.amountCorroborated = true;
+          delete best.amountUncertain;
+        }
       }
       return best;
     } finally {
