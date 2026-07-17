@@ -37,7 +37,7 @@ export const METRIC_KINDS = Object.keys(METRIC_META) as MetricKind[];
 
 // Where a reading came from. Absent means you typed it — the ordinary case, and
 // the reason this is optional rather than defaulted.
-export type MetricSource = "fitbit" | "strap";
+export type MetricSource = "fitbit" | "strap" | "ring";
 
 export type MetricContent = {
   kind: MetricKind;

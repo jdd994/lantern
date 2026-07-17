@@ -11,7 +11,8 @@ interface Navigator {
 
 interface Bluetooth {
   requestDevice(options: {
-    filters: { services: string[] }[];
+    filters: { services?: string[]; namePrefix?: string }[];
+    optionalServices?: string[];
   }): Promise<BluetoothDevice>;
 }
 
@@ -33,4 +34,5 @@ interface BluetoothRemoteGATTService {
 interface BluetoothRemoteGATTCharacteristic extends EventTarget {
   readonly value?: DataView;
   startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
+  writeValue(value: BufferSource): Promise<void>;
 }
