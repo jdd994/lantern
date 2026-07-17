@@ -1199,3 +1199,20 @@ input.mono, input[inputmode="decimal"] {
 .import-result { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
 
 .receipt-preview-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+
+/* Honesty affordances on the items table. Calm on purpose: the flag is a
+   glance-worthy dot, not an alarm; the gap row is an offer, not a demand. */
+.item-flag {
+  color: var(--brass);
+  font-size: 9px;
+  flex: none;
+  cursor: help;
+}
+.item-row-gap .item-label { border-style: dashed; }
+.adds-up {
+  display: block;
+  font-size: 12.5px;
+  color: var(--above);
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}

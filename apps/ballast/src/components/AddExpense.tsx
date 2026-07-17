@@ -27,7 +27,16 @@ import { Receipt } from "./icons";
 
 // An item row under edit. Amounts are text while typing; parsed on save.
 // category "" means "same as the expense" and follows the headline category.
-type ItemRow = { label: string; amount: string; category: Category | "" };
+// `uncertain` = the OCR read this line shakily (calm marker, never hidden);
+// `gap` = the arithmetic remainder the reader couldn't itemise, offered as an
+// editable row — name it and it becomes real, ignore it and it saves nothing.
+type ItemRow = {
+  label: string;
+  amount: string;
+  category: Category | "";
+  uncertain?: boolean;
+  gap?: boolean;
+};
 
 function today(): string {
   return dateKey(new Date());
@@ -96,12 +105,40 @@ export function AddExpense({
   const [rawText, setRawText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [items, setItems] = useState<ItemRow[]>([]);
+  // The honest header over the items: what was read, what wasn't. Fixed at scan
+  // time; the rows below stay editable.
+  const [readSummary, setReadSummary] = useState<string | null>(null);
+  const [taxMinor, setTaxMinor] = useState(0);
+  const [amountShaky, setAmountShaky] = useState(false);
 
   // Whether the current category came from the user or from the categoriser, so
   // we never overwrite a deliberate choice with a suggestion.
   const [touchedCategory, setTouchedCategory] = useState(false);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // The moment itemisation earns its keep: when the rows plus tax equal the
+  // total exactly, say so — that's the user NOT having to recheck the paper.
+  // Live-computed, so it appears (and disappears) as rows are edited.
+  const addsUp = (() => {
+    if (income || items.length === 0) return null;
+    const total = parseMoney(amount, currency);
+    if (!total || total.minor <= 0) return null;
+    let sum = 0;
+    for (const r of items) {
+      if (!r.label.trim() && !r.amount.trim()) continue;
+      const m = parseMoney(r.amount, currency);
+      if (!m || m.minor <= 0) return null;
+      sum += Math.abs(m.minor);
+    }
+    if (sum === 0) return null;
+    if (sum + taxMinor === Math.abs(total.minor)) {
+      return taxMinor > 0
+        ? `with ${minorToText(taxMinor, currency)} tax, adds up to ${minorToText(total.minor, currency)} ✓`
+        : `adds up to ${minorToText(total.minor, currency)} ✓`;
+    }
+    return null;
+  })();
 
   // Suggest a category from the merchant as it's typed.
   useEffect(() => {
@@ -133,14 +170,36 @@ export function AddExpense({
       if (draft.merchant) setMerchant(draft.merchant);
       if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
       if (draft.at) setDate(dateKey(new Date(draft.at)));
+      setAmountShaky(Boolean(draft.amountUncertain));
+      setTaxMinor(draft.tax?.minor ?? 0);
       if (draft.items && draft.items.length > 0) {
-        setItems(
-          draft.items.map((i) => ({
-            label: i.label,
-            amount: minorToText(i.amount.minor, currency),
+        const rows: ItemRow[] = draft.items.map((i) => ({
+          label: i.label,
+          amount: minorToText(i.amount.minor, currency),
+          category: "",
+          ...(i.uncertain ? { uncertain: true } : {}),
+        }));
+        // The gap row: the remainder the reader couldn't itemise, as exact
+        // arithmetic. One glance at the paper and a name typed beats
+        // re-entering an item — and left unnamed, it saves nothing.
+        if (draft.unread) {
+          rows.push({
+            label: "",
+            amount: minorToText(draft.unread.minor, currency),
             category: "",
-          }))
-        );
+            gap: true,
+          });
+        }
+        setItems(rows);
+        const n = draft.items.length;
+        let summary = `read ${n} item${n === 1 ? "" : "s"}`;
+        if (draft.soldCount && draft.soldCount !== n) {
+          summary += ` — the receipt says ${draft.soldCount}`;
+        }
+        if (draft.unread) {
+          summary += `, ${minorToText(draft.unread.minor, currency)} unaccounted for`;
+        }
+        setReadSummary(summary);
       }
       // Two kinds of nothing, said differently: a photo the OCR lost to is
       // worth retaking; a reader that couldn't run isn't, and pretending
@@ -183,7 +242,10 @@ export function AddExpense({
     // the user hasn't answered yet — say so rather than guessing or dropping it.
     let itemContents: TransactionItem[] | undefined;
     if (!income) {
-      const rows = items.filter((r) => r.label.trim() || r.amount.trim());
+      // A gap row left unnamed was an offer, not a claim — it saves nothing.
+      const rows = items.filter(
+        (r) => (r.label.trim() || r.amount.trim()) && !(r.gap && !r.label.trim())
+      );
       const built: TransactionItem[] = [];
       for (const row of rows) {
         const label = row.label.trim();
@@ -259,6 +321,8 @@ export function AddExpense({
                     setReadNote(null);
                     setRawText(null);
                     setCopied(false);
+                    setReadSummary(null);
+                    setAmountShaky(false);
                   }}
                 >
                   Remove photo
@@ -307,10 +371,18 @@ export function AddExpense({
                 type="text"
                 inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setAmountShaky(false);
+                }}
                 placeholder="0.00"
                 autoFocus
               />
+              {amountShaky ? (
+                <span className="hint">
+                  The reader wasn't confident about this number — worth a glance at the paper.
+                </span>
+              ) : null}
             </label>
             <label className="field">
               <span className="label">When</span>
@@ -367,16 +439,29 @@ export function AddExpense({
             <div className="items-block">
               <div className="items-head">
                 <span className="label">
-                  {items.length > 0 ? "On the receipt — check what it read" : null}
+                  {items.length > 0
+                    ? readSummary
+                      ? `On the receipt — ${readSummary}`
+                      : "On the receipt — check what it read"
+                    : null}
                 </span>
               </div>
               {items.map((row, i) => (
-                <div className="item-row" key={i}>
+                <div className={`item-row${row.gap ? " item-row-gap" : ""}`} key={i}>
+                  {row.uncertain ? (
+                    <span
+                      className="item-flag"
+                      title="The reader wasn't sure about this line — worth a glance at the paper."
+                      aria-label="Worth a glance"
+                    >
+                      ●
+                    </span>
+                  ) : null}
                   <input
                     type="text"
                     className="item-label"
                     value={row.label}
-                    placeholder="Item"
+                    placeholder={row.gap ? "Something it couldn't read — name it or remove it" : "Item"}
                     onChange={(e) =>
                       setItems((rows) =>
                         rows.map((r, j) => (j === i ? { ...r, label: e.target.value } : r))
@@ -432,6 +517,7 @@ export function AddExpense({
               >
                 + Add an item
               </button>
+              {addsUp ? <span className="adds-up">{addsUp}</span> : null}
               {items.some((r) => r.category && r.category !== category) ? (
                 <span className="hint">
                   Items with their own category split this expense in the monthly breakdown.

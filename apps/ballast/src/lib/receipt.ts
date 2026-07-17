@@ -31,9 +31,12 @@ import type { Money } from "./money";
 
 // A line item as read off the tape. No category here — the reader reports what
 // the paper says; deciding what it *means* happens in the form, by the human.
+// `uncertain` means the OCR itself wasn't confident about the line — rendered
+// as a calm "worth a glance" marker, never hidden and never alarming.
 export type ReceiptDraftItem = {
   label: string;
   amount: Money; // positive magnitude
+  uncertain?: boolean;
 };
 
 // What a reader can offer. Everything is optional — a partial read is useful,
@@ -41,9 +44,20 @@ export type ReceiptDraftItem = {
 // fiddliest bit of typing.
 export type ReceiptDraft = {
   amount?: Money; // positive magnitude; the form applies the sign
+  // The OCR read the total's digits shakily — worth a glance at the paper.
+  amountUncertain?: boolean;
   merchant?: string;
   at?: number;
   items?: ReceiptDraftItem[];
+  // Honesty about what wasn't read, computed by arithmetic, not guessed:
+  // total − items − tax. Rendered as an editable gap row — one glance at the
+  // paper and a name typed beats re-entering an item from scratch.
+  unread?: Money;
+  // Tax as read off the tape (it explains why items don't sum to the total).
+  tax?: Money;
+  // Some registers print their own item count ("TOTAL NUMBER OF ITEMS SOLD - 2")
+  // — when they do, we can say "read 1 of 2" with certainty.
+  soldCount?: number;
   // The verbatim text the engine read, for the "copy what it read" affordance —
   // how a quirky receipt becomes a parser test fixture instead of a mystery.
   // Debug surface only: it is NEVER stored, and no field is parsed from it here.
