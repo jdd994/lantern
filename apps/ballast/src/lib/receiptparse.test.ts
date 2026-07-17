@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseReceiptText } from "./receiptparse";
+import { parseReceiptLines, parseReceiptText } from "./receiptparse";
 
 const USD = "USD";
 // A fixed "now" so date sanity checks are deterministic: 2026-07-16 noon local.
@@ -240,6 +240,64 @@ CAFE
 TOTAL 9.00
 `);
     expect(d.items?.[0].label).toBe("LATTE");
+  });
+});
+
+describe("honesty: the arithmetic of what wasn't read", () => {
+  it("reports the unaccounted remainder as exact subtraction", () => {
+    // The Costco case: total readable, one of two items readable. The gap IS
+    // the missing item's price — not a guess, a subtraction.
+    const d = parse("COSTCO\nE 1048072 GREEK YOGURT 6.89\nTOTAL 33.88");
+    expect(d.unread).toEqual({ minor: 2699, currency: USD });
+  });
+
+  it("lets tax explain the gap instead of calling it unread", () => {
+    const d = parse("SHOP\nBREAD 5.00\nMILK 4.00\nTAX 0.72\nTOTAL 9.72");
+    expect(d.tax).toEqual({ minor: 72, currency: USD });
+    expect(d.unread).toBeUndefined();
+  });
+
+  it("reads the register's own item count when printed", () => {
+    const d = parse("SHOP\nBREAD 5.00\nTOTAL 12.00\nTOTAL NUMBER OF ITEMS SOLD - 2");
+    expect(d.soldCount).toBe(2);
+    expect(d.unread).toEqual({ minor: 700, currency: USD });
+  });
+
+  it("claims nothing unread when everything adds up", () => {
+    const d = parse(GROCERY);
+    expect(d.unread).toBeUndefined();
+  });
+});
+
+describe("honesty: the engine's own confidence", () => {
+  const scored = (rows: Array<[string, number]>) =>
+    parseReceiptLines(rows.map(([text, confidence]) => ({ text, confidence })), USD, NOW);
+
+  it("flags a shakily-read item, and only that item", () => {
+    const d = scored([
+      ["SHOP", 90],
+      ["BREAD 5.00", 91],
+      ["M1LK 4.00", 38],
+      ["TOTAL 9.00", 88],
+    ]);
+    expect(d.items?.map((i) => Boolean(i.uncertain))).toEqual([false, true]);
+    expect(d.amountUncertain).toBeUndefined();
+  });
+
+  it("flags a shakily-read total", () => {
+    const d = scored([
+      ["SHOP", 90],
+      ["BREAD 5.00", 91],
+      ["TOTAL 5.80", 30],
+    ]);
+    expect(d.amount).toEqual({ minor: 580, currency: USD });
+    expect(d.amountUncertain).toBe(true);
+  });
+
+  it("has no opinion when parsing plain text — no scores, no flags", () => {
+    const d = parse(GROCERY);
+    expect(d.items?.some((i) => i.uncertain)).toBe(false);
+    expect(d.amountUncertain).toBeUndefined();
   });
 });
 

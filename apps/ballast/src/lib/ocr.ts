@@ -29,8 +29,25 @@
 // which extracts only what it can defend.
 
 import type { ReceiptDraft, ReceiptReader } from "./receipt";
-import { parseReceiptText } from "./receiptparse";
+import { parseReceiptLines, parseReceiptText, type ScoredLine } from "./receiptparse";
 import { scaledJpeg } from "./media";
+
+// Flatten tesseract's block tree into scored lines. The confidences power the
+// calm "worth a glance" markers in the form — the engine's own honesty about
+// which readings were shaky.
+type TesseractBlocks = Array<{
+  paragraphs: Array<{ lines: Array<{ text: string; confidence: number }> }>;
+}>;
+
+function scoredLines(blocks: TesseractBlocks | null | undefined): ScoredLine[] | null {
+  if (!blocks) return null;
+  const lines = blocks.flatMap((b) =>
+    b.paragraphs.flatMap((p) =>
+      p.lines.map((l) => ({ text: l.text.replace(/\n/g, " ").trim(), confidence: l.confidence }))
+    )
+  );
+  return lines.length > 0 ? lines : null;
+}
 
 // How much of a receipt a draft actually captured. Used to decide whether a
 // pass was good enough to stop, and which pass won. The total is worth the
@@ -98,8 +115,12 @@ export const tesseractReader: ReceiptReader = {
           preserve_interword_spaces: "1",
           thresholding_method: pass.threshold,
         });
-        const { data } = await worker.recognize(pass.img);
-        const draft: ReceiptDraft = { ...parseReceiptText(data.text, currency), rawText: data.text };
+        const { data } = await worker.recognize(pass.img, {}, { blocks: true, text: true });
+        const lines = scoredLines(data.blocks as TesseractBlocks | null);
+        const parsed = lines
+          ? parseReceiptLines(lines, currency)
+          : parseReceiptText(data.text, currency);
+        const draft: ReceiptDraft = { ...parsed, rawText: data.text };
         const s = score(draft);
         if (s > bestScore) {
           best = draft;

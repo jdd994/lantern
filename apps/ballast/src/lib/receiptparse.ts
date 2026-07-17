@@ -82,23 +82,34 @@ function parseAmountMinor(raw: string, currency: string): number | null {
   return Number.isSafeInteger(minor) ? minor : null;
 }
 
+// A line as the engine delivered it: the text, and how sure the engine was.
+// `confidence` is 0..100 or absent (a plain-text parse has no opinion).
+export type ScoredLine = { text: string; confidence?: number };
+
+// Below this, a reading is flagged "worth a glance" in the form. Chosen from
+// field photos: garbage lines score 0-35, solid print 80+; the shaky-but-
+// present digits live in between.
+const SHAKY = 65;
+
 type MoneyLine = {
   index: number;
   text: string; // the line without its trailing amount
   minor: number;
+  confidence?: number;
 };
 
-function moneyLines(lines: string[], currency: string): MoneyLine[] {
+function moneyLines(lines: ScoredLine[], currency: string): MoneyLine[] {
   const out: MoneyLine[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(TRAILING_AMOUNT);
+    const m = lines[i].text.match(TRAILING_AMOUNT);
     if (!m) continue;
     const minor = parseAmountMinor(m[1], currency);
     if (minor === null || minor === 0) continue;
     out.push({
       index: i,
-      text: lines[i].slice(0, lines[i].length - m[0].length).trim(),
+      text: lines[i].text.slice(0, lines[i].text.length - m[0].length).trim(),
       minor,
+      confidence: lines[i].confidence,
     });
   }
   return out;
@@ -111,29 +122,32 @@ const letterCount = (s: string) => (s.match(/[A-Za-z]/g) ?? []).length;
 // `index` is the line the figure was lifted from, when that line isn't a
 // normal money line — the caller must keep it out of the items, or a garbled
 // "Visa 14.90" that lent us the total shows up as something you bought.
-type FoundTotal = { minor?: number; index?: number };
+// `confidence` travels along so the form can say "worth a glance".
+type FoundTotal = { minor?: number; index?: number; confidence?: number };
 
-function findTotal(lines: string[], monied: MoneyLine[], currency: string): FoundTotal {
+function findTotal(lines: ScoredLine[], monied: MoneyLine[], currency: string): FoundTotal {
   const byIndex = new Map(monied.map((l) => [l.index, l]));
 
   // Prefer an explicit TOTAL line; scan from the BOTTOM, because "TOTAL" is
   // often preceded by "SUBTOTAL" — and on long receipts a running total can
   // appear mid-tape.
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (!TOTAL_LINE.test(lines[i]) || NOT_THE_TOTAL.test(lines[i])) continue;
+    if (!TOTAL_LINE.test(lines[i].text) || NOT_THE_TOTAL.test(lines[i].text)) continue;
     const on = byIndex.get(i);
-    if (on) return { minor: on.minor };
+    if (on) return { minor: on.minor, confidence: on.confidence };
     // The keyword is the anchor; the figure can be messier than a trailing
     // amount. First try anywhere in the line — background clutter appends junk
     // after the figure ("TOTAL usd 14.90 \ i Sie") — then the line below, for
     // registers (and column-splitting OCR) that put the figure on its own line.
-    const inLine = [...lines[i].matchAll(ANY_AMOUNT)]
+    const inLine = [...lines[i].text.matchAll(ANY_AMOUNT)]
       .map((m) => parseAmountMinor(m[1], currency))
       .filter((n): n is number => n !== null && n > 0);
-    if (inLine.length > 0) return { minor: inLine[inLine.length - 1], index: i };
+    if (inLine.length > 0) {
+      return { minor: inLine[inLine.length - 1], index: i, confidence: lines[i].confidence };
+    }
     const next = byIndex.get(i + 1);
     if (next && !PAYMENT_LINE.test(next.text) && letterCount(next.text) <= 2) {
-      return { minor: next.minor, index: next.index };
+      return { minor: next.minor, index: next.index, confidence: next.confidence };
     }
   }
 
@@ -147,7 +161,7 @@ function findTotal(lines: string[], monied: MoneyLine[], currency: string): Foun
     // zero) — then the subtotal IS the total.
     const taxLines = monied.filter((l) => /\bTAX|\bVAT|\bGST|\bHST/i.test(l.text));
     const tax = taxLines.reduce((a, l) => a + l.minor, 0);
-    return { minor: sub.minor + tax };
+    return { minor: sub.minor + tax, confidence: sub.confidence };
   }
 
   // Fallback: the largest amount that isn't payment arithmetic — usually the
@@ -165,7 +179,8 @@ function findTotal(lines: string[], monied: MoneyLine[], currency: string): Foun
     itemish.reduce((a, l) => a + l.minor, 0) -
     (itemish.some((l) => l.minor === max) ? max : 0);
   if (rest > 0 && max < rest * 0.8) return {};
-  return { minor: max };
+  const winner = candidates.find((l) => l.minor === max);
+  return { minor: max, confidence: winner?.confidence };
 }
 
 // ---- The merchant ----------------------------------------------------------
@@ -173,7 +188,8 @@ function findTotal(lines: string[], monied: MoneyLine[], currency: string): Foun
 const MERCHANT_NOISE =
   /\b(RECEIPT|INVOICE|WELCOME\s+TO|THANK\s+YOU|TEL|PHONE|FAX|WWW\.|HTTP|STORE\s*#?\d*|REG(ISTER)?\s*#?\d*|CASHIER|ORDER|SURVEY)\b/i;
 
-function findMerchant(lines: string[]): string | undefined {
+function findMerchant(scored: ScoredLine[]): string | undefined {
+  const lines = scored.map((l) => l.text);
   // The name is almost always in the first few printed lines, above the
   // address — but a photographed logo shreds into short garbage lines that sit
   // above it. So don't take the FIRST plausible early line; take the most
@@ -266,7 +282,11 @@ function findItems(
     const letters = (label.match(/[A-Za-z]/g) ?? []).length;
     if (letters < 2) continue;
 
-    items.push({ label, amount: { minor: l.minor, currency } });
+    items.push({
+      label,
+      amount: { minor: l.minor, currency },
+      ...(l.confidence !== undefined && l.confidence < SHAKY ? { uncertain: true } : {}),
+    });
   }
 
   // A receipt tape has a natural ceiling; hundreds of "items" means the read
@@ -293,15 +313,17 @@ function findItems(
 
 // ---- Entry point -----------------------------------------------------------
 
-export function parseReceiptText(
-  text: string,
+// The registers that print their own item count give us certainty for free.
+const SOLD_COUNT = /\bITEMS?\s+SOLD\b/i;
+
+export function parseReceiptLines(
+  scored: ScoredLine[],
   currency: string,
   now: number = Date.now()
 ): ReceiptDraft {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+  const lines = scored
+    .map((l) => ({ ...l, text: l.text.trim() }))
+    .filter((l) => l.text.length > 0);
   if (lines.length === 0) return {};
 
   const monied = moneyLines(lines, currency);
@@ -316,14 +338,53 @@ export function parseReceiptText(
   if (total.minor !== undefined) {
     // Spending is signed at the form boundary, so the draft carries magnitude.
     draft.amount = { minor: total.minor, currency } satisfies Money;
+    if (total.confidence !== undefined && total.confidence < SHAKY) {
+      draft.amountUncertain = true;
+    }
   }
   const merchant = findMerchant(lines);
   if (merchant) draft.merchant = merchant;
+  const text = lines.map((l) => l.text).join("\n");
   const at = findDate(text, now);
   if (at) draft.at = at;
 
   const items = findItems(monied, total, currency);
   if (items.length > 0) draft.items = items;
 
+  // Tax, as read — it explains the gap between the items and the total.
+  const taxMinor = monied
+    .filter((l) => /\b(TAX|VAT|GST|HST)\b/i.test(l.text) && l.index !== total.index)
+    .reduce((a, l) => a + l.minor, 0);
+  if (taxMinor > 0) draft.tax = { minor: taxMinor, currency };
+
+  // The honesty arithmetic: what the total says minus what we could itemise.
+  // Exact subtraction, not a guess — rendered as an editable gap row.
+  if (draft.amount && items.length > 0) {
+    const gap = draft.amount.minor - items.reduce((a, i) => a + i.amount.minor, 0) - taxMinor;
+    if (gap > 0) draft.unread = { minor: gap, currency };
+  }
+
+  // "TOTAL NUMBER OF ITEMS SOLD - 2": the register's own count, when printed.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!SOLD_COUNT.test(lines[i].text)) continue;
+    const nums = lines[i].text.match(/\d+/g);
+    const n = nums ? Number(nums[nums.length - 1]) : NaN;
+    if (Number.isInteger(n) && n >= 1 && n <= 200) draft.soldCount = n;
+    break;
+  }
+
   return draft;
+}
+
+// Plain-text entry point — used by tests and any reader without line scores.
+export function parseReceiptText(
+  text: string,
+  currency: string,
+  now: number = Date.now()
+): ReceiptDraft {
+  return parseReceiptLines(
+    text.split(/\r?\n/).map((t) => ({ text: t })),
+    currency,
+    now
+  );
 }
