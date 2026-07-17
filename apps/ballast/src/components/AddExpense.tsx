@@ -86,6 +86,10 @@ export function AddExpense({
   const [preview, setPreview] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Soft, not an error: "the reader ran and got nothing" must be said — a
+  // silently blank form is indistinguishable from the reader not existing —
+  // but it must never scold, because typing it in works exactly as it always has.
+  const [readNote, setReadNote] = useState<string | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
 
   // Whether the current category came from the user or from the categoriser, so
@@ -113,6 +117,7 @@ export function AddExpense({
 
       // The seam. The reader returns whatever it could defend; a blank draft
       // just means the form opens blank, as it always did.
+      setReadNote(null);
       const draft = await readReceipt(new Blob([bytes], { type }), currency);
       if (draft.merchant) setMerchant(draft.merchant);
       if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
@@ -124,6 +129,11 @@ export function AddExpense({
             amount: minorToText(i.amount.minor, currency),
             category: "",
           }))
+        );
+      }
+      if (!draft.amount && !draft.merchant && (!draft.items || draft.items.length === 0)) {
+        setReadNote(
+          "Couldn't read this one — glare and faded print win sometimes. The photo is kept; typing it in works as always."
         );
       }
     } catch (e) {
@@ -208,12 +218,14 @@ export function AddExpense({
           {preview ? (
             <div className="receipt-preview">
               <img src={preview} alt="Receipt" />
+              {readNote ? <span className="hint">{readNote}</span> : null}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
                   setReceipt(null);
                   setPreview(null);
+                  setReadNote(null);
                 }}
               >
                 Remove photo
