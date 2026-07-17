@@ -21,9 +21,9 @@ import {
 } from "../lib/nutrition";
 import type { Metric, MetricContent } from "../lib/metrics";
 import * as fitbit from "../lib/wearable/fitbit";
-import * as strap from "../lib/wearable/strap";
+import * as live from "../lib/wearable/live";
 import {
-  readingContent, tagger,
+  PROVIDERS, readingContent, tagger,
   type ConnectionContent, type ProviderId, type Reading, type WearableConnection,
 } from "../lib/wearable";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
@@ -351,7 +351,7 @@ export function useHearth(): Hearth {
   // an app id baked into the build; the session kind needs a browser that can
   // speak Bluetooth (Chrome and Edge can; Safari and Firefox can't).
   const canUseWearable = useCallback((provider: ProviderId): boolean => {
-    return provider === "strap" ? strap.supported() : fitbit.configured();
+    return PROVIDERS[provider].mode === "session" ? live.supported() : fitbit.configured();
   }, []);
 
   // Coming back from the vendor's consent page. The vault has to be open before

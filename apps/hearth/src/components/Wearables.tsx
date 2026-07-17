@@ -8,8 +8,8 @@
 //
 // Two shapes of provider live here (see `mode` in lib/wearable):
 //   grant    connect once, hold a sealed token, refresh history — Fitbit.
-//   session  hold nothing: a live sit with a Bluetooth strap, where the only
-//            thing that ever persists is the reading you chose to save.
+//   session  hold nothing: a live sit with a Bluetooth device (strap or ring),
+//            where the only thing that ever persists is what you chose to save.
 //
 // The tone rule from CLAUDE.md holds here too: the badge is honest, not
 // frightening. It says what happens, calmly, and lets you decide.
@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   PROVIDERS, type ProviderId, type Reading, type WearableConnection,
 } from "../lib/wearable";
-import * as strap from "../lib/wearable/strap";
+import * as live from "../lib/wearable/live";
 
 function whenLabel(at: number): string {
   const mins = Math.round((Date.now() - at) / 60_000);
@@ -69,7 +69,7 @@ export function ConnectWearable({
   );
 }
 
-// ---- a sit with a strap ----------------------------------------------------
+// ---- a sit with a live device ------------------------------------------------
 // The whole session lives and dies inside this sheet. Closing it stops the
 // Bluetooth notifications; there is no token, no connection record, nothing to
 // disconnect later. The disclosure is the sheet's first face every time — for a
@@ -79,22 +79,24 @@ export function ConnectWearable({
 // Save unlocks when a summary would be honest.
 const MIN_SIT_MS = 60_000;
 
-export function StrapSit({
-  onSave, onClose,
+export function LiveSit({
+  provider, onSave, onClose,
 }: {
+  provider: ProviderId;
   onSave: (readings: Reading[]) => Promise<void> | void;
   onClose: () => void;
 }) {
-  const p = PROVIDERS.strap;
+  const p = PROVIDERS[provider];
+  const source = live.sources[provider]!;
   const [stage, setStage] = useState<"ask" | "sitting" | "saved">("ask");
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [now, setNow] = useState<strap.Sample | null>(null);
+  const [now, setNow] = useState<live.Sample | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [, setTick] = useState(0); // re-renders the elapsed clock once a second
-  const [saved, setSaved] = useState<strap.Resting | null>(null);
+  const [saved, setSaved] = useState<live.Resting | null>(null);
 
-  const session = useRef<strap.Session | null>(null);
+  const session = useRef<live.Session | null>(null);
   const bpms = useRef<number[]>([]);
   const rrs = useRef<number[]>([]);
 
@@ -109,17 +111,17 @@ export function StrapSit({
   async function begin() {
     setErr(null);
     try {
-      const s = await strap.open(
+      const s = await source.open(
         (sample) => {
-          // Off-skin beats are the strap saying "this isn't you" — believed,
+          // Off-body beats are the device saying "this isn't you" — believed,
           // shown below, and kept out of the summary.
-          if (sample.contact !== false) {
+          if (sample.contact !== false && sample.bpm > 0) {
             bpms.current.push(sample.bpm);
             rrs.current.push(...sample.rr);
           }
           setNow(sample);
         },
-        () => setErr("The strap went quiet. What it read so far is still here.")
+        () => setErr(`The ${p.label.toLowerCase()} went quiet. What it read so far is still here.`)
       );
       if (!s) return; // the chooser was closed — a complete answer
       session.current = s;
@@ -127,17 +129,17 @@ export function StrapSit({
       setStartedAt(Date.now());
       setStage("sitting");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't reach a strap just now.");
+      setErr(e instanceof Error ? e.message : "Couldn't reach the device just now.");
     }
   }
 
   async function save() {
-    const summary = strap.resting(bpms.current, rrs.current);
+    const summary = live.resting(bpms.current, rrs.current);
     if (!summary) return;
     session.current?.stop();
     session.current = null;
     try {
-      await onSave(strap.toReadings(summary, Date.now()));
+      await onSave(live.toReadings(provider, summary, Date.now()));
       setSaved(summary);
       setStage("saved");
     } catch (e) {
@@ -148,7 +150,7 @@ export function StrapSit({
   const elapsed = stage === "sitting" ? Date.now() - startedAt : 0;
   const mm = Math.floor(elapsed / 60_000);
   const ss = String(Math.floor((elapsed % 60_000) / 1000)).padStart(2, "0");
-  const live = strap.resting(bpms.current, rrs.current);
+  const snapshot = live.resting(bpms.current, rrs.current);
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -173,7 +175,7 @@ export function StrapSit({
             <div className="sheet-actions">
               <button type="button" className="btn btn-ghost" onClick={onClose}>Not now</button>
               <button type="button" className="btn btn-primary" onClick={() => void begin()}>
-                Find my strap
+                Find my {p.label.toLowerCase()}
               </button>
             </div>
           </>
@@ -182,14 +184,14 @@ export function StrapSit({
             <h3>{name}</h3>
             <p>Sit comfortably. A couple of quiet minutes makes an honest reading.</p>
             <div className="sit-live">
-              <span className="sit-bpm">{now ? now.bpm : "—"}</span>
+              <span className="sit-bpm">{now && now.bpm > 0 ? now.bpm : "—"}</span>
               <span className="sit-unit">bpm</span>
             </div>
             <p className="sit-meta">
               {now?.contact === false
-                ? "The strap isn't reading you yet — snug it just below your chest."
-                : live && live.samples > 30
-                  ? `Mostly ${live.low}–${live.high} · ${mm}:${ss}`
+                ? source.offBodyHint
+                : snapshot && snapshot.samples > 30
+                  ? `Mostly ${snapshot.low}–${snapshot.high} · ${mm}:${ss}`
                   : `Listening · ${mm}:${ss}`}
             </p>
             {err ? <div className="error">{err}</div> : null}
@@ -200,7 +202,7 @@ export function StrapSit({
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={elapsed < MIN_SIT_MS || !live}
+                disabled={elapsed < MIN_SIT_MS || !snapshot}
                 title={elapsed < MIN_SIT_MS ? "A minute of quiet first — settling in isn't resting yet." : undefined}
                 onClick={() => void save()}
               >
@@ -216,7 +218,9 @@ export function StrapSit({
               {saved!.high}.{" "}
               {saved!.hrv !== null
                 ? `Variability ${saved!.hrv} ms, from ${saved!.rrPairs} clean beat-to-beat gaps.`
-                : "Too few clean beat-to-beat gaps to say anything true about variability this time."}
+                : provider === "strap"
+                  ? "Too few clean beat-to-beat gaps to say anything true about variability this time."
+                  : ""}
             </p>
             <div className="sheet-actions">
               <button type="button" className="btn btn-primary" onClick={onClose}>Done</button>
@@ -244,7 +248,7 @@ export function Wearables({
   onSaveReadings: (p: ProviderId, readings: Reading[]) => Promise<void> | void;
 }) {
   const [asking, setAsking] = useState<ProviderId | null>(null);
-  const [sitting, setSitting] = useState(false);
+  const [sitting, setSitting] = useState<ProviderId | null>(null);
   const ids = Object.keys(PROVIDERS) as ProviderId[];
 
   return (
@@ -264,7 +268,7 @@ export function Wearables({
                 className="btn btn-sm"
                 disabled={busy || !canUse(id)}
                 title={canUse(id) ? undefined : "This browser can't speak Bluetooth — Chrome and Edge can."}
-                onClick={() => setSitting(true)}
+                onClick={() => setSitting(id)}
               >
                 Take a reading
               </button>
@@ -314,9 +318,10 @@ export function Wearables({
       ) : null}
 
       {sitting ? (
-        <StrapSit
-          onSave={(readings) => onSaveReadings("strap", readings)}
-          onClose={() => setSitting(false)}
+        <LiveSit
+          provider={sitting}
+          onSave={(readings) => onSaveReadings(sitting, readings)}
+          onClose={() => setSitting(null)}
         />
       ) : null}
     </>

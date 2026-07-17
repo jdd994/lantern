@@ -25,7 +25,7 @@ import type { MetricContent, MetricKind } from "../metrics";
 import type { FitbitTokens } from "./fitbit";
 
 export type Tier = 0 | 1 | 2 | 3;
-export type ProviderId = "fitbit" | "strap";
+export type ProviderId = "fitbit" | "strap" | "ring";
 
 export type Provider = {
   id: ProviderId;
@@ -65,6 +65,24 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
     ],
     refuses: [
       "Energy expended — the strap volunteers calories mid-stream; the parser steps over those bytes unread",
+      "Anything you didn't choose to save — a sit you close is gone",
+    ],
+  },
+  ring: {
+    id: "ring",
+    label: "Smart ring",
+    tier: 0,
+    mode: "session",
+    discloses:
+      "A ColMi-class ring (R02 and cousins) talks to this page over Bluetooth, and the reading " +
+      "never leaves this device — no account, no vendor app, no cloud. The protocol is one the " +
+      "community reverse-engineered, not one the vendor granted: the ring answers whoever's in " +
+      "the room, and tonight that's you.",
+    takes: ["Heart rate, live while you watch"],
+    refuses: [
+      "Blood pressure, blood sugar, fatigue — the ring offers these as readings; a small optical sensor can't honestly measure them, so they're never requested",
+      "Calories — logged by the ring, never asked for",
+      "Variability — the ring's stream carries no raw beat-to-beat intervals, so no honest number exists to take",
       "Anything you didn't choose to save — a sit you close is gone",
     ],
   },
