@@ -196,11 +196,20 @@ npm run preview  # serve the built app
    client secret. Those would all force a balance-seeing server — that's a
    different rung, not an implementation detail.
 4. **Receipt OCR** — ✅ built, on-device (Tesseract WASM behind the `receipt.ts`
-   seam). Reads total, merchant, date, and line items; items can carry their own
-   categories and split an expense honestly in the monthly breakdown. The engine
-   lazy-loads on first scan from `/ocr/` (vendored by `scripts/ocr-assets.mjs`,
-   gitignored, excluded from the PWA precache). **Never** cloud OCR — that part
-   is permanent.
+   seam), then field-hardened against real receipts (each one is a verbatim
+   fixture in `receiptparse.test.ts` — grow the parser BY fixtures, never by
+   guessing). The full loop now: live **scan assist** (`ScanCamera.tsx` +
+   pure `scanassist.ts`; camera granted under strict terms — see
+   `public/_headers`) → multi-pass OCR (default+Sauvola thresholding, two
+   resolutions; original camera bytes, never the storage re-encode) → parser
+   with **witness voting** (a receipt states its total several times; copies
+   vote, cash gets no vote) → honesty layer in the form (gap row for the
+   unaccounted remainder, "worth a glance" markers, "adds up ✓") → item-level
+   awareness ("What you're buying most" in Spending — facts, never verdicts).
+   The engine lazy-loads on first scan from `/ocr/` (vendored by
+   `scripts/ocr-assets.mjs`, gitignored, excluded from the PWA precache).
+   **Never** cloud OCR — that part is permanent. "Copy what it read" under a
+   scanned photo is how a quirky receipt becomes the next fixture.
 5. **Encrypt timestamps.** Today `at` is plaintext so sorting is cheap. Same
    explicit decision Driftless deferred. Revisit with sync.
 6. Niceties: CSV/OFX import — ✅ built (`lib/import.ts` pure + tested;
