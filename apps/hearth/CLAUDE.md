@@ -79,6 +79,16 @@ The user was explicit: *"I don't like the comparison too much."* So:
 - Inline SVG for icons, never Unicode glyphs (they tofu on system-font stacks —
   Ballast learned this).
 
+## Layout (decided 2026-07-17)
+
+Three bottom tabs — **Today** (food log, nutrients, goals: the daily act),
+**Kitchen** (recipes, plan, pantry, shared kitchens), **Body** (metrics,
+wearables, runs). Sync + settings stay in the gear sheet; log/measure sheets
+are global. The tab bar is inline in `App.tsx` per the H5 lesson — extract the
+component to `@lantern/ui` only when a second app provably wants tabs; each
+app's information architecture stays its own. A Fitbit OAuth return (`?code`)
+lands on the Body tab, where the connection lives.
+
 ## Stack
 
 - Vite + React 18 + TypeScript, `idb` for IndexedDB, WebCrypto (AES-GCM +
