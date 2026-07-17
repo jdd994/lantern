@@ -9,6 +9,7 @@ import {
   METRIC_META, METRIC_KINDS, series, latest, change, chartPoints, recentAverage,
   formatMetric, type Metric, type MetricContent, type MetricKind,
 } from "../lib/metrics";
+import { PROVIDERS } from "../lib/wearable";
 
 const AVG_DAYS = 14;
 
@@ -118,7 +119,7 @@ export function Body({
                   {formatMetric(m.value, active, m.unit)}
                   {/* Where it came from, stated plainly — a reading you typed and a
                       reading your band recorded are not quite the same claim. */}
-                  {m.source ? <span className="tier-badge">Fitbit</span> : null}
+                  {m.source ? <span className="tier-badge">{PROVIDERS[m.source].label}</span> : null}
                 </span>
                 <span className="metric-row-date">{new Date(m.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => onRemove(m.id)} title="Remove">×</button>

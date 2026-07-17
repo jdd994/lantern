@@ -5,7 +5,7 @@
 // an "ideal weight", never a comparison to anyone, never a verdict. It just shows
 // you your own trend, so you can notice it with compassion.
 
-export type MetricKind = "weight" | "waist" | "bodyfat" | "sleep" | "restingHR" | "steps";
+export type MetricKind = "weight" | "waist" | "bodyfat" | "sleep" | "restingHR" | "steps" | "hrv";
 
 // `daily` marks the kinds that are a fresh quantity every day rather than a
 // slow-moving state. It decides which true thing we can say about a series:
@@ -26,13 +26,18 @@ export const METRIC_META: Record<
   sleep: { label: "Sleep", units: ["h"], canonical: "h", dp: 1, daily: true },
   restingHR: { label: "Resting heart rate", units: ["bpm"], canonical: "bpm", dp: 0 },
   steps: { label: "Steps", units: ["steps"], canonical: "steps", dp: 0, daily: true },
+  // Beat-to-beat variability (RMSSD) from a strap's R-R intervals — arithmetic
+  // on your own heartbeats, never a vendor's readiness grade. Marked daily
+  // because it genuinely swings with sleep and stress: the true statement about
+  // it is what it's been averaging, not the gap between two arbitrary sits.
+  hrv: { label: "Heart rate variability", units: ["ms"], canonical: "ms", dp: 0, daily: true },
 };
 
 export const METRIC_KINDS = Object.keys(METRIC_META) as MetricKind[];
 
 // Where a reading came from. Absent means you typed it — the ordinary case, and
 // the reason this is optional rather than defaulted.
-export type MetricSource = "fitbit";
+export type MetricSource = "fitbit" | "strap";
 
 export type MetricContent = {
   kind: MetricKind;

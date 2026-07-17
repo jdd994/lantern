@@ -201,6 +201,12 @@ input::placeholder { color: var(--ink-faint); }
 .metric-row-val { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); min-width: 80px; }
 .metric-row-date { flex: 1; color: var(--ink-faint); font-size: 12.5px; }
 
+/* a sit with a strap — one large calm number, nothing that flashes or judges */
+.sit-live { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 18px 0 6px; }
+.sit-bpm { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 52px; font-weight: 500; color: var(--ink); }
+.sit-unit { font-size: 14px; color: var(--ink-faint); }
+.sit-meta { text-align: center; font-size: 13px; color: var(--ink-faint); min-height: 1.4em; margin: 0 0 14px; }
+
 /* gate (welcome / lock) */
 .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 26px; }
 .gate-card { width: 100%; max-width: 440px; }
