@@ -84,6 +84,30 @@ TOTAL 1,299.00
   it("returns nothing rather than guessing when there are no amounts", () => {
     expect(parse("THANK YOU\nCOME AGAIN")).toEqual({});
   });
+
+  it("reads TOTAL the way thermal print actually delivers it", () => {
+    // O→0 and L→I are the classic confusions; the anchor word must survive them.
+    expect(parse("SHOP\nTEA 2.00\nT0TAL 2.15").amount).toEqual({ minor: 215, currency: USD });
+    expect(parse("SHOP\nTEA 2.00\nTOTAI 2.15").amount).toEqual({ minor: 215, currency: USD });
+  });
+
+  it("takes the figure below a lone TOTAL label — split lines happen", () => {
+    const d = parse("SHOP\nTEA 2.00\nSCONE 3.00\nTOTAL\n5.40");
+    expect(d.amount).toEqual({ minor: 540, currency: USD });
+  });
+
+  it("refuses to crown an item as the total when the real one went unread", () => {
+    // The exact failure from the field: no readable TOTAL line, several items —
+    // the old fallback picked the priciest item and presented it as the total.
+    // Confidently wrong is worse than blank: claim nothing, keep the items.
+    const d = parse("SHOP\nBREAD 5.00\nMILK 4.00\nEGGS 3.00");
+    expect(d.amount).toBeUndefined();
+    expect(d.items).toHaveLength(3);
+  });
+
+  it("still claims a lone amount as the total — nothing contradicts it", () => {
+    expect(parse("CAFE\nLATTE 4.50").amount).toEqual({ minor: 450, currency: USD });
+  });
 });
 
 describe("parseReceiptText: the merchant", () => {

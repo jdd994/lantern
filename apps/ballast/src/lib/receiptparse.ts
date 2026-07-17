@@ -13,15 +13,29 @@
 import { minorDigits, type Money } from "./money";
 import type { ReceiptDraft, ReceiptDraftItem } from "./receipt";
 
+// "TOTAL" as the OCR actually delivers it off thermal paper: T0TAL, TOTAI,
+// T0TA1. The word is the anchor the whole parse hangs on, so it gets matched
+// the way it arrives, not the way it was printed.
+const FUZZY_TOTAL = "T[O0Q]TA[LI1!]";
+const FUZZY_SUBTOTAL = `SUB\\s?-?\\s?${FUZZY_TOTAL}`;
+
 // Words that mean a line is arithmetic or payment, not a purchased item. If a
 // line says CHANGE 20.00, the twenty dollars is the cashier's, not the store's.
-const NOT_AN_ITEM =
-  /\b(SUB\s?-?\s?TOTAL|TOTAL|TAX|VAT|GST|HST|TIP|GRATUITY|CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PAYMENT|BALANCE|AMOUNT\s+DUE|AUTH|APPROVED|REFUND|SAVINGS?|SAVED|COUPON|DISCOUNT|LOYALTY|POINTS|REWARDS?|ROUNDING)\b/i;
+const NOT_AN_ITEM = new RegExp(
+  `\\b(${FUZZY_SUBTOTAL}|${FUZZY_TOTAL}|TAX|VAT|GST|HST|TIP|GRATUITY|CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PAYMENT|BALANCE|AMOUNT\\s+DUE|AUTH|APPROVED|REFUND|SAVINGS?|SAVED|COUPON|DISCOUNT|LOYALTY|POINTS|REWARDS?|ROUNDING)\\b`,
+  "i"
+);
 
 // Lines whose amount is the one we actually want.
-const TOTAL_LINE = /\b(TOTAL|AMOUNT\s+DUE|BALANCE\s+DUE|TO\s+PAY|GRAND\s+TOTAL)\b/i;
+const TOTAL_LINE = new RegExp(
+  `\\b(${FUZZY_TOTAL}|AMOUNT\\s+DUE|BALANCE\\s+DUE|TO\\s+PAY|GRAND\\s+${FUZZY_TOTAL})\\b`,
+  "i"
+);
 // ...unless the same line disqualifies itself.
-const NOT_THE_TOTAL = /\b(SUB\s?-?\s?TOTAL|TAX|TIP|SAVINGS?|SAVED|ITEMS?\s+SOLD|POINTS|TENDER)\b/i;
+const NOT_THE_TOTAL = new RegExp(
+  `\\b(${FUZZY_SUBTOTAL}|TAX|TIP|SAVINGS?|SAVED|ITEMS?\\s+SOLD|POINTS|TENDER)\\b`,
+  "i"
+);
 
 // Payment lines often repeat the total to the cent; change lines exceed it.
 // Neither may win the "largest amount" fallback.
@@ -80,20 +94,43 @@ function moneyLines(lines: string[], currency: string): MoneyLine[] {
 
 // ---- The total -------------------------------------------------------------
 
-function findTotal(monied: MoneyLine[]): number | undefined {
-  // Prefer an explicit TOTAL line; take the LAST one, because "TOTAL" is often
-  // followed by payment lines but preceded by "SUBTOTAL" — and on long receipts
-  // a running total can appear mid-tape.
-  const explicit = monied.filter(
-    (l) => TOTAL_LINE.test(l.text) && !NOT_THE_TOTAL.test(l.text)
-  );
-  if (explicit.length > 0) return explicit[explicit.length - 1].minor;
+const letterCount = (s: string) => (s.match(/[A-Za-z]/g) ?? []).length;
 
-  // Fallback: the largest amount that isn't payment arithmetic. On most
-  // receipts that is the total, since it is the sum of everything above it.
+function findTotal(lines: string[], monied: MoneyLine[]): number | undefined {
+  const byIndex = new Map(monied.map((l) => [l.index, l]));
+
+  // Prefer an explicit TOTAL line; scan from the BOTTOM, because "TOTAL" is
+  // often preceded by "SUBTOTAL" — and on long receipts a running total can
+  // appear mid-tape.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!TOTAL_LINE.test(lines[i]) || NOT_THE_TOTAL.test(lines[i])) continue;
+    const on = byIndex.get(i);
+    if (on) return on.minor;
+    // Some registers print the label and the figure on separate lines — and
+    // column-split OCR does the same to ones that don't. A bare amount directly
+    // below a lone "TOTAL" is that figure.
+    const next = byIndex.get(i + 1);
+    if (next && !PAYMENT_LINE.test(next.text) && letterCount(next.text) <= 2) {
+      return next.minor;
+    }
+  }
+
+  // Fallback: the largest amount that isn't payment arithmetic — usually the
+  // total, since the total is the sum of everything above it. But that logic
+  // cuts both ways: when the OTHER amounts on the tape add up to well over the
+  // candidate, it cannot be their total — it's just the priciest item, and the
+  // real total went unread. Claiming it would be confidently wrong (it reads as
+  // plausible and is off by the rest of the receipt), so claim nothing and let
+  // the items speak for themselves.
   const candidates = monied.filter((l) => !PAYMENT_LINE.test(l.text));
   if (candidates.length === 0) return undefined;
-  return Math.max(...candidates.map((l) => l.minor));
+  const max = Math.max(...candidates.map((l) => l.minor));
+  const itemish = candidates.filter((l) => !NOT_AN_ITEM.test(l.text));
+  const rest =
+    itemish.reduce((a, l) => a + l.minor, 0) -
+    (itemish.some((l) => l.minor === max) ? max : 0);
+  if (rest > 0 && max < rest * 0.8) return undefined;
+  return max;
 }
 
 // ---- The merchant ----------------------------------------------------------
@@ -204,7 +241,7 @@ export function parseReceiptText(
   // return nothing and let the form open blank.
   if (monied.length === 0) return {};
 
-  const totalMinor = findTotal(monied);
+  const totalMinor = findTotal(lines, monied);
 
   const draft: ReceiptDraft = {};
   if (totalMinor !== undefined) {
