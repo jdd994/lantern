@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  fmtDuration, fmtKm, fmtPace, haversine, parseGPX, routePath, runNatural,
-  shapeOf, summarise,
+  cumulative, elevationPath, fmtClimb, fmtDistance, fmtDuration, fmtPace,
+  haversine, parseGPX, routePath, runNatural, shapeOf, splits, summarise,
+  type RoutePoint,
 } from "./run";
 
 const GPX = `<?xml version="1.0" encoding="UTF-8"?>
@@ -89,13 +90,28 @@ describe("naturals and shape", () => {
     expect(runNatural(s, points)).toContain("run:gpx:");
   });
 
-  it("stores the route at ~1m precision, nothing else", () => {
-    const shape = shapeOf([{ lat: 51.5000012, lon: -0.1000049, ele: 12, t: 5 }]);
-    expect(shape).toEqual([[51.5, -0.1]]);
+  it("stores position at ~1m, elevation at 0.1m, and time as seconds from the start", () => {
+    const start = Date.parse("2026-07-16T07:00:00Z");
+    const shape = shapeOf(
+      [
+        { lat: 51.5000012, lon: -0.1000049, ele: 12.34, t: start },
+        { lat: 51.501, lon: -0.101, t: start + 61_000 },
+        { lat: 51.502, lon: -0.102, ele: 15 },
+      ],
+      start
+    );
+    expect(shape).toEqual([
+      [51.5, -0.1, 12.3, 0],
+      [51.501, -0.101, null, 61],
+      [51.502, -0.102, 15, null],
+    ]);
   });
 
   it("fits the route into the box, both dimensions inside", () => {
-    const path = routePath([[51.5, -0.1], [51.501, -0.099], [51.5005, -0.1015]], 72, 44);
+    const pts: RoutePoint[] = [
+      [51.5, -0.1, null, null], [51.501, -0.099, null, null], [51.5005, -0.1015, null, null],
+    ];
+    const path = routePath(pts, 72, 44);
     const coords = path.split(" ").map((p) => p.split(",").map(Number));
     for (const [x, y] of coords) {
       expect(x).toBeGreaterThanOrEqual(0);
@@ -107,11 +123,50 @@ describe("naturals and shape", () => {
 });
 
 describe("display helpers", () => {
-  it("formats the facts, and refuses a pace built on noise", () => {
-    expect(fmtKm(5230)).toBe("5.23 km");
+  it("formats the facts in either unit, and refuses a pace built on noise", () => {
+    expect(fmtDistance(5230, "km")).toBe("5.23 km");
+    expect(fmtDistance(8046.72, "mi")).toBe("5.00 mi");
     expect(fmtDuration(1830)).toBe("30:30");
     expect(fmtDuration(3725)).toBe("1:02:05");
-    expect(fmtPace(1500, 5000)).toBe("5:00 /km");
-    expect(fmtPace(60, 50)).toBeNull(); // 50 metres is not a pace
+    expect(fmtPace(1500, 5000, "km")).toBe("5:00 /km");
+    expect(fmtPace(1500, 5000, "mi")).toBe("8:03 /mi");
+    expect(fmtPace(60, 50, "km")).toBeNull(); // 50 metres is not a pace
+    expect(fmtClimb(120.4, "km")).toBe("≈120 m climb");
+    expect(fmtClimb(30.48, "mi")).toBe("≈100 ft climb");
+  });
+});
+
+describe("depth: splits and the profile", () => {
+  // A straight line north at constant speed: each 0.001° of latitude ≈ 111.2m,
+  // one point per 30 seconds. ~10 points ≈ 1km.
+  const steady = (n: number): RoutePoint[] =>
+    Array.from({ length: n }, (_, i) => [51 + i * 0.001, 0, 10 + i, i * 30]);
+
+  it("cumulative distance climbs monotonically", () => {
+    const cum = cumulative(steady(4));
+    expect(cum[0]).toBe(0);
+    expect(cum[3]).toBeGreaterThan(cum[2]);
+    expect(cum[3]).toBeCloseTo(3 * 111_195 * 0.001, -1);
+  });
+
+  it("splits interpolate boundary times and never dress up the partial", () => {
+    const parts = splits(steady(12), 1000); // ~1.22 km total
+    expect(parts.length).toBe(2);
+    expect(parts[0].meters).toBe(1000);
+    // ~111.2m per 30s → 1km ≈ 270s. Interpolated, so near, not exact.
+    expect(parts[0].seconds).toBeGreaterThan(255);
+    expect(parts[0].seconds).toBeLessThan(285);
+    expect(parts[1].meters).toBeLessThan(1000); // the honest remainder
+  });
+
+  it("no times means no splits — never a pace invented from an assumption", () => {
+    const untimed: RoutePoint[] = steady(12).map((p) => [p[0], p[1], p[2], null]);
+    expect(splits(untimed, 1000)).toEqual([]);
+  });
+
+  it("draws the ground only when the ground was measured", () => {
+    expect(elevationPath(steady(5), 600, 90)).not.toBeNull();
+    const flat: RoutePoint[] = steady(5).map((p) => [p[0], p[1], null, p[3]]);
+    expect(elevationPath(flat, 600, 90)).toBeNull();
   });
 });

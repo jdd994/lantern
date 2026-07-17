@@ -1,6 +1,7 @@
 // SettingsSheet.tsx — vibe picker + a short, gentle "how it works", on the shared
 // @lantern/ui primitives. Presets now; deeper customization is a planned feature.
 import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
+import type { DistanceUnit } from "../lib/run";
 
 export const MOODS: ThemeOption[] = [
   { id: "ember", name: "Ember", desc: "Warm firelight", bg: "#1A130D", ink: "#EDE3D2", accent: "#E08A4A" },
@@ -11,10 +12,14 @@ export const MOODS: ThemeOption[] = [
 export function SettingsSheet({
   mood,
   onMood,
+  unit,
+  onUnit,
   onClose,
 }: {
   mood: string;
   onMood: (id: string) => void;
+  unit: DistanceUnit;
+  onUnit: (u: DistanceUnit) => void;
   onClose: () => void;
 }) {
   return (
@@ -25,6 +30,18 @@ export function SettingsSheet({
         <h4 className="set-head">Vibe</h4>
         <p className="hint">Pick the look that feels right — warm at any hour. Saved on this device.</p>
         <ThemePicker options={MOODS} current={mood} onSelect={onMood} />
+      </section>
+
+      <section className="set-section">
+        <h4 className="set-head">Distance</h4>
+        <p className="hint">How runs are shown. Stored honestly in metres either way.</p>
+        <div className="choices">
+          {(["km", "mi"] as DistanceUnit[]).map((u) => (
+            <button key={u} type="button" className="choice" aria-pressed={unit === u} onClick={() => onUnit(u)}>
+              {u === "km" ? "Kilometres" : "Miles"}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="set-section">
