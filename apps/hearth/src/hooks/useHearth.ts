@@ -26,6 +26,7 @@ import {
   PROVIDERS, readingContent, tagger,
   type ConnectionContent, type ProviderId, type Reading, type WearableConnection,
 } from "../lib/wearable";
+import { parseGPX, runNatural, shapeOf, summarise as summariseRun, type Run, type RunContent } from "../lib/run";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
 import { KITCHEN_META_ID, type Kitchen, type KitchenMeta, type SharedPlan, type SharedPlanContent } from "../lib/kitchen";
@@ -103,6 +104,13 @@ export type Hearth = {
   logMetric: (content: MetricContent, at?: number) => Promise<void>;
   removeMetric: (id: string) => Promise<void>;
 
+  // Runs — GPX files, parsed here, stored sealed. Tier 0: nothing is fetched
+  // and nothing leaves; the route is the most sensitive record in the vault.
+  runs: Run[];
+  runError: string | null;
+  importGPX: (files: { name: string; text: string }[]) => Promise<void>;
+  removeRun: (id: string) => Promise<void>;
+
   // Wearables. Readings you already own, copied to you from a device you already
   // wear — measurements only, never a score, and never calories burned.
   connections: WearableConnection[];
@@ -147,6 +155,8 @@ export function useHearth(): Hearth {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [wearableBusy, setWearableBusy] = useState(false);
   const [wearableError, setWearableError] = useState<string | null>(null);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [runError, setRunError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -164,8 +174,9 @@ export function useHearth(): Hearth {
   }, []);
 
   const loadAll = useCallback(async (key: CryptoKey) => {
-    const [sl, sg, sr, sm, sp, spa] = await Promise.all([
+    const [sl, sg, sr, sm, sp, spa, sru] = await Promise.all([
       db.allFoodLogs(), db.allGoals(), db.allRecipes(), db.allMetrics(), db.allMealPlans(), db.allPantry(),
+      db.allRuns(),
     ]);
     const l = await Promise.all(
       sl.filter((r) => !r.deleted).map(async (r): Promise<FoodLog> => {
@@ -203,12 +214,19 @@ export function useHearth(): Hearth {
         return { ...c, id: r.id, addedAt: r.createdAt };
       })
     );
+    const ru = await Promise.all(
+      sru.filter((r) => !r.deleted).map(async (r): Promise<Run> => {
+        const c = await openJSON<RunContent>(key, r.content);
+        return { ...c, id: r.id };
+      })
+    );
     setLogs(l);
     setGoals(g);
     setRecipes(rc);
     setMetrics(m);
     setPlans(pl);
     setPantry(pa);
+    setRuns(ru);
   }, []);
 
   // ---- sync ---------------------------------------------------------------
@@ -812,6 +830,65 @@ export function useHearth(): Hearth {
     scheduleSync();
   }, [scheduleSync]);
 
+  // ---- runs (GPX import) ---------------------------------------------------
+  // Files you picked, parsed in this tab, sealed with the vault key. Ids are
+  // HMAC-tagged naturals (same as wearable readings) so importing the same run
+  // twice — or on two devices — lands on one record, and the sync server never
+  // learns that a record is a run at all, let alone when it happened.
+  const importGPX = useCallback(async (files: { name: string; text: string }[]) => {
+    const key = keyRef.current;
+    if (!key) return;
+    setRunError(null);
+    const tag = await tagger(key);
+    const skipped: string[] = [];
+    let wrote = 0;
+    for (const f of files) {
+      const { name, points } = parseGPX(f.text);
+      const s = summariseRun(points);
+      if (!s) {
+        skipped.push(f.name);
+        continue;
+      }
+      const startedAt = s.startedAt ?? Date.now();
+      const content: RunContent = {
+        ...(name ? { name } : {}),
+        startedAt,
+        meters: s.meters,
+        ...(s.seconds !== undefined ? { seconds: s.seconds } : {}),
+        ...(s.ascent !== undefined ? { ascent: s.ascent } : {}),
+        points: shapeOf(points),
+      };
+      const id = await tag(runNatural(s, points));
+      const prev = (await db.allRuns()).find((r) => r.id === id);
+      // You deleted this run on purpose. An import does not argue with that.
+      if (prev?.deleted) continue;
+      const now = Date.now();
+      await db.putRun({
+        id, at: startedAt, createdAt: prev?.createdAt ?? now, updatedAt: now,
+        deleted: false, dirty: true, content: await sealJSON(key, content),
+      });
+      wrote++;
+    }
+    if (skipped.length > 0) {
+      setRunError(
+        skipped.length === files.length
+          ? "No track points in there — is it a GPX export with a recorded track?"
+          : `Imported, except ${skipped.join(", ")} — no track points in there.`
+      );
+    }
+    if (wrote > 0) {
+      await loadAll(key);
+      scheduleSync();
+    }
+  }, [loadAll, scheduleSync]);
+
+  const removeRun = useCallback(async (id: string) => {
+    setRuns((prev) => prev.filter((r) => r.id !== id));
+    const stored = (await db.allRuns()).find((r) => r.id === id);
+    if (stored) await db.putRun({ ...stored, deleted: true, dirty: true, updatedAt: Date.now() });
+    scheduleSync();
+  }, [scheduleSync]);
+
   // ---- derived -----------------------------------------------------------
   const { from, to } = dayBounds(Date.now());
   const today = windowTotal(logs, from, to);
@@ -1022,6 +1099,7 @@ export function useHearth(): Hearth {
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
     sharePlan, removeSharedPlan,
     logMetric, removeMetric,
+    runs, runError, importGPX, removeRun,
     connections, wearableBusy, wearableError, canUseWearable,
     connectWearable, importWearable: importFrom, disconnectWearable, saveWearableReadings,
   };
