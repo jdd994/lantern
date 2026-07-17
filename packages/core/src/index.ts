@@ -10,3 +10,4 @@ export * from "./vault";
 export * from "./sharing";
 export * from "./sharing-api";
 export * from "./vibe";
+export * from "./connect";
