@@ -8,6 +8,7 @@ import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Wearables } from "./components/Wearables";
+import { Runs } from "./components/Runs";
 import { Plan, AddPlan } from "./components/Plan";
 import { Pantry } from "./components/Pantry";
 import { Kitchens } from "./components/Kitchens";
@@ -200,6 +201,13 @@ export default function App() {
           onSaveReadings={(p, readings) => h.saveWearableReadings(p, readings)}
         />
       </Body>
+
+      <Runs
+        runs={h.runs}
+        error={h.runError}
+        onImport={(files) => void h.importGPX(files)}
+        onRemove={(id) => void h.removeRun(id)}
+      />
 
       {logging ? (
         <LogFood

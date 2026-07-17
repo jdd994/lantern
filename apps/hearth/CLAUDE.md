@@ -150,6 +150,27 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 **The escape hatch for every blocked vendor is CSV import (tier 0)** — Garmin,
 Whoop and Oura all let you export. Less magical; costs nothing and asks nobody.
 
+### Runs (GPX import, tier 0)
+
+`lib/run.ts` + `components/Runs.tsx` + the `runs` store (db v5, syncable kind
+`"run"`). You pick a `.gpx` file; it's parsed in the tab (no DOMParser — a
+small dependency-free reader, tested in node); distance/duration/ascent are
+computed locally; the route is sealed with the vault key. A run trace is the
+most sensitive record Hearth holds — where you are, alone, at predictable
+times — and GPX is the honest door every vendor leaves open, including the
+refused ones (Garmin/Whoop export it).
+
+Standing decisions:
+- **No map tiles.** Fetching tiles tells a tile server roughly where you run.
+  The route renders as its own shape on blank ground; real maps wait for an
+  offline-tiles story. The CSP stays silent.
+- **No GPX extensions.** Heart rate, cadence, calories ride in `<extensions>`;
+  the parser never reads them (asserted in run.test.ts).
+- **No records, no pace judgement, no streaks.** A run is its facts.
+- Ascent uses a 3m hysteresis (GPS wobble is not climbing) and displays as "≈".
+- Run ids are HMAC-tagged naturals (same `tagger`) — re-import dedupes, and
+  the sync server never learns a record is a run.
+
 ### Source-aware aggregation (the witness stand)
 
 With several devices feeding one metric, each source is a separate **witness**

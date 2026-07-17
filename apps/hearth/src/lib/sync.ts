@@ -7,6 +7,7 @@ import { pushChanges, pullChanges } from "./api";
 import {
   dirtyRecords, getStoredByKind, putStoredByKind, clearDirtyByKind, getSyncState, saveSyncState,
   type AnyStored, type SyncKind, type StoredFoodLog, type StoredMetric, type StoredMealPlan,
+  type StoredRun,
 } from "./db";
 
 // `at` lives OUTSIDE the ciphertext (it's the day/time the record belongs to), so
@@ -16,6 +17,7 @@ function metaFor(kind: string, rec: AnyStored): Record<string, unknown> | undefi
   if (kind === "foodLog") return { at: (rec as StoredFoodLog).at };
   if (kind === "metric") return { at: (rec as StoredMetric).at };
   if (kind === "mealPlan") return { at: (rec as StoredMealPlan).at };
+  if (kind === "run") return { at: (rec as StoredRun).at };
   return undefined;
 }
 
@@ -28,6 +30,7 @@ function fromRecord(rec: SyncRecord): AnyStored {
   if (rec.kind === "foodLog") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredFoodLog;
   if (rec.kind === "metric") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredMetric;
   if (rec.kind === "mealPlan") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredMealPlan;
+  if (rec.kind === "run") return { ...base, at: Number(m.at ?? rec.createdAt) } as StoredRun;
   return base as AnyStored;
 }
 
@@ -41,6 +44,7 @@ const engine = createSyncEngine<AnyStored>({
       ...d.recipes.map((rec) => ({ kind: "recipe", rec })),
       ...d.mealPlans.map((rec) => ({ kind: "mealPlan", rec })),
       ...d.pantry.map((rec) => ({ kind: "pantryItem", rec })),
+      ...d.runs.map((rec) => ({ kind: "run", rec })),
     ];
   },
   getByKind: (kind, id) => getStoredByKind(kind as SyncKind, id),

@@ -214,6 +214,15 @@ input::placeholder { color: var(--ink-faint); }
 .metric-row-val { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); min-width: 80px; }
 .metric-row-date { flex: 1; color: var(--ink-faint); font-size: 12.5px; }
 
+/* runs — a route as its own shape on blank ground; facts, never verdicts */
+.run-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.run-shape { flex: 0 0 auto; opacity: .9; }
+.run-facts { flex: 1; min-width: 0; }
+.run-head { display: flex; align-items: baseline; gap: 10px; }
+.run-dist { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px; color: var(--ink); }
+.run-name { font-size: 13px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-meta { font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
 /* a sit with a strap — one large calm number, nothing that flashes or judges */
 .sit-live { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 18px 0 6px; }
 .sit-bpm { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 52px; font-weight: 500; color: var(--ink); }
