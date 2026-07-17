@@ -17,6 +17,7 @@ import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Flame, Gear, Pot, Pulse } from "./components/icons";
 import { useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
+import type { DistanceUnit } from "./lib/run";
 
 function timeLabel(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
@@ -48,6 +49,15 @@ export default function App() {
     new URLSearchParams(window.location.search).has("code") ? "body" : "today"
   );
   const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
+  // Display preference only — metres are canonical in storage. Plaintext
+  // localStorage is fine: "this person likes miles" is bookkeeping, not a secret.
+  const [unit, setUnit] = useState<DistanceUnit>(() =>
+    localStorage.getItem("hearth-unit") === "mi" ? "mi" : "km"
+  );
+  const pickUnit = (u: DistanceUnit) => {
+    setUnit(u);
+    localStorage.setItem("hearth-unit", u);
+  };
 
   if (h.status === "loading") return null;
   if (h.status === "setup") {
@@ -225,6 +235,7 @@ export default function App() {
       <Runs
         runs={h.runs}
         error={h.runError}
+        unit={unit}
         onImport={(files) => void h.importGPX(files)}
         onRemove={(id) => void h.removeRun(id)}
       />
@@ -265,7 +276,11 @@ export default function App() {
       ) : null}
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
       {settings ? (
-        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+        <SettingsSheet
+          mood={mood} onMood={setMood}
+          unit={unit} onUnit={pickUnit}
+          onClose={() => setSettings(false)}
+        />
       ) : null}
       {sync ? (
         <Sync

@@ -856,7 +856,7 @@ export function useHearth(): Hearth {
         meters: s.meters,
         ...(s.seconds !== undefined ? { seconds: s.seconds } : {}),
         ...(s.ascent !== undefined ? { ascent: s.ascent } : {}),
-        points: shapeOf(points),
+        points: shapeOf(points, s.startedAt),
       };
       const id = await tag(runNatural(s, points));
       const prev = (await db.allRuns()).find((r) => r.id === id);
