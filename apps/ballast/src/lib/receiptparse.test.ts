@@ -194,6 +194,15 @@ yj sa 12.00
     expect(d.items?.map((i) => i.label)).toEqual(["BREAD", "MILK", "EGGS"]);
   });
 
+  it("never lists the card slip's AMOUNT line as a purchase", () => {
+    // Costco taught us this one: the inverted-box TOTAL is unreadable, but
+    // "AMOUNT: $33.88" on the card slip reads fine — it may lend us the total,
+    // and it must never appear as something you bought.
+    const d = parse("SHOP\nGREEK YOGURT 6.89\nAMOUNT: $33.88");
+    expect(d.amount).toEqual({ minor: 3388, currency: USD });
+    expect(d.items).toEqual([{ label: "GREEK YOGURT", amount: { minor: 689, currency: USD } }]);
+  });
+
   it("keeps a single item whose price IS the total — that's just a latte", () => {
     const d = parse("CAFE\nLATTE 4.50\nTOTAL 4.50");
     expect(d.items).toEqual([{ label: "LATTE", amount: { minor: 450, currency: USD } }]);

@@ -30,6 +30,15 @@
 
 import type { ReceiptDraft, ReceiptReader } from "./receipt";
 import { parseReceiptText } from "./receiptparse";
+import { scaledJpeg } from "./media";
+
+// How much of a receipt a draft actually captured. Used to decide whether a
+// pass was good enough to stop, and which pass won. The total is worth the
+// most — it's the number the whole feature exists to save typing.
+function score(d: ReceiptDraft): number {
+  return (d.amount ? 4 : 0) + Math.min(d.items?.length ?? 0, 5) + (d.merchant ? 1 : 0) + (d.at ? 1 : 0);
+}
+const GOOD_ENOUGH = 5; // total + at least one item — stop looking
 
 export const tesseractReader: ReceiptReader = {
   name: "tesseract",
@@ -52,15 +61,53 @@ export const tesseractReader: ReceiptReader = {
     });
 
     try {
-      // SINGLE_BLOCK, not SINGLE_COLUMN: column detection splits a receipt into
-      // a labels column and a prices column read separately, which orphans every
-      // amount from its item. One uniform block keeps each row a line.
-      await worker.setParameters({
-        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
-        preserve_interword_spaces: "1",
-      });
-      const { data } = await worker.recognize(image);
-      return { ...parseReceiptText(data.text, currency), rawText: data.text };
+      // MULTI-PASS, because real receipts fail in opposite directions and no
+      // single configuration survives all of them (each pass earned its place
+      // against a field photo):
+      //   - Default (global) thresholding drowns in patterned backgrounds —
+      //     Costco's blue border turned a whole receipt to noise. Sauvola
+      //     (thresholding_method 2) binarises locally and read the same photo
+      //     cleanly... while being no better, sometimes worse, on clean paper.
+      //   - Full resolution resolves thin thermal strokes — but it also renders
+      //     wood grain as crisp false detail; the same photo that failed at
+      //     4000px read fine small. So the gentler variant is a fallback, not
+      //     a downgrade.
+      // Passes run until one is good enough (total + an item); the best draft
+      // wins. Failing scans were already slow by feeling — a few extra seconds
+      // to rescue one is the right trade.
+      const half = await scaledJpeg(image, 2000).catch(() => null);
+      const passes: Array<{ threshold: string; img: Blob }> = [
+        { threshold: "0", img: image },
+        { threshold: "2", img: image },
+        ...(half && half !== image
+          ? [
+              { threshold: "0", img: half },
+              { threshold: "2", img: half },
+            ]
+          : []),
+      ];
+
+      let best: ReceiptDraft = {};
+      let bestScore = -1;
+      for (const pass of passes) {
+        // SINGLE_BLOCK, not SINGLE_COLUMN: column detection splits a receipt
+        // into a labels column and a prices column read separately, which
+        // orphans every amount from its item.
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+          preserve_interword_spaces: "1",
+          thresholding_method: pass.threshold,
+        });
+        const { data } = await worker.recognize(pass.img);
+        const draft: ReceiptDraft = { ...parseReceiptText(data.text, currency), rawText: data.text };
+        const s = score(draft);
+        if (s > bestScore) {
+          best = draft;
+          bestScore = s;
+        }
+        if (bestScore >= GOOD_ENOUGH) break;
+      }
+      return best;
     } finally {
       // The WASM instance holds tens of MB. A receipt is scanned occasionally,
       // not in a loop — free it rather than keeping it warm.
