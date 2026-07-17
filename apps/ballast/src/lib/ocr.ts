@@ -16,74 +16,26 @@
 //     bundle is unchanged; the ~7MB engine is a lazy, cached, one-time cost paid
 //     only by people who use the feature.
 //
-// Accuracy shape: thermal receipts are the hard case (curl, glare, faded ink),
-// so we upscale small images and flatten them to high-contrast grayscale before
-// recognition — cheap, and it measurably helps. Whatever comes out goes through
-// the pure parser (receiptparse.ts), which extracts only what it can defend.
+// Accuracy shape: the photo goes to the engine AS THE CAMERA TOOK IT (after
+// compressImage's downscale). There was a grayscale + contrast-stretch
+// preprocessing pass here once, written on intuition — then a real receipt on
+// a real countertop read measurably WORSE through it than raw (garbled items,
+// mangled merchant; same engine, same photo). Leptonica's own tiled
+// binarisation inside Tesseract is simply better at this than our histogram
+// math was. Same lesson as Driftless's HEIC converter: when the cleverness
+// stops earning its keep, delete it. Don't reintroduce preprocessing without
+// an A/B on real field photos (see the field fixture in receiptparse.test.ts).
+// Whatever the engine reads goes through the pure parser (receiptparse.ts),
+// which extracts only what it can defend.
 
 import type { ReceiptDraft, ReceiptReader } from "./receipt";
 import { parseReceiptText } from "./receiptparse";
-
-// Small print needs pixels. compressImage stores receipts at up to 2000px, but a
-// cropped or older photo may be smaller; below this width Tesseract starts
-// missing characters.
-const MIN_OCR_WIDTH = 1400;
-
-// Grayscale + gentle contrast stretch. Tesseract binarises internally (Otsu), so
-// we don't threshold here — we just give it a cleaner signal to threshold.
-async function preprocess(image: Blob): Promise<HTMLCanvasElement> {
-  const bitmap = await createImageBitmap(image);
-  const scale = Math.max(1, MIN_OCR_WIDTH / bitmap.width);
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) {
-    // No 2d context is vanishingly rare; feed the original image via a bare
-    // canvas-less path by throwing — readReceipt treats any throw as "no read".
-    bitmap.close?.();
-    throw new Error("no 2d context");
-  }
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close?.();
-
-  const img = ctx.getImageData(0, 0, w, h);
-  const px = img.data;
-
-  // Luminance histogram, then stretch the 2nd..98th percentile to full range —
-  // lifts faded thermal print without letting a glare spot blow out the scale.
-  const hist = new Uint32Array(256);
-  for (let i = 0; i < px.length; i += 4) {
-    const y = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
-    hist[y | 0]++;
-  }
-  const total = w * h;
-  let lo = 0, hi = 255, acc = 0;
-  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= total * 0.02) { lo = v; break; } }
-  acc = 0;
-  for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= total * 0.02) { hi = v; break; } }
-  const range = Math.max(1, hi - lo);
-
-  for (let i = 0; i < px.length; i += 4) {
-    const y = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
-    const v = Math.max(0, Math.min(255, ((y - lo) * 255) / range));
-    px[i] = px[i + 1] = px[i + 2] = v;
-  }
-  ctx.putImageData(img, 0, 0);
-  return canvas;
-}
 
 export const tesseractReader: ReceiptReader = {
   name: "tesseract",
 
   available: async () =>
-    typeof WebAssembly === "object" &&
-    typeof Worker === "function" &&
-    typeof createImageBitmap === "function",
+    typeof WebAssembly === "object" && typeof Worker === "function",
 
   read: async (image: Blob, currency: string): Promise<ReceiptDraft> => {
     // Dynamic import: the engine's JS enters memory only on first use.
@@ -107,8 +59,7 @@ export const tesseractReader: ReceiptReader = {
         tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
         preserve_interword_spaces: "1",
       });
-      const canvas = await preprocess(image);
-      const { data } = await worker.recognize(canvas);
+      const { data } = await worker.recognize(image);
       return parseReceiptText(data.text, currency);
     } finally {
       // The WASM instance holds tens of MB. A receipt is scanned occasionally,

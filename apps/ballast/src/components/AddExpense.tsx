@@ -20,7 +20,7 @@ import { minorDigits, parseMoney } from "../lib/money";
 import { CATEGORIES, SPEND_CATEGORIES, type Category, type Suggestion } from "../lib/categorize";
 import type { TransactionContent, TransactionItem } from "../lib/spend";
 import { readReceipt } from "../lib/receipt";
-import { compressImage, dataUrl } from "../lib/media";
+import { compressImage, dataUrl, imageForOcr } from "../lib/media";
 import type { Account } from "../lib/ledger";
 import { TrustBadge } from "./TrustBadge";
 import { Receipt } from "./icons";
@@ -115,10 +115,13 @@ export function AddExpense({
       setPreview(dataUrl(bytes, type));
       setReceipt(file);
 
-      // The seam. The reader returns whatever it could defend; a blank draft
-      // just means the form opens blank, as it always did.
+      // The seam. The reader gets the ORIGINAL photo — the compressed copy
+      // above is for storage; its re-encode eats the thin strokes OCR needs.
+      // The reader returns whatever it could defend; a blank draft just means
+      // the form opens blank, as it always did.
       setReadNote(null);
-      const { draft, outcome } = await readReceipt(new Blob([bytes], { type }), currency);
+      const forOcr = await imageForOcr(file).catch(() => new Blob([bytes], { type }));
+      const { draft, outcome } = await readReceipt(forOcr, currency);
       if (draft.merchant) setMerchant(draft.merchant);
       if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
       if (draft.at) setDate(dateKey(new Date(draft.at)));

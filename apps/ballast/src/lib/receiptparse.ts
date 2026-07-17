@@ -22,7 +22,7 @@ const FUZZY_SUBTOTAL = `SUB\\s?-?\\s?${FUZZY_TOTAL}`;
 // Words that mean a line is arithmetic or payment, not a purchased item. If a
 // line says CHANGE 20.00, the twenty dollars is the cashier's, not the store's.
 const NOT_AN_ITEM = new RegExp(
-  `\\b(${FUZZY_SUBTOTAL}|${FUZZY_TOTAL}|TAX|VAT|GST|HST|TIP|GRATUITY|CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PAYMENT|BALANCE|AMOUNT\\s+DUE|AUTH|APPROVED|REFUND|SAVINGS?|SAVED|COUPON|DISCOUNT|LOYALTY|POINTS|REWARDS?|ROUNDING)\\b`,
+  `\\b(${FUZZY_SUBTOTAL}|${FUZZY_TOTAL}|TAX|VAT|GST|HST|TIP|GRATUITY|CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|PAYMENT|PURCHASE|BALANCE|AMOUNT\\s+DUE|AUTH|APPROVED|REFUND|SAVINGS?|SAVED|COUPON|DISCOUNT|LOYALTY|POINTS|REWARDS?|ROUNDING)\\b`,
   "i"
 );
 
@@ -40,13 +40,25 @@ const NOT_THE_TOTAL = new RegExp(
 // Payment lines often repeat the total to the cent; change lines exceed it.
 // Neither may win the "largest amount" fallback.
 const PAYMENT_LINE =
-  /\b(CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|AUTH|APPROVED|BALANCE)\b/i;
+  /\b(CASH|CHANGE|CHG|TEND(ER(ED)?)?|VISA|MASTERCARD|M\/?C|AMEX|DISCOVER|DEBIT|CREDIT|CARD|AUTH|APPROVED|BALANCE|PURCHASE)\b/i;
 
 // A money figure at the end of a line: "4.99", "1,234.56", "12,34", with an
-// optional currency symbol and an optional trailing minus or column letter
-// ("4.99-" and "4.99 A" are both common register formats).
+// optional currency symbol, an optional trailing minus or tax-flag code —
+// "4.99-", "7.99 A" and "3.59 BF" are all common register formats (two-letter
+// flags are real; a receipt in the field taught us that) — and grudging room
+// for ONE short digit-free scrap after it, because a photographed receipt's
+// background bleeds specks into the right margin ("7.99 A   im"). One scrap of
+// ≤3 characters only: "USD/lb" and friends stay long enough to keep rate lines
+// ("1.45 lb @ 2.29 USD/lb") out of the money.
 const TRAILING_AMOUNT =
-  /(?:^|\s)[$£€]?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*(-)?\s*[A-Z*]?\s*$/;
+  /(?:^|\s)[$£€]?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*(-)?\s*[A-Z*]{0,2}(\s+[^\s\d]{1,3})?\s*$/;
+
+// Any money figure, anywhere in a line. Used ONLY on lines already anchored by
+// a total keyword — background clutter loves to append junk after the figure
+// ("TOTAL usd 14.90 \ i Sie"), and the anchor word is what makes grabbing a
+// mid-line amount safe there and unsafe everywhere else (rate lines like
+// "1.45 lb @ 2.29 USD/lb" must never yield a money line).
+const ANY_AMOUNT = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})/g;
 
 // OCR loves to read "$" as "S" or "5" glued to the number; strip a leading
 // currency-ish rune before parsing digits.
@@ -96,7 +108,12 @@ function moneyLines(lines: string[], currency: string): MoneyLine[] {
 
 const letterCount = (s: string) => (s.match(/[A-Za-z]/g) ?? []).length;
 
-function findTotal(lines: string[], monied: MoneyLine[]): number | undefined {
+// `index` is the line the figure was lifted from, when that line isn't a
+// normal money line — the caller must keep it out of the items, or a garbled
+// "Visa 14.90" that lent us the total shows up as something you bought.
+type FoundTotal = { minor?: number; index?: number };
+
+function findTotal(lines: string[], monied: MoneyLine[], currency: string): FoundTotal {
   const byIndex = new Map(monied.map((l) => [l.index, l]));
 
   // Prefer an explicit TOTAL line; scan from the BOTTOM, because "TOTAL" is
@@ -105,13 +122,18 @@ function findTotal(lines: string[], monied: MoneyLine[]): number | undefined {
   for (let i = lines.length - 1; i >= 0; i--) {
     if (!TOTAL_LINE.test(lines[i]) || NOT_THE_TOTAL.test(lines[i])) continue;
     const on = byIndex.get(i);
-    if (on) return on.minor;
-    // Some registers print the label and the figure on separate lines — and
-    // column-split OCR does the same to ones that don't. A bare amount directly
-    // below a lone "TOTAL" is that figure.
+    if (on) return { minor: on.minor };
+    // The keyword is the anchor; the figure can be messier than a trailing
+    // amount. First try anywhere in the line — background clutter appends junk
+    // after the figure ("TOTAL usd 14.90 \ i Sie") — then the line below, for
+    // registers (and column-splitting OCR) that put the figure on its own line.
+    const inLine = [...lines[i].matchAll(ANY_AMOUNT)]
+      .map((m) => parseAmountMinor(m[1], currency))
+      .filter((n): n is number => n !== null && n > 0);
+    if (inLine.length > 0) return { minor: inLine[inLine.length - 1], index: i };
     const next = byIndex.get(i + 1);
     if (next && !PAYMENT_LINE.test(next.text) && letterCount(next.text) <= 2) {
-      return next.minor;
+      return { minor: next.minor, index: next.index };
     }
   }
 
@@ -123,14 +145,14 @@ function findTotal(lines: string[], monied: MoneyLine[]): number | undefined {
   // plausible and is off by the rest of the receipt), so claim nothing and let
   // the items speak for themselves.
   const candidates = monied.filter((l) => !PAYMENT_LINE.test(l.text));
-  if (candidates.length === 0) return undefined;
+  if (candidates.length === 0) return {};
   const max = Math.max(...candidates.map((l) => l.minor));
   const itemish = candidates.filter((l) => !NOT_AN_ITEM.test(l.text));
   const rest =
     itemish.reduce((a, l) => a + l.minor, 0) -
     (itemish.some((l) => l.minor === max) ? max : 0);
-  if (rest > 0 && max < rest * 0.8) return undefined;
-  return max;
+  if (rest > 0 && max < rest * 0.8) return {};
+  return { minor: max };
 }
 
 // ---- The merchant ----------------------------------------------------------
@@ -140,18 +162,24 @@ const MERCHANT_NOISE =
 
 function findMerchant(lines: string[]): string | undefined {
   // The name is almost always in the first few printed lines, above the
-  // address. Take the first early line that is mostly letters and isn't
-  // boilerplate, a street address, or a phone number.
-  for (const line of lines.slice(0, 5)) {
+  // address — but a photographed logo shreds into short garbage lines that sit
+  // above it. So don't take the FIRST plausible early line; take the most
+  // letter-dense one, which is the printed name and not the logo's debris.
+  let best: string | undefined;
+  let bestLetters = 0;
+  for (const line of lines.slice(0, 6)) {
     const letters = (line.match(/[A-Za-z]/g) ?? []).length;
     if (letters < 3) continue;
     if (MERCHANT_NOISE.test(line)) continue;
     if (/\d{3,}/.test(line)) continue; // street numbers, zips, phones
     if (TRAILING_AMOUNT.test(line)) continue;
     const cleaned = line.replace(/[^A-Za-z0-9\s&'’.-]/g, " ").replace(/\s+/g, " ").trim();
-    if (cleaned.length >= 3) return cleaned;
+    if (cleaned.length >= 3 && letters > bestLetters) {
+      best = cleaned;
+      bestLetters = letters;
+    }
   }
-  return undefined;
+  return best;
 }
 
 // ---- The date --------------------------------------------------------------
@@ -186,11 +214,15 @@ function findDate(text: string, now: number): number | undefined {
 
 function findItems(
   monied: MoneyLine[],
-  totalMinor: number | undefined,
+  total: FoundTotal,
   currency: string
 ): ReceiptDraftItem[] {
+  const totalMinor = total.minor;
   const items: ReceiptDraftItem[] = [];
   for (const l of monied) {
+    // The line the total's figure was lifted from is spoken for — a garbled
+    // payment line that lent us 14.90 is not something you bought.
+    if (l.index === total.index) continue;
     if (NOT_AN_ITEM.test(l.text)) continue;
     // An "item" priced above the receipt total is a misread (often the phone
     // number). Better to drop it than to present it as something you bought.
@@ -241,19 +273,19 @@ export function parseReceiptText(
   // return nothing and let the form open blank.
   if (monied.length === 0) return {};
 
-  const totalMinor = findTotal(lines, monied);
+  const total = findTotal(lines, monied, currency);
 
   const draft: ReceiptDraft = {};
-  if (totalMinor !== undefined) {
+  if (total.minor !== undefined) {
     // Spending is signed at the form boundary, so the draft carries magnitude.
-    draft.amount = { minor: totalMinor, currency } satisfies Money;
+    draft.amount = { minor: total.minor, currency } satisfies Money;
   }
   const merchant = findMerchant(lines);
   if (merchant) draft.merchant = merchant;
   const at = findDate(text, now);
   if (at) draft.at = at;
 
-  const items = findItems(monied, totalMinor, currency);
+  const items = findItems(monied, total, currency);
   if (items.length > 0) draft.items = items;
 
   return draft;
