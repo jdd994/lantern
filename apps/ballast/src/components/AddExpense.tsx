@@ -1,23 +1,33 @@
 // AddExpense.tsx
 // Snap the receipt, say what it was.
 //
-// The capture calls `readReceipt()`, which today returns nothing — so the fields
-// open blank and you type. That call is not dead code: it is the seam. The day a
-// good on-device receipt model is cheap, `receipt.ts` starts returning values and
-// this component pre-fills itself without a single line changing here.
+// The capture calls `readReceipt()`, which runs OCR on this device and returns a
+// DRAFT — total, merchant, date, line items — that pre-fills the form. Every
+// field stays editable and nothing is saved until you confirm, so a bad read is
+// a nuisance, never a corrupted ledger. When the reader can't run, the fields
+// simply open blank and you type, exactly as this form worked on day one.
 //
 // The categoriser suggests as you type the merchant, and says honestly whether it
 // LEARNED that from you or is merely guessing. Confirming a guess teaches it.
+//
+// Items read off the receipt each get a category of their own (defaulting to the
+// expense's). Give two items different categories and the spending breakdown
+// splits the money accordingly — a Target run can be half groceries, half
+// shopping, and both truths land where they belong.
 
 import { useEffect, useRef, useState } from "react";
-import { parseMoney } from "../lib/money";
+import { minorDigits, parseMoney } from "../lib/money";
 import { CATEGORIES, SPEND_CATEGORIES, type Category, type Suggestion } from "../lib/categorize";
-import type { TransactionContent } from "../lib/spend";
+import type { TransactionContent, TransactionItem } from "../lib/spend";
 import { readReceipt } from "../lib/receipt";
 import { compressImage, dataUrl } from "../lib/media";
 import type { Account } from "../lib/ledger";
 import { TrustBadge } from "./TrustBadge";
 import { Receipt } from "./icons";
+
+// An item row under edit. Amounts are text while typing; parsed on save.
+// category "" means "same as the expense" and follows the headline category.
+type ItemRow = { label: string; amount: string; category: Category | "" };
 
 function today(): string {
   return dateKey(new Date());
@@ -26,6 +36,14 @@ function today(): string {
 function dateKey(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Minor units → the text a human would type in the amount field. Display-only;
+// parseMoney is the way back.
+function minorToText(minor: number, currency: string): string {
+  const digits = minorDigits(currency);
+  const s = String(Math.abs(minor)).padStart(digits + 1, "0");
+  return digits === 0 ? s : `${s.slice(0, -digits)}.${s.slice(-digits)}`;
 }
 
 // The form takes a date, but a transaction is stored at an instant. For a past
@@ -68,6 +86,7 @@ export function AddExpense({
   const [preview, setPreview] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<ItemRow[]>([]);
 
   // Whether the current category came from the user or from the categoriser, so
   // we never overwrite a deliberate choice with a suggestion.
@@ -92,12 +111,21 @@ export function AddExpense({
       setPreview(dataUrl(bytes, type));
       setReceipt(file);
 
-      // The seam. Empty today; the UI is already built to use whatever it
-      // eventually returns.
+      // The seam. The reader returns whatever it could defend; a blank draft
+      // just means the form opens blank, as it always did.
       const draft = await readReceipt(new Blob([bytes], { type }), currency);
       if (draft.merchant) setMerchant(draft.merchant);
-      if (draft.amount) setAmount(String(Math.abs(draft.amount.minor) / 100));
-      if (draft.at) setDate(new Date(draft.at).toISOString().slice(0, 10));
+      if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
+      if (draft.at) setDate(dateKey(new Date(draft.at)));
+      if (draft.items && draft.items.length > 0) {
+        setItems(
+          draft.items.map((i) => ({
+            label: i.label,
+            amount: minorToText(i.amount.minor, currency),
+            category: "",
+          }))
+        );
+      }
     } catch (e) {
       // A photo that can't be read must never block logging the expense. The
       // number is the thing that matters; the picture is a nice-to-have.
@@ -123,6 +151,32 @@ export function AddExpense({
       return;
     }
 
+    // Item rows, if any survive review. A row that's half-filled is a question
+    // the user hasn't answered yet — say so rather than guessing or dropping it.
+    let itemContents: TransactionItem[] | undefined;
+    if (!income) {
+      const rows = items.filter((r) => r.label.trim() || r.amount.trim());
+      const built: TransactionItem[] = [];
+      for (const row of rows) {
+        const label = row.label.trim();
+        const rowParsed = parseMoney(row.amount, currency);
+        if (!label || !rowParsed || rowParsed.minor <= 0) {
+          setError(
+            `The item "${label || row.amount || "?"}" needs both a name and an amount — fill it in or remove the row.`
+          );
+          return;
+        }
+        built.push({
+          label,
+          amount: { minor: Math.abs(rowParsed.minor), currency },
+          // Stored only when it differs — "same as the expense" stays implicit,
+          // so recategorising the expense later carries these items with it.
+          ...(row.category && row.category !== category ? { category: row.category } : {}),
+        });
+      }
+      if (built.length > 0) itemContents = built;
+    }
+
     const magnitude = Math.abs(parsed.minor);
     const content: TransactionContent = {
       // Money out is negative. Signed at the boundary, so nothing downstream has
@@ -132,6 +186,7 @@ export function AddExpense({
       category: income ? "income" : category,
       note: note.trim() || undefined,
       accountId: accountId || undefined,
+      items: itemContents,
     };
 
     try {
@@ -175,7 +230,7 @@ export function AddExpense({
                 <Receipt size={24} />
               </span>
               <span>
-                {reading ? "Reading…" : "Photograph the receipt"}
+                {reading ? "Reading it, on this device…" : "Photograph the receipt"}
                 <small>
                   <TrustBadge tier={0} /> encrypted on this device, never uploaded
                 </small>
@@ -260,6 +315,83 @@ export function AddExpense({
                 <option value="transfer">{CATEGORIES.transfer.label} (not spending)</option>
               </select>
             </label>
+          ) : null}
+
+          {!income ? (
+            <div className="items-block">
+              <div className="items-head">
+                <span className="label">
+                  {items.length > 0 ? "On the receipt — check what it read" : null}
+                </span>
+              </div>
+              {items.map((row, i) => (
+                <div className="item-row" key={i}>
+                  <input
+                    type="text"
+                    className="item-label"
+                    value={row.label}
+                    placeholder="Item"
+                    onChange={(e) =>
+                      setItems((rows) =>
+                        rows.map((r, j) => (j === i ? { ...r, label: e.target.value } : r))
+                      )
+                    }
+                  />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="item-amount"
+                    value={row.amount}
+                    placeholder="0.00"
+                    onChange={(e) =>
+                      setItems((rows) =>
+                        rows.map((r, j) => (j === i ? { ...r, amount: e.target.value } : r))
+                      )
+                    }
+                  />
+                  <select
+                    className="item-category"
+                    value={row.category}
+                    onChange={(e) =>
+                      setItems((rows) =>
+                        rows.map((r, j) =>
+                          j === i ? { ...r, category: e.target.value as Category | "" } : r
+                        )
+                      )
+                    }
+                  >
+                    <option value="">Same as expense</option>
+                    {SPEND_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORIES[c].label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    title="Remove this item"
+                    onClick={() => setItems((rows) => rows.filter((_, j) => j !== i))}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  setItems((rows) => [...rows, { label: "", amount: "", category: "" }])
+                }
+              >
+                + Add an item
+              </button>
+              {items.some((r) => r.category && r.category !== category) ? (
+                <span className="hint">
+                  Items with their own category split this expense in the monthly breakdown.
+                </span>
+              ) : null}
+            </div>
           ) : null}
 
           {accounts.length > 0 ? (

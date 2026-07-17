@@ -111,7 +111,9 @@ on their own trajectory.**
 - `src/lib/spend.ts` — **pure.** Spending windows, category totals, comparisons.
 - `src/lib/categorize.ts` — **pure.** The local learning categoriser.
 - `src/lib/sources/*` — connectors. Each declares its **trust tier**.
-- `src/lib/receipt.ts` — the OCR seam. Today's reader returns nothing.
+- `src/lib/receipt.ts` — the OCR seam. `ocr.ts` (on-device Tesseract, lazy-loaded,
+  every asset served from our origin — see `scripts/ocr-assets.mjs`) plugs into it;
+  `receiptparse.ts` is the **pure**, tested parser that turns OCR text into a draft.
 - `src/hooks/useLedger.ts` — the ONLY place state, IO, and the key meet.
 - `src/components/*` — presentational; data and callbacks in, nothing else.
 
@@ -186,9 +188,12 @@ npm run preview  # serve the built app
    already in the vault.
 3. **Tier 2 connectors** — read-only brokerage/exchange API keys. Keys live
    encrypted in the vault; the browser calls the institution directly.
-4. **Receipt OCR** — only when a good on-device model is cheap. The seam is
-   already in `receipt.ts`; swapping the reader changes one file and zero UI.
-   **Never** cloud OCR.
+4. **Receipt OCR** — ✅ built, on-device (Tesseract WASM behind the `receipt.ts`
+   seam). Reads total, merchant, date, and line items; items can carry their own
+   categories and split an expense honestly in the monthly breakdown. The engine
+   lazy-loads on first scan from `/ocr/` (vendored by `scripts/ocr-assets.mjs`,
+   gitignored, excluded from the PWA precache). **Never** cloud OCR — that part
+   is permanent.
 5. **Encrypt timestamps.** Today `at` is plaintext so sorting is cheap. Same
    explicit decision Driftless deferred. Revisit with sync.
 6. Niceties: CSV/OFX import (tier 0!), FX for multi-currency (explicit, dated,

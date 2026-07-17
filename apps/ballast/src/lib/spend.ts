@@ -14,6 +14,15 @@
 import { add, isNegative, negate, zero, type Money } from "./money";
 import { CATEGORIES, type Category } from "./categorize";
 
+// A line item off a receipt. Amounts are positive magnitudes — the sign lives
+// on the transaction, once. `category` is set only when it differs from the
+// transaction's own; most receipts are all one thing.
+export type TransactionItem = {
+  label: string;
+  amount: Money;
+  category?: Category;
+};
+
 export type TransactionContent = {
   // Negative = money left. Positive = money arrived. Signed, so totals are a
   // plain sum and nothing downstream has to remember a convention.
@@ -23,6 +32,7 @@ export type TransactionContent = {
   note?: string;
   receiptId?: string; // -> the encrypted image in the media store
   accountId?: string;
+  items?: TransactionItem[]; // read off the receipt; encrypted with the rest
 };
 
 export type Transaction = TransactionContent & {
@@ -61,6 +71,32 @@ export type CategoryTotal = {
   share: number; // 0..1 of total spend in the window
 };
 
+// How a single transaction's magnitude distributes across categories.
+//
+// A receipt from a mixed store is genuinely more than one kind of spending —
+// $50 of groceries and $30 of shopping on one Target tape. When the items on a
+// transaction carry their own categories, attribute each item's amount to its
+// own category and whatever the items don't cover (tax, unread lines) to the
+// transaction's headline category. If the items claim MORE than the whole
+// transaction, the breakdown is inconsistent — fall back to the headline rather
+// than invent a scaling factor. We report; we don't make data up.
+export function attribute(t: Transaction): Array<{ category: Category; minor: number }> {
+  const magnitude = Math.abs(t.amount.minor);
+  const items = t.items ?? [];
+  const itemSum = items.reduce((a, i) => a + Math.abs(i.amount.minor), 0);
+  const split = items.some((i) => i.category && i.category !== t.category);
+  if (!split || itemSum > magnitude) return [{ category: t.category, minor: magnitude }];
+
+  const out = new Map<Category, number>();
+  for (const i of items) {
+    const c = i.category ?? t.category;
+    out.set(c, (out.get(c) ?? 0) + Math.abs(i.amount.minor));
+  }
+  const remainder = magnitude - itemSum;
+  if (remainder > 0) out.set(t.category, (out.get(t.category) ?? 0) + remainder);
+  return [...out.entries()].map(([category, minor]) => ({ category, minor }));
+}
+
 export function byCategory(
   transactions: Transaction[],
   from: number,
@@ -70,8 +106,10 @@ export function byCategory(
   const totals = new Map<Category, { minor: number; count: number }>();
   for (const t of transactions) {
     if (!isSpend(t) || !inWindow(t, from, to)) continue;
-    const cur = totals.get(t.category) ?? { minor: 0, count: 0 };
-    totals.set(t.category, { minor: cur.minor + Math.abs(t.amount.minor), count: cur.count + 1 });
+    for (const part of attribute(t)) {
+      const cur = totals.get(part.category) ?? { minor: 0, count: 0 };
+      totals.set(part.category, { minor: cur.minor + part.minor, count: cur.count + 1 });
+    }
   }
   const grand = [...totals.values()].reduce((a, b) => a + b.minor, 0);
   return [...totals.entries()]

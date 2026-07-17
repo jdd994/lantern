@@ -182,3 +182,50 @@ describe("recurring — the subscriptions you forgot about", () => {
     expect(recurring(txns, now, USD)).toEqual([]);
   });
 });
+
+describe("attribute: items split a transaction across categories", () => {
+  const now = new Date("2026-07-15").getTime();
+  const target: Transaction = {
+    ...tx("2026-07-10", -8000, "TARGET", "shopping"),
+    items: [
+      { label: "PRODUCE", amount: money(3000, USD), category: "groceries" },
+      { label: "MILK", amount: money(2000, USD), category: "groceries" },
+      { label: "T-SHIRT", amount: money(2500, USD) }, // no category = the headline's
+    ],
+  };
+
+  it("sends each item's money to its own category, remainder to the headline", () => {
+    const r = byCategory([target], monthWindow(now).from, monthWindow(now).to, USD);
+    // 3000+2000 groceries; 2500 headline + 500 remainder (tax) = 3000 shopping.
+    expect(r).toEqual([
+      { category: "groceries", total: { minor: 5000, currency: USD }, count: 1, share: 5000 / 8000 },
+      { category: "shopping", total: { minor: 3000, currency: USD }, count: 1, share: 3000 / 8000 },
+    ]);
+  });
+
+  it("leaves a transaction whose items all agree with it untouched", () => {
+    const plain: Transaction = {
+      ...tx("2026-07-10", -1526, "TRADER JOE'S", "groceries"),
+      items: [
+        { label: "BANANAS", amount: money(149, USD) },
+        { label: "MILK", amount: money(429, USD) },
+      ],
+    };
+    const r = byCategory([plain], monthWindow(now).from, monthWindow(now).to, USD);
+    expect(r).toEqual([
+      { category: "groceries", total: { minor: 1526, currency: USD }, count: 1, share: 1 },
+    ]);
+  });
+
+  it("falls back to the headline when items claim more than the whole transaction", () => {
+    // An inconsistent breakdown gets ignored, not rescaled. We don't make data up.
+    const broken: Transaction = {
+      ...tx("2026-07-10", -1000, "SHOP", "shopping"),
+      items: [{ label: "GLITCH", amount: money(99900, USD), category: "groceries" }],
+    };
+    const r = byCategory([broken], monthWindow(now).from, monthWindow(now).to, USD);
+    expect(r).toEqual([
+      { category: "shopping", total: { minor: 1000, currency: USD }, count: 1, share: 1 },
+    ]);
+  });
+});
