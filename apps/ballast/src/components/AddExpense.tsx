@@ -118,7 +118,7 @@ export function AddExpense({
       // The seam. The reader returns whatever it could defend; a blank draft
       // just means the form opens blank, as it always did.
       setReadNote(null);
-      const draft = await readReceipt(new Blob([bytes], { type }), currency);
+      const { draft, outcome } = await readReceipt(new Blob([bytes], { type }), currency);
       if (draft.merchant) setMerchant(draft.merchant);
       if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
       if (draft.at) setDate(dateKey(new Date(draft.at)));
@@ -131,9 +131,16 @@ export function AddExpense({
           }))
         );
       }
-      if (!draft.amount && !draft.merchant && (!draft.items || draft.items.length === 0)) {
+      // Two kinds of nothing, said differently: a photo the OCR lost to is
+      // worth retaking; a reader that couldn't run isn't, and pretending
+      // otherwise sends someone off to photograph the same receipt five times.
+      if (outcome === "empty") {
         setReadNote(
-          "Couldn't read this one — glare and faded print win sometimes. The photo is kept; typing it in works as always."
+          "Couldn't read this one. What helps: fill the frame with the receipt, flatten it, and avoid glare. The photo is kept either way — typing it in works as always."
+        );
+      } else if (outcome === "failed") {
+        setReadNote(
+          "The reader couldn't run in this browser, so nothing was read — the photo is kept and typing it in works as always. (Retaking the photo won't change this one.)"
         );
       }
     } catch (e) {
