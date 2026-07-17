@@ -178,6 +178,27 @@ TOTAL 9.00
     expect(d.amount).toEqual({ minor: 900, currency: USD });
   });
 
+  it("drops an echo of the total instead of nuking every real item", () => {
+    // A payment line whose keyword got mangled ("Visa" -> "yj sa") repeats the
+    // total to the cent. It must not appear as a purchase — and it must not
+    // push the item sum past the sanity check and take the real items with it.
+    const d = parse(`
+SHOP
+BREAD 5.00
+MILK 4.00
+EGGS 3.00
+TOTAL 12.00
+yj sa 12.00
+`);
+    expect(d.amount).toEqual({ minor: 1200, currency: USD });
+    expect(d.items?.map((i) => i.label)).toEqual(["BREAD", "MILK", "EGGS"]);
+  });
+
+  it("keeps a single item whose price IS the total — that's just a latte", () => {
+    const d = parse("CAFE\nLATTE 4.50\nTOTAL 4.50");
+    expect(d.items).toEqual([{ label: "LATTE", amount: { minor: 450, currency: USD } }]);
+  });
+
   it("strips leading quantity markers from labels", () => {
     const d = parse(`
 CAFE

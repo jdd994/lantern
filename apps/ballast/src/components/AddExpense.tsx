@@ -90,6 +90,11 @@ export function AddExpense({
   // silently blank form is indistinguishable from the reader not existing —
   // but it must never scold, because typing it in works exactly as it always has.
   const [readNote, setReadNote] = useState<string | null>(null);
+  // What the engine read, verbatim. Debug affordance: never stored, never sent —
+  // it exists so "the scan missed something" can become a copy-pasteable report
+  // (and, ultimately, a parser test fixture) instead of a mystery.
+  const [rawText, setRawText] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [items, setItems] = useState<ItemRow[]>([]);
 
   // Whether the current category came from the user or from the categoriser, so
@@ -120,8 +125,11 @@ export function AddExpense({
       // The reader returns whatever it could defend; a blank draft just means
       // the form opens blank, as it always did.
       setReadNote(null);
+      setRawText(null);
+      setCopied(false);
       const forOcr = await imageForOcr(file).catch(() => new Blob([bytes], { type }));
       const { draft, outcome } = await readReceipt(forOcr, currency);
+      if (draft.rawText?.trim()) setRawText(draft.rawText);
       if (draft.merchant) setMerchant(draft.merchant);
       if (draft.amount) setAmount(minorToText(Math.abs(draft.amount.minor), currency));
       if (draft.at) setDate(dateKey(new Date(draft.at)));
@@ -229,17 +237,33 @@ export function AddExpense({
             <div className="receipt-preview">
               <img src={preview} alt="Receipt" />
               {readNote ? <span className="hint">{readNote}</span> : null}
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  setReceipt(null);
-                  setPreview(null);
-                  setReadNote(null);
-                }}
-              >
-                Remove photo
-              </button>
+              <div className="receipt-preview-actions">
+                {rawText ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    title="Copy the text the reader saw — handy for reporting a scan that missed something"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(rawText).then(() => setCopied(true));
+                    }}
+                  >
+                    {copied ? "Copied" : "Copy what it read"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setReceipt(null);
+                    setPreview(null);
+                    setReadNote(null);
+                    setRawText(null);
+                    setCopied(false);
+                  }}
+                >
+                  Remove photo
+                </button>
+              </div>
             </div>
           ) : (
             <button
