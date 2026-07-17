@@ -8,6 +8,7 @@ import { AddAccount, UpdateBalance } from "./components/AddAccount";
 import { Goals, AddGoal } from "./components/Goals";
 import { Spending, ReceiptView } from "./components/Spending";
 import { AddExpense } from "./components/AddExpense";
+import { ImportSheet } from "./components/ImportSheet";
 import { Support } from "./components/Support";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
@@ -24,6 +25,7 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingExpense, setAddingExpense] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<string | null>(null);
   const [support, setSupport] = useState(false);
@@ -186,9 +188,14 @@ export default function App() {
         <section className="section">
           <div className="section-head">
             <h2 className="section-title">Spending</h2>
-            <button className="btn btn-sm" onClick={() => setAddingExpense(true)}>
-              Log
-            </button>
+            <div className="section-actions">
+              <button className="btn btn-ghost btn-sm" onClick={() => setImporting(true)}>
+                Import
+              </button>
+              <button className="btn btn-sm" onClick={() => setAddingExpense(true)}>
+                Log
+              </button>
+            </div>
           </div>
           <Spending
             transactions={l.transactions}
@@ -198,6 +205,17 @@ export default function App() {
           />
         </section>
       )}
+
+      {importing ? (
+        <ImportSheet
+          currency={l.currency}
+          accounts={l.accounts}
+          busy={l.busy}
+          suggest={l.suggest}
+          onImport={l.importTransactions}
+          onClose={() => setImporting(false)}
+        />
+      ) : null}
 
       {addingExpense ? (
         <AddExpense

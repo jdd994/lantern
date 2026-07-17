@@ -18,6 +18,7 @@ import {
   VERIFIER_TEXT,
 } from "../lib/crypto";
 import { createVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
+import { tagger } from "@lantern/core/connect";
 import * as db from "../lib/db";
 import {
   valueAccounts,
@@ -108,6 +109,13 @@ export type Ledger = {
   // indexes the store), not part of the encrypted payload — and because a
   // receipt is usually from yesterday, not from now.
   addTransaction: (content: TransactionContent, at: number, receipt?: File) => Promise<void>;
+  // Bulk import (CSV/OFX — tier 0). Record ids are HMACs of each row's natural
+  // key (@lantern/core/connect), so importing the same file twice lands on the
+  // same ids: rows already present — including ones you've since deleted — are
+  // skipped, never duplicated and never resurrected.
+  importTransactions: (
+    rows: Array<{ content: TransactionContent; at: number; natural: string }>
+  ) => Promise<{ added: number; skipped: number }>;
   removeTransaction: (id: string) => Promise<void>;
   // Decrypt a receipt photo into a data: URL for display. Nothing is cached to
   // disk in the clear — the plaintext image exists only in the open <img>.
@@ -741,6 +749,59 @@ export function useLedger(): Ledger {
     [memory, scheduleSync]
   );
 
+  // ⚠️ FROZEN PARAMETER, like Hearth's ID_INFO: import ids derive from this
+  // string. Change it and re-importing an old file duplicates every row instead
+  // of skipping it. Pinned by a golden vector in import.test.ts.
+  const IMPORT_ID_INFO = "ballast-import-id-v1";
+
+  const importTransactions = useCallback(
+    async (rows: Array<{ content: TransactionContent; at: number; natural: string }>) => {
+      const key = keyRef.current;
+      if (!key) return { added: 0, skipped: 0 };
+      setBusy(true);
+      setError(null);
+      try {
+        const tag = await tagger(key, IMPORT_ID_INFO);
+        // Everything ever stored, tombstones included: a row the user deleted
+        // stays deleted, no matter how many times the file is re-imported.
+        const existing = new Set((await db.allStoredTransactions()).map((t) => t.id));
+        const fresh: Transaction[] = [];
+        for (const row of rows) {
+          const id = await tag(row.natural);
+          if (existing.has(id)) continue;
+          existing.add(id); // guards against dup naturals within one call
+          fresh.push({ ...row.content, id, at: row.at });
+        }
+
+        setTransactions((prev) => [...prev, ...fresh]);
+        const now = Date.now();
+        for (const t of fresh) {
+          const { id, at, ...content } = t;
+          await db.putStoredTransaction({
+            id,
+            at,
+            createdAt: now,
+            updatedAt: now,
+            deleted: false,
+            dirty: true,
+            content: await sealJSON(key, content),
+          });
+        }
+        // Imports deliberately do NOT teach the categoriser — only a category
+        // the user confirms by hand is a correction. Bulk-learning hundreds of
+        // guessed categories would drown what they actually taught it.
+        if (fresh.length > 0) scheduleSync();
+        return { added: fresh.length, skipped: rows.length - fresh.length };
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't import that file.");
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [scheduleSync]
+  );
+
   const removeTransaction = useCallback(async (id: string) => {
     const target = (await db.allStoredTransactions()).find((t) => t.id === id);
     setTransactions((prev) => prev.filter((t) => t.id !== id));
@@ -852,6 +913,7 @@ export function useLedger(): Ledger {
     addGoal,
     removeGoal,
     addTransaction,
+    importTransactions,
     removeTransaction,
     loadReceipt,
     suggest,
