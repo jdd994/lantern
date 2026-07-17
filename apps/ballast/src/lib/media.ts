@@ -82,27 +82,36 @@ export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; t
 // still uses compressImage — what you see saved is unchanged.
 export const OCR_MAX_DIM = 4000;
 
-export async function imageForOcr(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+// High-quality downscale, no re-encode when already small enough. The OCR
+// passes use this twice: once to cap huge originals (WASM memory), and once to
+// make a gentler variant — high resolution renders background texture (wood
+// grain, patterned borders) as crisp false detail that drowns the reader, so a
+// smaller image is sometimes the BETTER read, not the worse one.
+export async function scaledJpeg(image: Blob, maxDim: number, quality = 0.92): Promise<Blob> {
+  const bitmap = await createImageBitmap(image);
   const maxEdge = Math.max(bitmap.width, bitmap.height);
-  if (maxEdge <= OCR_MAX_DIM) {
+  if (maxEdge <= maxDim) {
     bitmap.close?.();
-    return file;
+    return image;
   }
-  const scale = OCR_MAX_DIM / maxEdge;
+  const scale = maxDim / maxEdge;
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     bitmap.close?.();
-    return file;
+    return image;
   }
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close?.();
   const blob: Blob | null = await new Promise((res) =>
-    canvas.toBlob((b) => res(b), "image/jpeg", 0.92)
+    canvas.toBlob((b) => res(b), "image/jpeg", quality)
   );
-  return blob ?? file;
+  return blob ?? image;
+}
+
+export async function imageForOcr(file: File): Promise<Blob> {
+  return scaledJpeg(file, OCR_MAX_DIM);
 }
