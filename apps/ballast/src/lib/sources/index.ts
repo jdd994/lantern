@@ -20,6 +20,13 @@ export type Connector = {
   // money, because they are.
   discloses: string;
 
+  // The consent contract from @lantern/core/connect, for connectors that hold a
+  // credential: what we take, and what we deliberately refuse — both rendered
+  // in the connect sheet, so the refusals are a promise made in public rather
+  // than a comment in a file. Tests assert they're kept.
+  takes?: string[];
+  refuses?: string[];
+
   // Some sources you read (a chain); some you're told (manual entry).
   read?: (ref: SourceRef) => Promise<SnapshotContent>;
 
@@ -30,11 +37,13 @@ export type Connector = {
 
 import { manual } from "./manual";
 import { bitcoin, ethereum } from "./chain";
+import { alpaca } from "./alpaca";
 
 export const CONNECTORS: Record<SourceKind, Connector> = {
   manual: manual,
   bitcoin: bitcoin,
   ethereum: ethereum,
+  alpaca: alpaca,
 };
 
 export function connectorFor(ref: SourceRef): Connector {

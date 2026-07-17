@@ -55,7 +55,11 @@ export const TIERS: Record<Tier, { label: string; discloses: string }> = {
 export type SourceRef =
   | { kind: "manual" }
   | { kind: "bitcoin"; address: string }
-  | { kind: "ethereum"; address: string };
+  | { kind: "ethereum"; address: string }
+  // Tier 2: the key pair is a credential and lives here, inside AccountContent,
+  // so it is sealed with the vault key like every other secret. It is sent to
+  // the institution it belongs to and nowhere else — the CSP enforces that.
+  | { kind: "alpaca"; keyId: string; secret: string };
 
 export type SourceKind = SourceRef["kind"];
 

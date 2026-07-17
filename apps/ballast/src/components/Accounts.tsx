@@ -51,7 +51,15 @@ export function Accounts({
                 {account.source.kind !== "manual" ? (
                   <>
                     <span aria-hidden="true">·</span>
-                    <span className="addr">{truncate(account.source.address)}</span>
+                    {/* The public identifier only — an address, or a key ID
+                        (which names the key; the secret never renders anywhere). */}
+                    <span className="addr">
+                      {truncate(
+                        account.source.kind === "alpaca"
+                          ? account.source.keyId
+                          : account.source.address
+                      )}
+                    </span>
                   </>
                 ) : null}
                 {snapshot ? (

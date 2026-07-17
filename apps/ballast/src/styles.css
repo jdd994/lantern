@@ -428,6 +428,20 @@ input.mono, input[inputmode="decimal"] {
 .disclosure .tier { margin-bottom: 9px; }
 .disclosure p { margin: 0; }
 
+/* The consent contract for connectors that hold a credential: what's taken and
+   what's refused, both stated up front. The refusals are half the point. */
+.disclosure-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.disclosure-list li { margin-bottom: 3px; }
+.disclosure-refuses-head {
+  margin-top: 10px !important;
+  color: var(--ink);
+  font-weight: 600;
+}
+.disclosure-refuses { color: var(--ink-faint); }
+
 /* ---------- goals ---------- */
 .goal {
   padding: 16px;

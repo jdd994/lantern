@@ -127,7 +127,7 @@ disclosure buried in a policy.
 |---|---|---|
 | 0 | Manual entry, receipts, file import | **Nobody.** |
 | 1 | Public chain data, market prices | A provider learns *which* asset/address — never how much. |
-| 2 | Read-only API keys (brokerage/exchange) | The institution that already has your data. Nobody new. |
+| 2 | Read-only API keys (brokerage/exchange) — **Alpaca BUILT** | The institution that already has your data. Nobody new. |
 | 3 | Aggregator (Plaid/Teller/SimpleFIN) | **Every transaction, in the clear.** Not built. |
 
 Adding a `connect-src` host to `public/_headers` is a **security decision**, not a
@@ -186,8 +186,15 @@ npm run preview  # serve the built app
    Workers + D1) that stores opaque ciphertext; devices reconcile by
    `updatedAt`. Records already carry `deleted` + `dirty`. Identity keys are
    already in the vault.
-3. **Tier 2 connectors** — read-only brokerage/exchange API keys. Keys live
-   encrypted in the vault; the browser calls the institution directly.
+3. **Tier 2 connectors** — ✅ first one built: **Alpaca** (`sources/alpaca.ts`),
+   keys encrypted in the vault, browser → institution directly, consent sheet
+   states takes/refuses (the shared contract from `@lantern/core/connect`).
+   CORS probe matrix (2026-07-17, re-probe before building): **Gemini** also
+   passes cleanly (echoes origin + approves its HMAC headers — natural next);
+   Kraken/Binance.US send no CORS; Bitstamp allows origin but not its auth
+   headers; Coinbase permits only OAuth Bearer and its token exchange wants a
+   client secret. Those would all force a balance-seeing server — that's a
+   different rung, not an implementation detail.
 4. **Receipt OCR** — ✅ built, on-device (Tesseract WASM behind the `receipt.ts`
    seam). Reads total, merchant, date, and line items; items can carry their own
    categories and split an expense honestly in the monthly breakdown. The engine
