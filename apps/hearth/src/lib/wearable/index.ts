@@ -25,12 +25,18 @@ import type { MetricContent, MetricKind } from "../metrics";
 import type { FitbitTokens } from "./fitbit";
 
 export type Tier = 0 | 1 | 2 | 3;
-export type ProviderId = "fitbit";
+export type ProviderId = "fitbit" | "strap";
 
 export type Provider = {
   id: ProviderId;
   label: string;
   tier: Tier;
+
+  // How readings arrive. "grant" is the Fitbit shape: connect once, hold a
+  // token, refresh history on demand. "session" is the strap shape: nothing is
+  // held at all — each reading is a live sit with the device, and the only
+  // thing that persists is what you chose to save.
+  mode: "grant" | "session";
 
   // Precisely who learns precisely what, shown before anyone connects. Write it
   // as if the person reading it is about to hand you their body, because they are.
@@ -43,10 +49,30 @@ export type Provider = {
 };
 
 export const PROVIDERS: Record<ProviderId, Provider> = {
+  strap: {
+    id: "strap",
+    label: "Heart-rate strap",
+    tier: 0,
+    mode: "session",
+    discloses:
+      "The strap talks to this page over Bluetooth, and the reading never leaves this device — " +
+      "no account, no cloud, no company in between. This isn't a vendor integration: any strap " +
+      "or armband speaking the standard Bluetooth heart-rate profile works (Polar, Garmin, " +
+      "Wahoo…), and none of them ever learns what was listening.",
+    takes: [
+      "Heart rate, live while you watch",
+      "Beat-to-beat intervals — an honest resting reading and its variability",
+    ],
+    refuses: [
+      "Energy expended — the strap volunteers calories mid-stream; the parser steps over those bytes unread",
+      "Anything you didn't choose to save — a sit you close is gone",
+    ],
+  },
   fitbit: {
     id: "fitbit",
     label: "Fitbit",
     tier: 2,
+    mode: "grant",
     discloses:
       "Your browser talks straight to Fitbit — nobody new sees anything. Fitbit already holds " +
       "these readings; this only copies them to you. They learn that an app read your data, " +

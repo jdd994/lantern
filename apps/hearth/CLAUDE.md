@@ -139,6 +139,7 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 | Provider | Tier | Status | Who learns what |
 |---|---|---|---|
 | **Manual entry** | 0 | Always | **Nobody.** Type a reading; it never leaves. |
+| **Heart-rate strap (BLE)** | 0 | **BUILT** | **Nobody.** Any strap speaking the standard Bluetooth heart-rate GATT profile (Polar H10/H9, Garmin HRM-Dual, Wahoo…) → this page over Web Bluetooth. No vendor, no account, no network, no CSP origin. A live "sit" saves resting HR + HRV (RMSSD from raw R-R); nothing persists unless saved. Chrome/Edge only — Web Bluetooth doesn't exist in Safari/Firefox. `lib/wearable/strap.ts`. |
 | **Fitbit** | 2 | **BUILT** | **Nobody new.** Browser → Fitbit directly (CORS + OAuth2/PKCE, no client secret, no backend). Fitbit already holds these readings. |
 | Withings (scales) | 2–3 | Candidate | Data API sends `allow-origin: *`, but the token exchange wants a secret → would need a **token broker** (a server that sees a token, never a reading). |
 | Oura | — | **Blocked** | Sends **no `allow-origin`**, and killed personal access tokens Dec 2025. Only the legacy implicit flow remains (no refresh, ~30-day expiry). |
@@ -148,11 +149,13 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 **The escape hatch for every blocked vendor is CSV import (tier 0)** — Garmin,
 Whoop and Oura all let you export. Less magical; costs nothing and asks nobody.
 
-**Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and asserted
-in its test:
+**Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and
+`lib/wearable/strap.ts`, asserted in their tests:
 1. **No calories burned.** Calories-out next to the food log silently becomes
    deficit maths — the exact harm invariant 3 forbids. Fitbit's `activity` scope
-   grants it anyway; the promise is kept by never asking for the endpoint.
+   grants it anyway; the promise is kept by never asking for the endpoint. The
+   strap's measurement packet volunteers "energy expended" mid-stream; the
+   parser steps over those bytes unread.
 2. **No scores.** Sleep efficiency, readiness, BMI — a grade for your body is not
    a measurement of it. We take the hours slept, never the mark out of 100.
 

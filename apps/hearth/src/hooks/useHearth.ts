@@ -21,9 +21,10 @@ import {
 } from "../lib/nutrition";
 import type { Metric, MetricContent } from "../lib/metrics";
 import * as fitbit from "../lib/wearable/fitbit";
+import * as strap from "../lib/wearable/strap";
 import {
   readingContent, tagger,
-  type ConnectionContent, type ProviderId, type WearableConnection,
+  type ConnectionContent, type ProviderId, type Reading, type WearableConnection,
 } from "../lib/wearable";
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
@@ -107,10 +108,13 @@ export type Hearth = {
   connections: WearableConnection[];
   wearableBusy: boolean;
   wearableError: string | null;
-  canConnectWearable: boolean;
+  canUseWearable: (provider: ProviderId) => boolean;
   connectWearable: (provider: ProviderId) => Promise<void>;
   importWearable: (provider: ProviderId) => Promise<void>;
   disconnectWearable: (provider: ProviderId) => Promise<void>;
+  // Session providers (the strap) hand finished readings straight in — there is
+  // no token and no import; this is the only doorway their data has.
+  saveWearableReadings: (provider: ProviderId, readings: Reading[]) => Promise<void>;
 };
 
 const uid = () => crypto.randomUUID();
@@ -261,6 +265,33 @@ export function useHearth(): Hearth {
     setConnections(out);
   }, []);
 
+  // One write loop for both shapes of provider — tags naturals, respects your
+  // deletions, skips unchanged records so a refresh doesn't mark the whole
+  // history dirty and re-upload it. Returns how many records actually changed.
+  const writeReadings = useCallback(async (key: CryptoKey, provider: ProviderId, readings: Reading[]) => {
+    const existing = new Map((await db.allMetrics()).map((r) => [r.id, r]));
+    const tag = await tagger(key);
+    const now = Date.now();
+    let wrote = 0;
+    for (const r of readings) {
+      const id = await tag(r.natural);
+      const prev = existing.get(id);
+      // You deleted this reading on purpose. An import does not argue with that.
+      if (prev?.deleted) continue;
+      const content = readingContent(r, provider);
+      if (prev) {
+        const old = await openJSON<MetricContent>(key, prev.content);
+        if (old.kind === content.kind && old.value === content.value && prev.at === r.at) continue;
+      }
+      await db.putMetric({
+        id, at: r.at, createdAt: prev?.createdAt ?? now, updatedAt: now,
+        deleted: false, dirty: true, content: await sealJSON(key, content),
+      });
+      wrote++;
+    }
+    return wrote;
+  }, []);
+
   const importFrom = useCallback(async (provider: ProviderId) => {
     const key = keyRef.current;
     if (!key) return;
@@ -283,33 +314,11 @@ export function useHearth(): Hearth {
         });
       }
       const readings = await fitbit.fetchReadings(tokens);
-
-      const existing = new Map((await db.allMetrics()).map((r) => [r.id, r]));
-      const tag = await tagger(key);
-      const now = Date.now();
-      let wrote = 0;
-      for (const r of readings) {
-        const id = await tag(r.natural);
-        const prev = existing.get(id);
-        // You deleted this reading on purpose. An import does not argue with that.
-        if (prev?.deleted) continue;
-        const content = readingContent(r, provider);
-        if (prev) {
-          // Unchanged since last time — skip, so a refresh doesn't mark the whole
-          // history dirty and re-upload it.
-          const old = await openJSON<MetricContent>(key, prev.content);
-          if (old.kind === content.kind && old.value === content.value && prev.at === r.at) continue;
-        }
-        await db.putMetric({
-          id, at: r.at, createdAt: prev?.createdAt ?? now, updatedAt: now,
-          deleted: false, dirty: true, content: await sealJSON(key, content),
-        });
-        wrote++;
-      }
+      const wrote = await writeReadings(key, provider, readings);
 
       await db.putConnection({
         ...stored,
-        content: await sealJSON(key, { ...conn, tokens, lastImportAt: now } satisfies ConnectionContent),
+        content: await sealJSON(key, { ...conn, tokens, lastImportAt: Date.now() } satisfies ConnectionContent),
       });
       await loadConnections(key);
       if (wrote > 0) {
@@ -321,7 +330,29 @@ export function useHearth(): Hearth {
     } finally {
       setWearableBusy(false);
     }
-  }, [loadAll, loadConnections, scheduleSync]);
+  }, [loadAll, loadConnections, scheduleSync, writeReadings]);
+
+  // The strap's doorway: a finished sit hands its readings straight in. No token,
+  // no connection record — the vault key seals them exactly like a typed reading,
+  // and the HMAC ids mean even our own server never learns a strap was involved.
+  // Errors are thrown, not parked in wearableError: the sit sheet is still open
+  // and can say what happened right where the person is looking.
+  const saveWearableReadings = useCallback(async (provider: ProviderId, readings: Reading[]) => {
+    const key = keyRef.current;
+    if (!key) return;
+    const wrote = await writeReadings(key, provider, readings);
+    if (wrote > 0) {
+      await loadAll(key);
+      scheduleSync();
+    }
+  }, [loadAll, scheduleSync, writeReadings]);
+
+  // Whether this build/browser can use a provider at all: the grant kind needs
+  // an app id baked into the build; the session kind needs a browser that can
+  // speak Bluetooth (Chrome and Edge can; Safari and Firefox can't).
+  const canUseWearable = useCallback((provider: ProviderId): boolean => {
+    return provider === "strap" ? strap.supported() : fitbit.configured();
+  }, []);
 
   // Coming back from the vendor's consent page. The vault has to be open before
   // this can finish, because the tokens are sealed with the vault key — so a
@@ -991,7 +1022,7 @@ export function useHearth(): Hearth {
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
     sharePlan, removeSharedPlan,
     logMetric, removeMetric,
-    connections, wearableBusy, wearableError, canConnectWearable: fitbit.configured(),
-    connectWearable, importWearable: importFrom, disconnectWearable,
+    connections, wearableBusy, wearableError, canUseWearable,
+    connectWearable, importWearable: importFrom, disconnectWearable, saveWearableReadings,
   };
 }
