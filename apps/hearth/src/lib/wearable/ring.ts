@@ -4,7 +4,7 @@
 // here: the protocol is community reverse-engineered (tahnok's colmi_r02_client
 // and the colmi.puxtril.com command notes, pinned 2026-07-17), and the ring
 // still never learns what was listening — no account, no vendor app, no cloud,
-// no network. The full protocol notes live in the open-wearable repo; this file
+// no network. The full protocol notes live in the Wick repo (~/dev/wick); this file
 // implements only what a live sit needs.
 //
 // THE REFUSALS HAVE TEETH HERE. The ring's real-time command will cheerfully
