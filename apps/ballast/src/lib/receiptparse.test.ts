@@ -187,3 +187,64 @@ TOTAL 9.00
     expect(d.items?.[0].label).toBe("LATTE");
   });
 });
+
+// THE FIELD FIXTURE — verbatim OCR output from a real phone photo of a real
+// grocery receipt (crumpled thermal paper, speckled countertop background),
+// the first one the feature met in the wild. It packs five hostile realities
+// into one tape: background specks appended after amounts ("7.99 A   im"),
+// two-letter tax flags ("BF"), a TOTAL line whose figure is followed by junk,
+// a mangled payment line that repeats the total, and a per-pound rate line
+// that must NOT become an item. If this test breaks, the parser got cleverer
+// on paper and worse at the checkout counter.
+const FIELD_RECEIPT = `
+a      Lhe?7 1 SE
+rR a RRR
+PERE CoN i    i                             pat tace
+Sy mA PR CNEL      TN            Ftamin Cottage
+Cs ea       Natural Gragg by oe
+CAE,           3061, ontane A
+aE MERE           Helena, MI 59601
+ER She          Phone; 4q6- 204-3939
+ih    LR Date                    55
+s         .           ;      me    Stor   Reg Emp  Txn        ATA
+Sait GOT        07/12/26 10:55 my yog; 7 15930 49       pare
+hs                        us        Te
+ES          g 1489 HUMB Lip Balm 0.3 cz     7.99 A        im
+bin               1X E2 JUS Cupcake Ca 4.4 c     3.59 BF      Pa
+4073 Red Potatoes           3.32 BF      Eo
+               1.45 1h      2.29 USD/ 1b          fees
+:          SUBTOTAL [3]        USO 14.90     Re
+-            A        1.986 0.000% -        0.60       EEE
+:           ls       6.96 0.000% -       0.00         re
+Loe               TOTAL                   ust        14.90          \\      i Sie
+:    4        :  )      po!       14,90       we oe
+PURCHASE $14.90                  /    hi
+kkpEAR REAR 1060 Visa
+CHIP CONTACT Egg
+REF#; 060210 APProved
+visa Credit
+`;
+
+describe("the field fixture: a real phone photo's OCR, end to end", () => {
+  const d = parse(FIELD_RECEIPT);
+
+  it("finds the true total despite junk trailing the figure", () => {
+    expect(d.amount).toEqual({ minor: 1490, currency: USD });
+  });
+
+  it("reads all three items, two-letter tax flags and margin specks included", () => {
+    expect(d.items?.map((i) => i.amount.minor)).toEqual([799, 359, 332]);
+    expect(d.items?.[2].label).toBe("Red Potatoes");
+  });
+
+  it("keeps the rate line, the mangled Visa line, and PURCHASE out of the items", () => {
+    const labels = (d.items ?? []).map((i) => i.label.toUpperCase());
+    expect(labels.some((l) => l.includes("USD/"))).toBe(false);
+    expect(labels.some((l) => l.includes("PURCHASE"))).toBe(false);
+    expect(d.items?.some((i) => i.amount.minor === 1490)).toBe(false);
+  });
+
+  it("reads the date", () => {
+    expect(d.at).toBe(new Date(2026, 6, 12, 12).getTime());
+  });
+});

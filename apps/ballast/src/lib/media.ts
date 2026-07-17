@@ -73,3 +73,36 @@ export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; t
   if (!blob) throw new Error("Couldn't process that image.");
   return { bytes: await blob.arrayBuffer(), type: "image/jpeg" };
 }
+
+// What the OCR engine should read: the camera's ORIGINAL bytes, not the 0.82
+// re-encode above — lossy compression eats exactly the thin thermal strokes
+// the reader needs (a field photo read measurably worse re-encoded than raw).
+// The one exception is a huge original: past ~4000px the WASM engine's memory
+// bill gets dangerous on phones, so downscale gently at high quality. Storage
+// still uses compressImage — what you see saved is unchanged.
+export const OCR_MAX_DIM = 4000;
+
+export async function imageForOcr(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const maxEdge = Math.max(bitmap.width, bitmap.height);
+  if (maxEdge <= OCR_MAX_DIM) {
+    bitmap.close?.();
+    return file;
+  }
+  const scale = OCR_MAX_DIM / maxEdge;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close?.();
+    return file;
+  }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob: Blob | null = await new Promise((res) =>
+    canvas.toBlob((b) => res(b), "image/jpeg", 0.92)
+  );
+  return blob ?? file;
+}
