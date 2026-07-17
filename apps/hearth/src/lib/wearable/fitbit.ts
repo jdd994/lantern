@@ -16,79 +16,49 @@
 // isn't kept by what we're permitted to read — it's kept by what we actually ask
 // for. There is no calories endpoint in this file, and that's the enforcement.
 
+import { pkceClient, type OAuthTokens } from "@lantern/core/connect";
 import type { Reading } from "./index";
 
-const AUTHORIZE = "https://www.fitbit.com/oauth2/authorize";
-const TOKEN = "https://api.fitbit.com/oauth2/token";
 const API = "https://api.fitbit.com";
 
 // The narrowest set that covers what we take. Notably absent: `nutrition`
 // (Hearth's food log is ours and stays ours), `profile`, `location`, `social`.
 const SCOPES = ["weight", "sleep", "heartrate", "activity"];
 
-// Transient OAuth artefacts, parked across the redirect. Not secrets in the vault
-// sense — a verifier is useless once the code is spent, and both are gone the
-// moment we're back. They never touch IndexedDB.
-const PKCE_KEY = "hearth-fitbit-verifier";
-const STATE_KEY = "hearth-fitbit-state";
-
-export type FitbitTokens = {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-};
+export type FitbitTokens = OAuthTokens;
 
 export function clientId(): string {
   return (import.meta.env.VITE_FITBIT_CLIENT_ID as string | undefined) ?? "";
 }
 export const configured = (): boolean => clientId().length > 0;
 
-const redirectUri = () => `${window.location.origin}/`;
-const utf8 = (s: string) => new TextEncoder().encode(s);
-
-function b64url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function randomB64url(n: number): string {
-  return b64url(crypto.getRandomValues(new Uint8Array(n)));
-}
-async function challengeFor(verifier: string): Promise<string> {
-  return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", utf8(verifier))));
-}
-
 // ---- the dance -----------------------------------------------------------
+// The OAuth2+PKCE machinery is @lantern/core/connect — the same dance every
+// tier-2 connector in the family does. What stays HERE is Fitbit: the
+// endpoints, the scopes, and everything below about what we take and refuse.
+//
+// Lazy, because clientId() reads the env and module-eval order shouldn't.
+const client = () =>
+  pkceClient({
+    clientId: clientId(),
+    label: "Fitbit",
+    authorizeUrl: "https://www.fitbit.com/oauth2/authorize",
+    tokenUrl: "https://api.fitbit.com/oauth2/token",
+    scopes: SCOPES,
+    // Unchanged from before the extraction: same sessionStorage keys, so a
+    // dance in flight across a deploy still completes.
+    storagePrefix: "hearth-fitbit",
+  });
 
 /** Leave for Fitbit's consent page. Returns only to say it's about to navigate. */
-export async function beginConnect(): Promise<void> {
-  const verifier = randomB64url(32);
-  const state = randomB64url(16);
-  sessionStorage.setItem(PKCE_KEY, verifier);
-  sessionStorage.setItem(STATE_KEY, state);
-  const q = new URLSearchParams({
-    client_id: clientId(),
-    response_type: "code",
-    code_challenge: await challengeFor(verifier),
-    code_challenge_method: "S256",
-    scope: SCOPES.join(" "),
-    redirect_uri: redirectUri(),
-    state,
-  });
-  window.location.assign(`${AUTHORIZE}?${q}`);
-}
+export const beginConnect = (): Promise<void> => client().beginConnect();
 
 /**
  * Is this page load a return from Fitbit? Reads (and does not clear) the code.
  * Returns null when there's nothing pending, or when `state` doesn't match what
  * we sent — which means it isn't our redirect and we want no part of it.
  */
-export function pendingCode(search = window.location.search): string | null {
-  const p = new URLSearchParams(search);
-  const code = p.get("code");
-  const state = p.get("state");
-  if (!code || !state) return null;
-  if (state !== sessionStorage.getItem(STATE_KEY)) return null;
-  return code;
-}
+export const pendingCode = (search?: string): string | null => client().pendingCode(search);
 
 /**
  * Did we come back having been told no? Saying no is a perfectly good answer, so
@@ -96,70 +66,20 @@ export function pendingCode(search = window.location.search): string | null {
  * Fitbit's page returns you to a screen where nothing whatsoever happens.
  * Returns null when this isn't our redirect, or isn't a refusal.
  */
-export function pendingError(search = window.location.search): string | null {
-  const p = new URLSearchParams(search);
-  const err = p.get("error");
-  if (!err) return null;
-  if (p.get("state") !== sessionStorage.getItem(STATE_KEY)) return null;
-  return err === "access_denied"
-    ? "Fitbit wasn't connected — nothing was shared, and nothing changed here."
-    : "Fitbit couldn't complete that connection. You can try again whenever.";
-}
+export const pendingError = (search?: string): string | null => client().pendingError(search);
 
 /** Scrub the code out of the address bar so a reload can't replay it. */
-export function clearCallback(): void {
-  sessionStorage.removeItem(STATE_KEY);
-  sessionStorage.removeItem(PKCE_KEY);
-  window.history.replaceState({}, "", window.location.pathname);
-}
-
-function tokensFrom(json: Record<string, unknown>): FitbitTokens {
-  return {
-    accessToken: String(json.access_token ?? ""),
-    refreshToken: String(json.refresh_token ?? ""),
-    // A minute of slack, so a token doesn't expire mid-request.
-    expiresAt: Date.now() + (Number(json.expires_in ?? 0) - 60) * 1000,
-  };
-}
+export const clearCallback = (): void => client().clearCallback();
 
 /** Trade the code for tokens. No client secret — that's the whole point of PKCE. */
-export async function completeConnect(code: string): Promise<FitbitTokens> {
-  const verifier = sessionStorage.getItem(PKCE_KEY);
-  if (!verifier) throw new Error("That Fitbit sign-in didn't finish here. Try connecting again.");
-  const res = await fetch(TOKEN, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId(),
-      grant_type: "authorization_code",
-      code,
-      code_verifier: verifier,
-      redirect_uri: redirectUri(),
-    }),
-  });
-  sessionStorage.removeItem(PKCE_KEY);
-  if (!res.ok) throw new Error("Fitbit wouldn't complete that connection. Try again.");
-  return tokensFrom(await res.json());
-}
+export const completeConnect = (code: string): Promise<FitbitTokens> =>
+  client().completeConnect(code);
 
 /** Fitbit rotates the refresh token on every use — always store what comes back. */
-export async function refreshTokens(refreshToken: string): Promise<FitbitTokens> {
-  const res = await fetch(TOKEN, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId(),
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }),
-  });
-  if (!res.ok) throw new Error("Fitbit signed this device out. Connect it again when you like.");
-  return tokensFrom(await res.json());
-}
+export const refreshTokens = (refreshToken: string): Promise<FitbitTokens> =>
+  client().refreshTokens(refreshToken);
 
-export async function ensureFresh(t: FitbitTokens): Promise<FitbitTokens> {
-  return Date.now() < t.expiresAt ? t : refreshTokens(t.refreshToken);
-}
+export const ensureFresh = (t: FitbitTokens): Promise<FitbitTokens> => client().ensureFresh(t);
 
 // ---- reading -------------------------------------------------------------
 
