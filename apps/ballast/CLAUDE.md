@@ -203,8 +203,11 @@ npm run preview  # serve the built app
    is permanent.
 5. **Encrypt timestamps.** Today `at` is plaintext so sorting is cheap. Same
    explicit decision Driftless deferred. Revisit with sync.
-6. Niceties: CSV/OFX import (tier 0!), FX for multi-currency (explicit, dated,
-   visible conversions — never an invisible rate), net-worth chart.
+6. Niceties: CSV/OFX import — ✅ built (`lib/import.ts` pure + tested;
+   `ImportSheet`; re-import-safe ids via `@lantern/core/connect`, frozen info
+   string `ballast-import-id-v1` pinned by a golden vector). Still open: FX for
+   multi-currency (explicit, dated, visible conversions — never an invisible
+   rate), net-worth chart.
 
 ## Watch out for
 
