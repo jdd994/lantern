@@ -137,6 +137,19 @@ function findTotal(lines: string[], monied: MoneyLine[], currency: string): Foun
     }
   }
 
+  // SUBTOTAL + TAX, when the TOTAL itself went unread (Costco prints it in an
+  // inverted box the OCR cannot touch). Both lines are keyword-anchored and the
+  // arithmetic is exact — strictly more defensible than "largest number wins".
+  const subtotal = monied.filter((l) => new RegExp(`\\b${FUZZY_SUBTOTAL}`, "i").test(l.text));
+  if (subtotal.length > 0) {
+    const sub = subtotal[subtotal.length - 1];
+    // TAX might legitimately be absent (or 0.00, which moneyLines skips as
+    // zero) — then the subtotal IS the total.
+    const taxLines = monied.filter((l) => /\bTAX|\bVAT|\bGST|\bHST/i.test(l.text));
+    const tax = taxLines.reduce((a, l) => a + l.minor, 0);
+    return { minor: sub.minor + tax };
+  }
+
   // Fallback: the largest amount that isn't payment arithmetic — usually the
   // total, since the total is the sum of everything above it. But that logic
   // cuts both ways: when the OTHER amounts on the tape add up to well over the
@@ -212,6 +225,27 @@ function findDate(text: string, now: number): number | undefined {
 
 // ---- The items -------------------------------------------------------------
 
+// Strip register plumbing off the front of an item label. What a person wants
+// in their ledger is "GREEK YOGURT", not "E 1048072 GREEK YOGURT" — the flag
+// letter and the SKU are the register talking to itself. The pattern is
+// general, not one store's: leading tokens carrying no letters (SKUs, £2, #),
+// and 1-2 character stubs sitting in front of them or each other. A real word
+// like "XL" in "XL Eggs" survives, because what follows it has letters.
+function cleanLabel(text: string): string {
+  const qtyless = text.replace(/^\d+\s*[xX@]\s*/, "").replace(/\s{2,}/g, " ").trim();
+  const tokens = qtyless.split(/\s+/);
+  while (tokens.length > 1) {
+    const t = tokens[0];
+    const letters = (t.match(/[A-Za-z]/g) ?? []).length;
+    const nextHasWord =
+      (tokens[1].match(/[A-Za-z]/g) ?? []).length > 0 && tokens[1].length > 2;
+    if (letters === 0) tokens.shift(); // 1048072, £2, #, **
+    else if (t.length <= 2 && !nextHasWord) tokens.shift(); // E before a SKU, stray "g"
+    else break;
+  }
+  return tokens.join(" ");
+}
+
 function findItems(
   monied: MoneyLine[],
   total: FoundTotal,
@@ -228,13 +262,7 @@ function findItems(
     // number). Better to drop it than to present it as something you bought.
     if (totalMinor !== undefined && l.minor > totalMinor) continue;
 
-    // Strip register noise: leading quantity ("2 X", "3 @ 1.50"), SKU digits,
-    // trailing tax-column letters already went with the amount regex.
-    const label = l.text
-      .replace(/^\d+\s*[xX@]\s*/, "")
-      .replace(/^[\d\s#*-]+/, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
+    const label = cleanLabel(l.text);
     const letters = (label.match(/[A-Za-z]/g) ?? []).length;
     if (letters < 2) continue;
 

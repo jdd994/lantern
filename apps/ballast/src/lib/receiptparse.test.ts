@@ -208,6 +208,31 @@ yj sa 12.00
     expect(d.items).toEqual([{ label: "LATTE", amount: { minor: 450, currency: USD } }]);
   });
 
+  it("rebuilds an unreadable total from SUBTOTAL + TAX — the Costco shape", () => {
+    // Costco prints the total in an inverted box the OCR cannot read at all.
+    // Both anchor words survive, and their arithmetic is exact.
+    const d = parse(`
+COSTCO WHOLESALE
+E 1048072 GREEK YOGURT 6.89
+E 598881 ORGANIC GRND 26.99
+SUBTOTAL 33.88
+TAX 1.12
+**** TOTAL ███████
+Visa 35.00
+`);
+    expect(d.amount).toEqual({ minor: 3500, currency: USD });
+  });
+
+  it("strips register plumbing off item labels, but not real words", () => {
+    const d = parse(`
+COSTCO WHOLESALE
+E 1048072 GREEK YOGURT 6.89
+XL Eggs 4.99
+TOTAL 11.88
+`);
+    expect(d.items?.map((i) => i.label)).toEqual(["GREEK YOGURT", "XL Eggs"]);
+  });
+
   it("strips leading quantity markers from labels", () => {
     const d = parse(`
 CAFE
