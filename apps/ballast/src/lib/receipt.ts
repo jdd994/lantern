@@ -72,16 +72,29 @@ export function activeReader(): ReceiptReader {
   return active;
 }
 
-// Called by the capture flow. Returns whatever the active reader can defend —
-// possibly nothing, in which case the form simply opens blank and the user
-// types, exactly as before this feature existed.
-export async function readReceipt(image: Blob, currency: string): Promise<ReceiptDraft> {
+// The two ways a read can come back with nothing, kept distinct because they
+// mean opposite things: `empty` is the OCR running honestly and losing to the
+// photo (retake it); `failed` is the machinery itself not running here (no
+// amount of retaking will help, and the UI should say so instead of letting
+// the person photograph the same receipt five times).
+export type ReceiptRead = {
+  draft: ReceiptDraft;
+  outcome: "read" | "empty" | "failed" | "unavailable";
+};
+
+// Called by the capture flow. Never throws — a failed read must never block
+// logging an expense; the human types the number, exactly as before this
+// feature existed. But it does SAY what happened, so the UI can be honest.
+export async function readReceipt(image: Blob, currency: string): Promise<ReceiptRead> {
   try {
-    if (!(await active.available())) return {};
-    return await active.read(image, currency);
-  } catch {
-    // A failed read must never block logging an expense. Fall back to the thing
-    // that always works: the human types the number.
-    return {};
+    if (!(await active.available())) return { draft: {}, outcome: "unavailable" };
+    const draft = await active.read(image, currency);
+    const empty = !draft.amount && !draft.merchant && (!draft.items || draft.items.length === 0);
+    return { draft, outcome: empty ? "empty" : "read" };
+  } catch (e) {
+    // Deliberately loud in the console: a swallowed engine failure once looked
+    // identical to "the feature doesn't exist", and that cost a debugging trip.
+    console.warn("receipt reader failed:", e);
+    return { draft: {}, outcome: "failed" };
   }
 }
