@@ -39,5 +39,12 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=()
+  # camera=(self): granted 2026-07-17, for one feature — the receipt scan
+  # assist — under explicit terms: the camera activates only on the user's tap,
+  # frames are processed on this device in memory and discarded, nothing is
+  # stored until the shutter, nothing ever leaves (connect-src enforces that),
+  # and the stream stops the moment the sheet closes. Declining the permission
+  # leaves the photo-picker path fully working. Nothing else may use this
+  # grant. Everything else stays locked.
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), interest-cohort=(), payment=()
   Cross-Origin-Opener-Policy: same-origin

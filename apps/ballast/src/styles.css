@@ -1216,3 +1216,82 @@ input.mono, input[inputmode="decimal"] {
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- the scan assist ---------- */
+/* A camera sheet with one outline and one calm sentence. The terms it runs
+   under are in ScanCamera.tsx and public/_headers — on-device, discarded,
+   off means off. */
+.scan-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 10, 0.92);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scan-stage {
+  position: relative;
+  width: min(100vw, 560px);
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.scan-video {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
+}
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.scan-hint {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 21, 18, 0.85);
+  color: var(--ink);
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.scan-controls {
+  position: absolute;
+  bottom: max(26px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px;
+}
+.scan-shutter {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: 4px solid var(--ink);
+  background: rgba(226, 231, 226, 0.25);
+}
+.scan-shutter:disabled { opacity: 0.4; }
+.scan-spacer { width: 64px; }
+.scan-terms {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin: 0;
+  padding: 0 20px 4px;
+}
+.receipt-alt { display: block; margin: 4px auto 0; }
