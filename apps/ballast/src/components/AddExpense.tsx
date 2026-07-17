@@ -23,7 +23,14 @@ import { readReceipt } from "../lib/receipt";
 import { compressImage, dataUrl, imageForOcr } from "../lib/media";
 import type { Account } from "../lib/ledger";
 import { TrustBadge } from "./TrustBadge";
+import { ScanCamera } from "./ScanCamera";
 import { Receipt } from "./icons";
+
+// The live scan assist needs a camera the browser will admit to having.
+// Everywhere else — and whenever permission is declined — the photo picker
+// path works exactly as it always has.
+const cameraPossible = (): boolean =>
+  typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
 // An item row under edit. Amounts are text while typing; parsed on save.
 // category "" means "same as the expense" and follows the headline category.
@@ -99,6 +106,7 @@ export function AddExpense({
   // silently blank form is indistinguishable from the reader not existing —
   // but it must never scold, because typing it in works exactly as it always has.
   const [readNote, setReadNote] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   // What the engine read, verbatim. Debug affordance: never stored, never sent —
   // it exists so "the scan missed something" can become a copy-pasteable report
   // (and, ultimately, a parser test fixture) instead of a mystery.
@@ -330,22 +338,33 @@ export function AddExpense({
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              className="receipt-drop"
-              onClick={() => fileInput.current?.click()}
-              disabled={reading}
-            >
-              <span className="receipt-icon" aria-hidden="true">
-                <Receipt size={24} />
-              </span>
-              <span>
-                {reading ? "Reading it, on this device…" : "Photograph the receipt"}
-                <small>
-                  <TrustBadge tier={0} /> encrypted on this device, never uploaded
-                </small>
-              </span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="receipt-drop"
+                onClick={() => (cameraPossible() ? setScanning(true) : fileInput.current?.click())}
+                disabled={reading}
+              >
+                <span className="receipt-icon" aria-hidden="true">
+                  <Receipt size={24} />
+                </span>
+                <span>
+                  {reading ? "Reading it, on this device…" : "Scan the receipt"}
+                  <small>
+                    <TrustBadge tier={0} /> encrypted on this device, never uploaded
+                  </small>
+                </span>
+              </button>
+              {cameraPossible() && !reading ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm receipt-alt"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  or pick a photo
+                </button>
+              ) : null}
+            </>
           )}
           <input
             ref={fileInput}
@@ -567,6 +586,23 @@ export function AddExpense({
             </button>
           </div>
         </form>
+
+        {scanning ? (
+          <ScanCamera
+            onCapture={(file) => {
+              setScanning(false);
+              void pickReceipt(file);
+            }}
+            onClose={() => setScanning(false)}
+            onUnavailable={(message) => {
+              // Declining the camera is a fine answer — the picker path is
+              // not a consolation prize, it's the original feature.
+              setScanning(false);
+              setReadNote(message);
+              fileInput.current?.click();
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );
