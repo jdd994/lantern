@@ -27,8 +27,14 @@
 #
 # There is no analytics host here, and there never will be. There is no font CDN
 # here either — fonts are system-native, so `font-src 'self'` can stay absolute.
+#
+# `wasm-unsafe-eval` (script-src): permits compiling WebAssembly — and ONLY that;
+# it does not permit JS eval(). Needed by the on-device receipt reader (ocr.ts),
+# whose engine is WASM served from our own origin. The name is scarier than the
+# grant: the wasm still has to come from a script-src-permitted origin, which
+# remains 'self' alone.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ballast-server.jdd994.workers.dev https://blockstream.info https://cloudflare-eth.com https://api.coingecko.com https://api.alpaca.markets https://paper-api.alpaca.markets; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ballast-server.jdd994.workers.dev https://blockstream.info https://cloudflare-eth.com https://api.coingecko.com https://api.alpaca.markets https://paper-api.alpaca.markets; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
