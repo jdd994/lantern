@@ -160,10 +160,14 @@ export type Reading = {
   unit: string;
   at: number;
   natural: string;
+  // The reading's own uncertainty, stated as part of the datum ("mostly 54–61")
+  // rather than discarded at save time. A number stripped of its spread looks
+  // more certain than the device ever claimed.
+  note?: string;
 };
 
 export function readingContent(r: Reading, provider: ProviderId): MetricContent {
-  return { kind: r.kind, value: r.value, unit: r.unit, source: provider };
+  return { kind: r.kind, value: r.value, unit: r.unit, source: provider, ...(r.note ? { note: r.note } : {}) };
 }
 
 // ---- connections ---------------------------------------------------------

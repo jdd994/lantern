@@ -129,10 +129,18 @@ export function resting(bpms: number[], rr: number[]): Resting | null {
  */
 export function toReadings(provider: ProviderId, r: Resting, at: number): Reading[] {
   const out: Reading[] = [
-    { kind: "restingHR", value: r.bpm, unit: "bpm", at, natural: `${provider}:rhr:${at}` },
+    {
+      kind: "restingHR", value: r.bpm, unit: "bpm", at, natural: `${provider}:rhr:${at}`,
+      // The spread travels with the number — the saved reading stays exactly as
+      // honest as the sit that produced it.
+      note: `mostly ${r.low}–${r.high}`,
+    },
   ];
   if (r.hrv !== null) {
-    out.push({ kind: "hrv", value: r.hrv, unit: "ms", at, natural: `${provider}:hrv:${at}` });
+    out.push({
+      kind: "hrv", value: r.hrv, unit: "ms", at, natural: `${provider}:hrv:${at}`,
+      note: `from ${r.rrPairs} clean beat gaps`,
+    });
   }
   return out;
 }
