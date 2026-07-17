@@ -46,12 +46,12 @@ const PAYMENT_LINE =
 // optional currency symbol, an optional trailing minus or tax-flag code —
 // "4.99-", "7.99 A" and "3.59 BF" are all common register formats (two-letter
 // flags are real; a receipt in the field taught us that) — and grudging room
-// for ONE short digit-free scrap after it, because a photographed receipt's
-// background bleeds specks into the right margin ("7.99 A   im"). One scrap of
-// ≤3 characters only: "USD/lb" and friends stay long enough to keep rate lines
-// ("1.45 lb @ 2.29 USD/lb") out of the money.
+// for up to TWO short digit-free scraps after it, because a photographed
+// receipt's background bleeds specks into the right margin ("7.99 A   im .").
+// Scraps are ≤3 characters each: "USD/lb" and friends stay long enough to keep
+// rate lines ("1.45 lb @ 2.29 USD/lb") out of the money.
 const TRAILING_AMOUNT =
-  /(?:^|\s)[$£€]?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*(-)?\s*[A-Z*]{0,2}(\s+[^\s\d]{1,3})?\s*$/;
+  /(?:^|\s)[$£€]?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*(-)?\s*[A-Z*]{0,2}(\s+[^\s\d]{1,3}){0,2}\s*$/;
 
 // Any money figure, anywhere in a line. Used ONLY on lines already anchored by
 // a total keyword — background clutter loves to append junk after the figure
@@ -218,7 +218,7 @@ function findItems(
   currency: string
 ): ReceiptDraftItem[] {
   const totalMinor = total.minor;
-  const items: ReceiptDraftItem[] = [];
+  let items: ReceiptDraftItem[] = [];
   for (const l of monied) {
     // The line the total's figure was lifted from is spoken for — a garbled
     // payment line that lent us 14.90 is not something you bought.
@@ -245,8 +245,17 @@ function findItems(
   // went wrong, and pre-filling a form with garbage is worse than a blank form.
   if (items.length > 60) return [];
 
-  // If the items visibly disagree with the total (sum wildly above it), the
-  // read is untrustworthy — return the total alone and let the human type.
+  // A mangled payment line that repeats the total to the cent ("Visa 14.90"
+  // with the word Visa unreadable) is an ECHO, not a purchase. When it sneaks
+  // in it inflates the sum and used to get every real item withheld along with
+  // it — so drop echoes first, and only when the receipt is more than one line
+  // (a latte whose price IS the total is a real single-item receipt).
+  if (totalMinor !== undefined && items.length >= 2) {
+    items = items.filter((i) => i.amount.minor !== totalMinor);
+  }
+
+  // If what remains still visibly disagrees with the total (sum wildly above
+  // it), the read is untrustworthy — return the total alone, let the human type.
   if (totalMinor !== undefined) {
     const sum = items.reduce((a, i) => a + i.amount.minor, 0);
     if (sum > totalMinor * 1.15) return [];

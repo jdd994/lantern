@@ -44,6 +44,10 @@ export type ReceiptDraft = {
   merchant?: string;
   at?: number;
   items?: ReceiptDraftItem[];
+  // The verbatim text the engine read, for the "copy what it read" affordance —
+  // how a quirky receipt becomes a parser test fixture instead of a mystery.
+  // Debug surface only: it is NEVER stored, and no field is parsed from it here.
+  rawText?: string;
 };
 
 export type ReceiptReader = {
@@ -89,6 +93,7 @@ export async function readReceipt(image: Blob, currency: string): Promise<Receip
   try {
     if (!(await active.available())) return { draft: {}, outcome: "unavailable" };
     const draft = await active.read(image, currency);
+    // rawText is a debug surface, not a reading — it doesn't make a draft non-empty.
     const empty = !draft.amount && !draft.merchant && (!draft.items || draft.items.length === 0);
     return { draft, outcome: empty ? "empty" : "read" };
   } catch (e) {

@@ -60,7 +60,7 @@ export const tesseractReader: ReceiptReader = {
         preserve_interword_spaces: "1",
       });
       const { data } = await worker.recognize(image);
-      return parseReceiptText(data.text, currency);
+      return { ...parseReceiptText(data.text, currency), rawText: data.text };
     } finally {
       // The WASM instance holds tens of MB. A receipt is scanned occasionally,
       // not in a loop — free it rather than keeping it warm.
