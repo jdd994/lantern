@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { money } from "./money";
 import { normalizeMerchant, suggestCategory, remember, type MerchantMemory } from "./categorize";
-import { byCategory, spentIn, earnedIn, monthWindow, notable, recurring, type Transaction } from "./spend";
+import { byCategory, spentIn, earnedIn, monthWindow, notable, recurring, itemPatterns, type Transaction } from "./spend";
 
 const USD = "USD";
 let seq = 0;
@@ -227,5 +227,33 @@ describe("attribute: items split a transaction across categories", () => {
     expect(r).toEqual([
       { category: "shopping", total: { minor: 1000, currency: USD }, count: 1, share: 1 },
     ]);
+  });
+});
+
+describe("itemPatterns: what you're buying, noticed calmly", () => {
+  const now = new Date("2026-07-15").getTime();
+  const w = monthWindow(now);
+  const withItems = (at: string, merchant: string, items: Array<[string, number]>): Transaction => ({
+    ...tx(at, -items.reduce((a, [, m]) => a + m, 0), merchant, "groceries"),
+    items: items.map(([label, minor]) => ({ label, amount: money(minor, USD) })),
+  });
+
+  it("groups the same item across receipts, sizes and casing ignored", () => {
+    const txns = [
+      withItems("2026-07-02", "STORE", [["GREEK YOGURT 32OZ", 689], ["CHIPS", 399]]),
+      withItems("2026-07-09", "STORE", [["Greek Yogurt", 689]]),
+      withItems("2026-07-13", "OTHER STORE", [["CHIPS", 449], ["BREAD", 350]]),
+      withItems("2026-07-14", "STORE", [["CHIPS", 399]]),
+    ];
+    const p = itemPatterns(txns, w.from, w.to, USD);
+    expect(p[0]).toEqual({ label: "CHIPS", count: 3, total: { minor: 1247, currency: USD } });
+    expect(p[1]).toEqual({ label: "GREEK YOGURT 32OZ", count: 2, total: { minor: 1378, currency: USD } });
+    // BREAD appeared once — a one-off is not a pattern.
+    expect(p).toHaveLength(2);
+  });
+
+  it("says nothing when nothing repeats", () => {
+    const txns = [withItems("2026-07-02", "STORE", [["BREAD", 350]])];
+    expect(itemPatterns(txns, w.from, w.to, USD)).toEqual([]);
   });
 });

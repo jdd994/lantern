@@ -17,6 +17,7 @@ import {
   monthWindow,
   notable,
   recurring,
+  itemPatterns,
   isSpend,
   type Transaction,
 } from "../lib/spend";
@@ -42,6 +43,7 @@ export function Spending({
   const cats = byCategory(transactions, w.from, w.to, currency);
   const notices = notable(transactions, now, currency);
   const subs = recurring(transactions, now, currency);
+  const buying = itemPatterns(transactions, w.from, w.to, currency);
 
   const thisMonth = transactions
     .filter((t) => t.at >= w.from && t.at < w.to)
@@ -118,6 +120,31 @@ export function Spending({
               <span className="repeat-amount money">{formatMoney(s.amount)}</span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {/* Item-level awareness, live off itemised receipts. The point is
+          presence, not policing: seeing "chips, 6 times, $24" as a plain fact
+          invites a moment of noticing — and that is the entire feature. What
+          to do about it is the user's business. Updates as receipts land. */}
+      {buying.length > 0 ? (
+        <div className="section" style={{ marginTop: 24 }}>
+          <div className="section-head">
+            <h3 className="section-title">What you're buying most</h3>
+            <span className="section-note">{w.label}</span>
+          </div>
+          {buying.map((b) => (
+            <div className="repeat" key={b.label}>
+              <span className="repeat-name">{b.label}</span>
+              <span className="repeat-meta">
+                {b.count}×
+              </span>
+              <span className="repeat-amount money">{formatMoney(b.total)}</span>
+            </div>
+          ))}
+          <p className="hint" style={{ marginTop: 8 }}>
+            From itemised receipts — the more you scan, the truer this gets.
+          </p>
         </div>
       ) : null}
 

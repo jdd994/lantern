@@ -254,3 +254,55 @@ export function recurring(
   }
   return out.sort((a, b) => b.amount.minor - a.amount.minor);
 }
+
+// ---- what you're buying ----------------------------------------------------
+// Item-level awareness, possible only because receipts itemise now. The same
+// discipline as everything above: what YOU bought, how often, what it added up
+// to — facts about your own month, rendered calmly. No "needs vs wants", no
+// verdict, no comparison. Noticing is the entire feature; what to do about the
+// chips is the user's business, and they're better placed to decide than we are.
+
+// Receipt labels for the same thing vary by size and packaging noise
+// ("GREEK YOGURT 32OZ", "Greek Yogurt"). Reduce to the words.
+export function normalizeItemLabel(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z\s&']/g, " ")
+    .replace(/\b(OZ|LB|LBS|CT|PK|PKG|EA|KG|ML|G|L|X)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type ItemPattern = {
+  label: string; // as first seen on a receipt — the user's own words for it
+  count: number;
+  total: Money; // positive magnitude
+};
+
+// Repeated purchases in the window, most-often first. `min` 2: a list of
+// one-offs is noise, and "what you're buying most" implies again-and-again.
+export function itemPatterns(
+  transactions: Transaction[],
+  from: number,
+  to: number,
+  currency: string,
+  min = 2
+): ItemPattern[] {
+  const map = new Map<string, { label: string; count: number; minor: number }>();
+  for (const t of transactions) {
+    if (!isSpend(t) || !inWindow(t, from, to)) continue;
+    for (const i of t.items ?? []) {
+      const key = normalizeItemLabel(i.label);
+      if (key.length < 3) continue;
+      const cur = map.get(key) ?? { label: i.label, count: 0, minor: 0 };
+      cur.count += 1;
+      cur.minor += Math.abs(i.amount.minor);
+      map.set(key, cur);
+    }
+  }
+  return [...map.values()]
+    .filter((p) => p.count >= min)
+    .map((p) => ({ label: p.label, count: p.count, total: { minor: p.minor, currency } }))
+    .sort((a, b) => b.count - a.count || b.total.minor - a.total.minor)
+    .slice(0, 8);
+}
