@@ -14,6 +14,7 @@
     "./sharing": "./src/sharing.ts",
     "./sharing-api": "./src/sharing-api.ts",
     "./vibe": "./src/vibe.ts",
+    "./vibe-relay": "./src/vibe-relay.ts",
     "./connect": "./src/connect.ts"
   }
 }

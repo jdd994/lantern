@@ -1,0 +1,16 @@
+{
+  "name": "@lantern/vibe-relay",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Optional local relay so one lantern app's vibe pick can reach another on the same machine. Unauthenticated, ephemeral, localhost-only — deliberately outside the sync/account system.",
+  "bin": {
+    "lantern-vibe-relay": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

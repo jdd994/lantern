@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useHearth } from "./hooks/useHearth";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -21,6 +22,17 @@ function timeLabel(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+// Hearth's own moods, loosely mapped to the shared @lantern/core vibe vocabulary —
+// only for announcing a pick over the local vibe relay, so e.g. Aura's lights can
+// follow if it's running and mirroring is on. Publish-only: Hearth's own theme
+// never changes because of what another app picked, so nothing here ever surprises
+// you mid-cook.
+const MOOD_TO_VIBE: Record<string, string> = {
+  ember: "candlelight",
+  hearthlight: "wind-down",
+  cream: "daylight",
+};
+
 export default function App() {
   const h = useHearth();
   const [logging, setLogging] = useState(false);
@@ -32,6 +44,16 @@ export default function App() {
   const [planningDay, setPlanningDay] = useState<number | null>(null);
   const [settings, setSettings] = useState(false);
   const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+  useEffect(() => {
+    relayRef.current = connectVibeRelay("hearth", () => {});
+    return () => relayRef.current?.close();
+  }, []);
+  const handleMood = (id: string) => {
+    setMood(id);
+    const vibeId = MOOD_TO_VIBE[id];
+    if (vibeId) relayRef.current?.publish({ vibeId });
+  };
 
   if (h.status === "loading") return null;
   if (h.status === "setup") {
@@ -219,7 +241,7 @@ export default function App() {
       ) : null}
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
       {settings ? (
-        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+        <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} />
       ) : null}
       {sync ? (
         <Sync
