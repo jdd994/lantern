@@ -179,9 +179,9 @@ person's whole body history. Pinned by a golden vector. Same discipline as
    preference. The UI must have no way to express it.
 4. **A photo of your food never leaves the device** without explicit consent or
    an on-device model. See `recognize.ts`.
-5. **Auth and encryption stay separate** (when sync lands) — same as the siblings:
-   the account says whose ciphertext this is; the passphrase decrypts it and never
-   leaves the device. A server breach yields only ciphertext.
+5. **Auth and encryption stay separate** — same as the siblings: the account says
+   whose ciphertext this is; the passphrase decrypts it and never leaves the
+   device. A server breach yields only ciphertext.
 6. **RDAs are reference, never a verdict**, and off by default.
 
 ## Conventions
@@ -211,10 +211,11 @@ change it.
    Calm, no BMI-shaming. (Explicitly next, per the user.)
 4. **Barcodes (tier 1).** Open Food Facts lookup for packaged goods. Add its
    origin to `connect-src`; that's a trust-ladder decision, not a config tweak.
-5. **Sync.** Port the Driftless/Ballast model (Cloudflare Workers + D1, opaque
-   ciphertext, LWW). Records already carry `deleted`/`dirty` + an identity key,
-   built for it. Bake in the HARDENING.md protections (quotas, rate limits) from
-   the first server commit.
+5. **Sync — BUILT.** Ported the Driftless/Ballast model (Cloudflare Workers + D1,
+   `server/`, factory in `@lantern/server`, opaque ciphertext, LWW by
+   `updatedAt`), plus `sharing: true` for co-authored recipes/meal plans.
+   `src/lib/sync.ts` binds `@lantern/core/sync`, wired end-to-end through
+   `useHearth.ts`'s `syncNow`. Deployed at hearth.garden.
 6. **Later / maybe:** more wearables — **Fitbit is done** (see the wearable trust
    ladder above); next candidates are CSV import (tier 0, covers the vendors we
    refuse) and Withings for scales. Apple Health / Google Fit stay native-only;

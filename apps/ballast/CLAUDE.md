@@ -12,7 +12,8 @@ port Driftless's proven code over inventing a second version of it.
 
 A financial wellbeing dashboard built around one job: **show you the truth about
 your money, calmly, and help you see whether you're getting where you want to
-go.** It is local-first and end-to-end encrypted. Sync is the main open chapter.
+go.** It is local-first, end-to-end encrypted, and synced across devices
+(Cloudflare Workers + D1, opaque ciphertext only).
 
 ## Purpose (the north star)
 
@@ -151,9 +152,9 @@ user-aligned. And it must look exactly as alarming as it is.
    as *unpriced* — never folded into the total as zero. Understating someone's
    net worth while looking plausible is the most dangerous kind of wrong.
 5. **Authentication and encryption stay separate.** Same as Driftless invariant 4.
-   When sync lands, the account says *whose* ciphertext this is; the passphrase
-   *decrypts* it and never leaves the device. Never derive the key from the login
-   credential. A server compromise must yield only unreadable ciphertext.
+   The account says *whose* ciphertext this is; the passphrase *decrypts* it and
+   never leaves the device. Never derive the key from the login credential. A
+   server compromise must yield only unreadable ciphertext.
 6. **No third party sees a receipt photo.** Ever. See `receipt.ts`.
 
 ## Licence
@@ -182,10 +183,11 @@ npm run preview  # serve the built app
 
 1. **Spend tracking** — transactions, encrypted receipt photos, the local
    learning categoriser. (In progress.)
-2. **Sync.** Port Driftless's model wholesale: a tiny custom server (Cloudflare
-   Workers + D1) that stores opaque ciphertext; devices reconcile by
-   `updatedAt`. Records already carry `deleted` + `dirty`. Identity keys are
-   already in the vault.
+2. **Sync — BUILT.** Ported Driftless's model: a tiny custom server (Cloudflare
+   Workers + D1, `server/`, factory in `@lantern/server`) that stores opaque
+   ciphertext; devices reconcile by `updatedAt` via `@lantern/core/sync`
+   (`src/lib/sync.ts`), wired end-to-end through `useLedger.ts`'s `syncNow`.
+   Deployed at ballast.gold.
 3. **Tier 2 connectors** — ✅ first one built: **Alpaca** (`sources/alpaca.ts`),
    keys encrypted in the vault, browser → institution directly, consent sheet
    states takes/refuses (the shared contract from `@lantern/core/connect`).
