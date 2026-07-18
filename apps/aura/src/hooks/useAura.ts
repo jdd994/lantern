@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { vibeById } from "@lantern/core";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
 import { simulateDemoMotion } from "../lib/connectors/demo";
 import { assign, type Room } from "../lib/rooms";
@@ -58,6 +59,15 @@ export function useAura() {
   const [adaptive, setAdaptiveState] = useState<boolean>(() => {
     try {
       return localStorage.getItem("aura-adaptive") === "1";
+    } catch {
+      return false;
+    }
+  });
+  // Mirror vibes with other lantern apps on this machine (the vibe relay). Off by
+  // default: this only ever starts talking to localhost after an explicit choice.
+  const [mirrorVibes, setMirrorVibesState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("aura-vibe-mirror") === "1";
     } catch {
       return false;
     }
@@ -341,10 +351,11 @@ export function useAura() {
     [setDevice]
   );
 
-  // Apply a shared vibe (from @lantern/core) to the lights — the local end of the
-  // cross-app vibe layer. Each device takes what it can of the vibe's target
-  // (brightness / color); the vibe stays medium-agnostic, Aura renders it in light.
-  const applyVibe = useCallback(
+  // Apply a shared vibe (from @lantern/core) to the lights. Each device takes what
+  // it can of the vibe's target (brightness / color); the vibe stays medium-agnostic,
+  // Aura renders it in light. Internal: no relay publish, so the relay subscription
+  // below can call this directly without echoing a vibe right back out.
+  const applyVibeInternal = useCallback(
     (vibeId: string, roomId?: string) => {
       // Resolve the light target from either a built-in (@lantern/core) or a
       // user-made custom vibe.
@@ -372,6 +383,41 @@ export function useAura() {
     },
     [devices, rooms, customVibes, setDevice]
   );
+
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+
+  // The local end of the cross-app vibe layer: apply here, and — if mirroring is
+  // on — tell the relay too. Only built-in vibes travel (other apps only know the
+  // shared @lantern/core vocabulary, not Aura's custom ones).
+  const applyVibe = useCallback(
+    (vibeId: string, roomId?: string) => {
+      applyVibeInternal(vibeId, roomId);
+      if (mirrorVibes && vibeById(vibeId)) relayRef.current?.publish({ vibeId, roomId });
+    },
+    [applyVibeInternal, mirrorVibes]
+  );
+
+  const setMirrorVibes = useCallback((on: boolean) => {
+    setMirrorVibesState(on);
+    try {
+      localStorage.setItem("aura-vibe-mirror", on ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  // Connect to the local relay only while mirroring is on; disconnect the moment
+  // it's turned off. Incoming vibes apply whole-home — other apps don't know
+  // Aura's room ids, so a foreign roomId wouldn't map to anything useful here.
+  useEffect(() => {
+    if (!mirrorVibes) return;
+    const handle = connectVibeRelay("aura", (event) => applyVibeInternal(event.vibeId));
+    relayRef.current = handle;
+    return () => {
+      handle.close();
+      relayRef.current = null;
+    };
+  }, [mirrorVibes, applyVibeInternal]);
 
   const createCustomVibe = useCallback(async (label: string, rgb: Color, brightness: number) => {
     const v: CustomVibe = { id: uid(), label: label.trim() || "My vibe", rgb, brightness, createdAt: Date.now() };
@@ -662,5 +708,6 @@ export function useAura() {
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
     exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
+    mirrorVibes, setMirrorVibes,
   };
 }

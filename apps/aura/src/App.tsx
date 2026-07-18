@@ -297,6 +297,8 @@ export default function App() {
           onDisconnect={aura.disconnect}
           adaptive={aura.adaptive}
           onAdaptive={aura.setAdaptive}
+          mirrorVibes={aura.mirrorVibes}
+          onMirrorVibes={aura.setMirrorVibes}
           onExport={aura.exportSetup}
           onImport={aura.importSetup}
           onClose={() => setSettings(false)}

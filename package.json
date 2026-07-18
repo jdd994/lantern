@@ -8,6 +8,9 @@
     "apps/*",
     "apps/*/server"
   ],
+  "scripts": {
+    "vibe-relay": "npm run start -w @lantern/vibe-relay"
+  },
   "devDependencies": {
     "playwright": "^1.61.1"
   }

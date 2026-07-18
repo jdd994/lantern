@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useLedger } from "./hooks/useLedger";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -19,6 +20,16 @@ import type { SnapshotContent } from "./lib/ledger";
 
 type Tab = "worth" | "spending";
 
+// Ballast's own moods, loosely mapped to the shared @lantern/core vibe vocabulary —
+// only for announcing a pick over the local vibe relay, so e.g. Aura's lights can
+// follow if it's running and mirroring is on. Publish-only: Ballast's own theme
+// never changes because of what another app picked.
+const MOOD_TO_VIBE: Record<string, string> = {
+  deep: "candlelight",
+  midnight: "wind-down",
+  shoreline: "daylight",
+};
+
 export default function App() {
   const l = useLedger();
   const [tab, setTab] = useState<Tab>("worth");
@@ -32,6 +43,16 @@ export default function App() {
   const [sync, setSync] = useState(false);
   const [settings, setSettings] = useState(false);
   const { mood, setMood } = useTheme("ballast-mood", MOODS.map((m) => m.id), "deep");
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+  useEffect(() => {
+    relayRef.current = connectVibeRelay("ballast", () => {});
+    return () => relayRef.current?.close();
+  }, []);
+  const handleMood = (id: string) => {
+    setMood(id);
+    const vibeId = MOOD_TO_VIBE[id];
+    if (vibeId) relayRef.current?.publish({ vibeId });
+  };
 
   async function viewReceipt(mediaId: string) {
     setReceipt(await l.loadReceipt(mediaId));
@@ -233,7 +254,7 @@ export default function App() {
       {support ? <Support onClose={() => setSupport(false)} /> : null}
 
       {settings ? (
-        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+        <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} />
       ) : null}
 
       {sync ? (

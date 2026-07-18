@@ -3,11 +3,16 @@
 // deliberately medium-agnostic: each app renders it in its own material — Aura as
 // room lighting, @lantern/ui as a screen theme (`mood`), a music app as a seed.
 //
-// This module is only the vocabulary + a neutral target. It holds no transport:
-// how a vibe chosen in one app reaches another is a separate concern that rides the
-// sync layer once an app has an account (see the cross-app design note). Keeping the
-// words here — and nothing else — is what lets the apps agree on "candlelight"
-// without knowing anything about each other.
+// This module is only the vocabulary + a neutral target — it holds no transport
+// itself. The transport that exists today is `vibe-relay.ts`: a same-machine,
+// account-free WebSocket relay (packages/vibe-relay). That's deliberate, not a
+// placeholder — a vibe is an ephemeral, already-on-screen mood pick, not data
+// worth an account, and Aura has no account/vault by design ("you shouldn't type
+// a password to dim a lamp"). True cross-device transport riding the real
+// sync/account system (packages/server) remains a possible later path for apps
+// that already have an account, but isn't needed for same-machine mirroring.
+// Keeping the words here — and nothing else — is what lets the apps agree on
+// "candlelight" without knowing anything else about each other.
 
 export type VibeLight = {
   brightness: number; // 0..100

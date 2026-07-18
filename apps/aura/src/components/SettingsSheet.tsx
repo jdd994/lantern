@@ -19,6 +19,8 @@ export function SettingsSheet({
   onDisconnect,
   adaptive,
   onAdaptive,
+  mirrorVibes,
+  onMirrorVibes,
   onExport,
   onImport,
   onClose,
@@ -34,6 +36,8 @@ export function SettingsSheet({
   onDisconnect: (sourceId: string) => void;
   adaptive: boolean;
   onAdaptive: (on: boolean) => void;
+  mirrorVibes: boolean;
+  onMirrorVibes: (on: boolean) => void;
   onExport: () => string;
   onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
@@ -97,6 +101,27 @@ export function SettingsSheet({
             aria-checked={adaptive}
             aria-label="Adaptive white"
             onClick={() => onAdaptive(!adaptive)}
+          >
+            <span className="toggle-knob" />
+          </button>
+        </div>
+      </div>
+
+      <div className="set-section">
+        <div className="adaptive-row">
+          <div>
+            <span className="label">Mirror vibes</span>
+            <p className="hint">
+              When another lantern app on this computer sets a vibe, Aura's lights follow — and vice versa.
+              Local only; nothing leaves this machine.
+            </p>
+          </div>
+          <button
+            className="toggle"
+            role="switch"
+            aria-checked={mirrorVibes}
+            aria-label="Mirror vibes"
+            onClick={() => onMirrorVibes(!mirrorVibes)}
           >
             <span className="toggle-knob" />
           </button>
