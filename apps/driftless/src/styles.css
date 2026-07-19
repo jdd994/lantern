@@ -765,6 +765,39 @@ kbd {
 .help-body h3 { font-family: var(--serif); font-weight: 500; font-size: 16px; color: var(--ink); margin: 0 0 6px; }
 .help-body p { font-family: var(--sans); font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 6px; }
 .help-body b { color: var(--ink); font-weight: 600; }
+
+/* A quiet accordion — collapsed rows so the sheet reads as a list of topics
+   rather than a wall of text. Native <details>, no extra JS. */
+.help-item { border-bottom: 1px solid var(--line-soft); }
+.help-item:first-of-type { margin-top: 4px; }
+.help-item summary {
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 15.5px;
+  color: var(--ink);
+  padding: 13px 22px 13px 0;
+  position: relative;
+  user-select: none;
+}
+.help-item summary::-webkit-details-marker { display: none; }
+.help-item summary::after {
+  content: "+";
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--ink-faint);
+  transition: transform 0.15s;
+}
+.help-item[open] summary::after { content: "–"; }
+.help-item summary:hover { color: var(--amber); }
+.help-item-body { padding: 0 0 16px; }
+.help-item-body p:last-child { margin-bottom: 0; }
 .note-maker { border-top: 1px solid var(--line-soft); padding-top: 4px; }
 .note-input, .note-contact {
   width: 100%;
