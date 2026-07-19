@@ -11,7 +11,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob, WrappedKey } from "./crypto";
 
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export type VaultMeta = {
   id: "vault";
@@ -82,6 +82,16 @@ export type DeviceEnrollment = {
   wrapped: CipherBlob;
 };
 
+// A recovery attempt's throwaway session keypair — see Driftless's db.ts for
+// the full rationale. Plaintext-local, device-scoped, useless alone; this is
+// why a recovery attempt only completes on the device it started on.
+export type RecoverySession = {
+  id: "session";
+  requestId: string;
+  publicKeyB64: string;
+  privateKeyPkcs8B64: string;
+};
+
 interface HearthDB extends DBSchema {
   vault: { key: string; value: VaultMeta };
   foodLogs: { key: string; value: StoredFoodLog; indexes: { byTime: number } };
@@ -93,6 +103,7 @@ interface HearthDB extends DBSchema {
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
   connections: { key: string; value: StoredConnection };
+  recoverySession: { key: string; value: RecoverySession };
 }
 
 let dbPromise: Promise<IDBPDatabase<HearthDB>> | null = null;
@@ -121,6 +132,9 @@ function db() {
         }
         if (oldVersion < 4) {
           database.createObjectStore("connections", { keyPath: "id" });
+        }
+        if (oldVersion < 5) {
+          database.createObjectStore("recoverySession", { keyPath: "id" });
         }
       },
     });
@@ -241,6 +255,17 @@ export async function dirtyRecords(): Promise<{
   };
 }
 
+// ---- social recovery ------------------------------------------------------
+export async function getRecoverySession(): Promise<RecoverySession | undefined> {
+  return (await db()).get("recoverySession", "session");
+}
+export async function saveRecoverySession(s: RecoverySession): Promise<void> {
+  await (await db()).put("recoverySession", s);
+}
+export async function clearRecoverySession(): Promise<void> {
+  await (await db()).delete("recoverySession", "session");
+}
+
 // ---- generic sync accessors ---------------------------------------------
 // The sync engine treats the four syncable stores uniformly (a kind + an id).
 // These map a kind to its store and give get/put/clear-dirty/mark-all by kind,
@@ -281,6 +306,7 @@ export async function markAllDirty(): Promise<void> {
 
 const ALL_STORES = [
   "vault", "foodLogs", "metrics", "goals", "recipes", "mealPlans", "pantry", "sync", "device", "connections",
+  "recoverySession",
 ] as const;
 
 // Wipe everything (forget this device). Without the passphrase nothing readable

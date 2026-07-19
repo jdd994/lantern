@@ -14,7 +14,9 @@
 import { Hono, type Context, type Next } from "hono";
 import { cors } from "hono/cors";
 import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth";
+import { mountIdentity } from "./identity";
 import { mountSharing } from "./sharing";
+import { mountRecovery } from "./recovery";
 
 export type BaseEnv = {
   DB: D1Database;
@@ -27,10 +29,17 @@ export type ServerContext<E extends BaseEnv = BaseEnv> = Context<{ Bindings: E; 
 export type ServerConfig<E extends BaseEnv = BaseEnv> = {
   kinds: readonly string[];
   service: string;
-  // Mount the sharing routes (/shared/*, /identity, /keys). Off by default: an app
-  // without it is exactly as private as before — no sharing tables are ever
-  // consulted. Requires the sharing tables (packages/server/schema.sharing.sql).
+  // Mount the sharing routes (/shared/*). Off by default: an app without it is
+  // exactly as private as before — no sharing tables are ever consulted.
+  // Requires the sharing tables (packages/server/schema.sharing.sql).
   sharing?: boolean;
+  // Mount the social-recovery routes (/recovery/*). Off by default. Requires
+  // the recovery tables (packages/server/schema.recovery.sql) — independent of
+  // `sharing`, since both rely on the always-mounted identity directory.
+  recovery?: boolean;
+  // App-wide floor on a recovery circle's delay window, in ms. Higher-stakes
+  // apps (e.g. Ballast) should set this well above a journaling app's default.
+  recoveryMinDelayMs?: number;
   maxUserObjects?: number;
   maxUserContentBytes?: number;
   // Override the account deletion (e.g. to also sweep object storage or shared
@@ -119,7 +128,9 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
     })(c, next);
   });
 
+  mountIdentity(app);
   if (config.sharing) mountSharing(app);
+  if (config.recovery) mountRecovery(app, { minDelayMs: config.recoveryMinDelayMs });
 
   app.get("/health", (c) => c.json({ ok: true, service: config.service }));
   app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));

@@ -1,8 +1,10 @@
 // index.ts — Driftless sync server.
 // The base (CORS, auth, rate limits, quotas, register / login / vault / me /
-// delete / sync) is the shared factory (@lantern/server). Driftless adds its own
-// routes on top: media (R2 photos), shared strands, invite links, feedback, and
-// the identity/key directory. Stores opaque ciphertext + non-secret metadata only.
+// delete / sync) is the shared factory (@lantern/server), which also mounts the
+// identity/key directory, shared strands + invite links (sharing: true), and
+// guardian-based social recovery (recovery: true). Driftless adds its own
+// routes on top: media (R2 photos) and feedback. Stores opaque ciphertext +
+// non-secret metadata only.
 import {
   createServer, requireAuth, withinRateLimit, TOO_MANY, verifyToken, membership,
   type ServerContext,
@@ -103,6 +105,10 @@ const app = createServer<Env>({
   // same SQL, same wire format. Below, Driftless keeps only what's truly its own:
   // media (R2) and the feedback box.
   sharing: true,
+  // /recovery/* — guardian-based social recovery. Requires schema.recovery.sql
+  // applied to this app's D1 (see packages/server/schema.recovery.sql).
+  recovery: true,
+  recoveryMinDelayMs: 24 * 3_600_000,
   deleteAccount: deleteDriftlessAccount,
 });
 

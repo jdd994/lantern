@@ -167,6 +167,14 @@ export default function App() {
         onBiometric={j.biometricUnlock}
         onRestore={j.restoreBackup}
         onSignIn={j.connectSignIn}
+        account={j.account}
+        guardianCircle={j.guardianCircle}
+        onRecoverySignIn={j.recoverySignIn}
+        onLoadGuardianCircle={j.loadGuardianCircle}
+        onStartRecovery={j.startRecoveryRequest}
+        onPollRecovery={j.pollRecoveryRequest}
+        onCancelRecovery={j.cancelRecoveryRequest}
+        onFinishRecovery={j.finishRecoveryRequest}
       />
     );
   }
@@ -462,6 +470,12 @@ export default function App() {
           onDeleteAccount={j.deleteAccount}
           onSyncNow={j.syncNow}
           onChangePassphrase={j.changePassphrase}
+          guardianCircle={j.guardianCircle}
+          onSetupGuardians={j.setupGuardians}
+          recoveryStatus={j.recoveryStatus}
+          onCancelPendingRecovery={j.cancelPendingRecovery}
+          pendingGuardianRequests={j.pendingGuardianRequests}
+          onApproveGuardianRequest={j.approveGuardianRequest}
         />
       )}
       <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />

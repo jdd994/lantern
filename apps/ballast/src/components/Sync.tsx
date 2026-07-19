@@ -14,8 +14,211 @@
 
 import { useEffect, useState } from "react";
 import { TrustBadge } from "./TrustBadge";
+import type { RecoveryCircleInfo, RecoveryStatus, PendingForMe } from "../lib/api";
 
 type Mode = "signin" | "create";
+
+const DELAY_OPTIONS = [
+  { label: "24 hours", ms: 24 * 3_600_000 },
+  { label: "48 hours", ms: 48 * 3_600_000 },
+  { label: "4 days", ms: 96 * 3_600_000 },
+  { label: "1 week", ms: 7 * 24 * 3_600_000 },
+];
+
+// Guardians who can jointly help recover a forgotten passphrase — without us,
+// or any one of them alone, ever holding the key. See SettingsSheet's "How
+// Ballast works" for the short version. Given the stakes here (money, not
+// journal entries), the setup form defaults higher than its siblings — see
+// the caller for Ballast's k/n/delay defaults.
+function GuardiansSection({
+  guardianCircle,
+  onSetupGuardians,
+  recoveryStatus,
+  onCancelPendingRecovery,
+}: {
+  guardianCircle: RecoveryCircleInfo | null;
+  onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
+  recoveryStatus: RecoveryStatus;
+  onCancelPendingRecovery: () => Promise<string | null>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<{ email: string; codeword: string }[]>([
+    { email: "", codeword: "" }, { email: "", codeword: "" }, { email: "", codeword: "" },
+    { email: "", codeword: "" }, { email: "", codeword: "" },
+  ]);
+  const [k, setK] = useState(3);
+  const [delayMs, setDelayMs] = useState(DELAY_OPTIONS[2].ms);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  function updateRow(i: number, field: "email" | "codeword", value: string) {
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+
+  async function submit() {
+    setError(null);
+    const guardians = rows.filter((r) => r.email.trim() && r.codeword.trim());
+    if (guardians.length < 2) return setError("Add at least 2 guardians, each with a codeword.");
+    if (k < 2 || k > guardians.length) return setError("Choose how many must approve — at least 2, at most the number of guardians.");
+    setBusy(true);
+    const err = await onSetupGuardians(guardians, k, delayMs);
+    setBusy(false);
+    if (err) return setError(err);
+    setOpen(false);
+    setDone(true);
+    setTimeout(() => setDone(false), 4000);
+  }
+
+  return (
+    <div className="danger-zone">
+      <h4 className="pass-head">Guardians</h4>
+      {recoveryStatus ? (
+        <>
+          <div className="error">
+            Someone started recovering this account {new Date(recoveryStatus.createdAt).toLocaleString()} —{" "}
+            {recoveryStatus.approvals} of {recoveryStatus.k} guardians have approved. If this wasn't you, cancel it now.
+          </div>
+          <button
+            className="btn btn-danger"
+            disabled={cancelBusy}
+            onClick={async () => { setCancelBusy(true); await onCancelPendingRecovery(); setCancelBusy(false); }}
+          >
+            {cancelBusy ? "Cancelling…" : "This wasn't me — cancel it"}
+          </button>
+        </>
+      ) : null}
+      {done ? (
+        <p className="hint">Guardians are set. Ask each one to expect a request someday, never today.</p>
+      ) : !open ? (
+        <>
+          {guardianCircle ? (
+            <p className="hint">
+              {guardianCircle.k} of {guardianCircle.n} guardians can recover this account:{" "}
+              {guardianCircle.guardians.map((g) => g.email).join(", ")}.
+            </p>
+          ) : (
+            <p>
+              A handful of people you trust can jointly help you back in if you ever forget your
+              passphrase — without us, or any one of them, ever holding the key. Given this is your
+              money, the defaults here (3 of 5, a 4-day wait) are stricter than a journal's.
+            </p>
+          )}
+          <button className="linklike" onClick={() => setOpen(true)}>
+            {guardianCircle ? "Change guardians" : "Set up guardians"}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="hint">
+            Tell each guardian their codeword <strong>out loud</strong> — in person or by phone,
+            never by message or email. It's the second lock; we never see it either.
+          </p>
+          {rows.map((row, i) => (
+            <div className="sheet-actions" key={i}>
+              <input
+                type="email" placeholder="Guardian's email"
+                value={row.email} onChange={(e) => updateRow(i, "email", e.target.value)}
+              />
+              <input
+                type="text" placeholder="Codeword (told out loud)"
+                value={row.codeword} onChange={(e) => updateRow(i, "codeword", e.target.value)}
+              />
+            </div>
+          ))}
+          <button className="linklike" onClick={() => setRows((r) => [...r, { email: "", codeword: "" }])}>
+            + Add another guardian
+          </button>
+          <label className="field">
+            <span className="label">How many must approve</span>
+            <select value={k} onChange={(e) => setK(Number(e.target.value))}>
+              {rows.map((_, i) => (
+                <option key={i} value={i + 1} disabled={i + 1 < 2}>{i + 1}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Waiting period before it completes</span>
+            <select value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))}>
+              {DELAY_OPTIONS.map((o) => <option key={o.ms} value={o.ms}>{o.label}</option>)}
+            </select>
+          </label>
+          {error ? <div className="error">{error}</div> : null}
+          <div className="sheet-actions">
+            <button className="btn btn-ghost" onClick={() => { setOpen(false); setError(null); }}>Cancel</button>
+            <button className="btn btn-primary" disabled={busy} onClick={submit}>
+              {busy ? "Saving…" : "Save guardians"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// "Help a friend" — approving someone else's recovery request. Only shows up
+// when there's something to do.
+function GuardianApprovalsSection({
+  pendingGuardianRequests,
+  onApproveGuardianRequest,
+}: {
+  pendingGuardianRequests: PendingForMe[];
+  onApproveGuardianRequest: (requestId: string, codeword: string) => Promise<string | null>;
+}) {
+  const [codewords, setCodewords] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Tracked separately from pendingGuardianRequests: approving a request makes
+  // the server stop returning it (GET /recovery/pending-for-me only lists
+  // requests this guardian HASN'T approved yet), so the list refreshes this
+  // row away the instant approval succeeds. Without its own memory of what it
+  // just did, the "Approved for X" confirmation would never be visible.
+  const [done, setDone] = useState<{ requestId: string; ownerEmail: string }[]>([]);
+
+  if (pendingGuardianRequests.length === 0 && done.length === 0) return null;
+
+  async function approve(requestId: string, ownerEmail: string) {
+    setErrors((e) => ({ ...e, [requestId]: "" }));
+    setBusyId(requestId);
+    const err = await onApproveGuardianRequest(requestId, codewords[requestId] ?? "");
+    setBusyId(null);
+    if (err) setErrors((e) => ({ ...e, [requestId]: err }));
+    else setDone((d) => [...d, { requestId, ownerEmail }]);
+  }
+
+  return (
+    <div className="danger-zone">
+      <h4 className="pass-head">Help a friend</h4>
+      {done.map((d) => (
+        <p key={d.requestId} className="hint">Approved for {d.ownerEmail}.</p>
+      ))}
+      {pendingGuardianRequests.map((r) => (
+          <div key={r.requestId}>
+            <p className="hint">
+              {r.ownerEmail} is trying to recover their account ({r.k} of {r.n} guardians needed).
+              Ask them for their codeword, out loud, before approving.
+            </p>
+            <input
+              type="text" placeholder="Their codeword"
+              value={codewords[r.requestId] ?? ""}
+              onChange={(e) => setCodewords((c) => ({ ...c, [r.requestId]: e.target.value }))}
+            />
+            {errors[r.requestId] ? <div className="error">{errors[r.requestId]}</div> : null}
+            <div className="sheet-actions">
+              <button
+                className="btn btn-ghost"
+                disabled={busyId === r.requestId}
+                onClick={() => approve(r.requestId, r.ownerEmail)}
+              >
+                {busyId === r.requestId ? "Approving…" : "Approve"}
+              </button>
+            </div>
+          </div>
+      ))}
+    </div>
+  );
+}
 
 // Change the vault passphrase (only shown when there's a vault on this device).
 // Thanks to envelope encryption this re-encrypts nothing and doesn't disturb
@@ -81,6 +284,12 @@ export function Sync({
   onSyncNow,
   onChangePassphrase,
   onClose,
+  guardianCircle,
+  onSetupGuardians,
+  recoveryStatus,
+  onCancelPendingRecovery,
+  pendingGuardianRequests,
+  onApproveGuardianRequest,
 }: {
   account: string | null;
   syncing: boolean;
@@ -95,6 +304,12 @@ export function Sync({
   onSyncNow: () => Promise<void>;
   onChangePassphrase: (current: string, next: string) => Promise<string | null>;
   onClose: () => void;
+  guardianCircle: RecoveryCircleInfo | null;
+  onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
+  recoveryStatus: RecoveryStatus;
+  onCancelPendingRecovery: () => Promise<string | null>;
+  pendingGuardianRequests: PendingForMe[];
+  onApproveGuardianRequest: (requestId: string, codeword: string) => Promise<string | null>;
 }) {
   const [mode, setMode] = useState<Mode>(canCreate ? "create" : "signin");
   const [email, setEmail] = useState("");
@@ -262,6 +477,22 @@ export function Sync({
         {/* Change-passphrase lives here because this is the vault's account/
             security surface. Only shown when there's a vault on this device. */}
         {canCreate ? <ChangePassphrase onChange={onChangePassphrase} /> : null}
+
+        {/* Guardians need the vault key (to split it), so same gate as above. */}
+        {canCreate && account ? (
+          <>
+            <GuardiansSection
+              guardianCircle={guardianCircle}
+              onSetupGuardians={onSetupGuardians}
+              recoveryStatus={recoveryStatus}
+              onCancelPendingRecovery={onCancelPendingRecovery}
+            />
+            <GuardianApprovalsSection
+              pendingGuardianRequests={pendingGuardianRequests}
+              onApproveGuardianRequest={onApproveGuardianRequest}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

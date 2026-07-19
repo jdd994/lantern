@@ -27,8 +27,19 @@ import {
   fromB64url,
   toBase64,
   VERIFIER_TEXT,
+  exportPrivateKeyB64,
+  importPrivateKeyB64,
+  createRecoveryCircle,
+  approveAsGuardian,
+  reconstructDEK,
 } from "../lib/crypto";
-import { createVault as makeVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
+import {
+  createVault as makeVault,
+  openVault,
+  rewrapVault,
+  verifyDEK,
+  setPassphraseFromDEK,
+} from "@lantern/core/vault";
 import { compressImage, bytesToBase64 } from "../lib/media";
 import {
   biometricSupported,
@@ -52,6 +63,9 @@ import {
   getSyncState,
   saveSyncState,
   markAllDirty,
+  getRecoverySession,
+  saveRecoverySession,
+  clearRecoverySession,
   type StoredEntry,
   type StoredStrand,
   type VaultMeta,
@@ -81,8 +95,21 @@ import {
   uploadSharedMedia,
   downloadSharedMedia,
   deleteSharedMediaRemote,
+  setCircle,
+  fetchCircle,
+  startRequest,
+  fetchRecoveryStatus,
+  fetchRecoveryRequest,
+  cancelRequest as apiCancelRecoveryRequest,
+  completeRequest as apiCompleteRecoveryRequest,
+  fetchPendingForMe,
+  approveRecovery,
   type SharedRecord,
   type StrandMember,
+  type GuardianEntry,
+  type RecoveryCircleInfo,
+  type RecoveryStatus,
+  type PendingForMe,
 } from "../lib/api";
 import { syncNow } from "../lib/sync";
 import {
@@ -130,6 +157,9 @@ export function useJournal() {
   const [account, setAccount] = useState<string | null>(null); // synced account email, or null
   const [sharedStrands, setSharedStrands] = useState<SharedStrandView[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null); // this account's id (shared authorship)
+  const [guardianCircle, setGuardianCircle] = useState<RecoveryCircleInfo | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(null); // a pending request on MY OWN account
+  const [pendingGuardianRequests, setPendingGuardianRequests] = useState<PendingForMe[]>([]); // requests I can approve
   const myUserIdRef = useRef<string | null>(null);
   const keyRef = useRef<CryptoKey | null>(null);
   const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
@@ -564,6 +594,258 @@ export function useJournal() {
     []
   );
 
+  // ---- Social recovery: MY circle (post-unlock, needs the key + identity) ---
+
+  const loadGuardianCircle = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      setGuardianCircle(await fetchCircle(token));
+    } catch {
+      setGuardianCircle(null); // no circle configured yet (404) or offline
+    }
+  }, []);
+
+  // Configure (or rotate) K-of-N guardians. Each guardian's codeword must have
+  // been told to them OUT LOUD, never typed anywhere but here — see HelpSheet.
+  // Rotating cancels any recovery request already in flight (its shares wrap
+  // the OLD recovery key). Returns an error message, or null on success.
+  const setupGuardians = useCallback(
+    async (guardians: { email: string; codeword: string }[], k: number, delayMs: number): Promise<string | null> => {
+      const token = tokenRef.current;
+      const dek = keyRef.current;
+      if (!token || !dek) return "Unlock your journal first.";
+      if (k < 2 || k > guardians.length) return "Pick at least 2, and no more than the number of guardians.";
+      try {
+        const resolved = await Promise.all(
+          guardians.map(async (g) => {
+            const em = g.email.trim().toLowerCase();
+            const { identityPublicKey } = await fetchKeys(token, em);
+            if (!identityPublicKey) throw new Error(`${em} doesn't have an account yet.`);
+            return { userId: em, identityPublicKey, codeword: g.codeword };
+          })
+        );
+        const circle = await createRecoveryCircle(dek, resolved, { k, n: resolved.length, delayMs });
+        const entries: GuardianEntry[] = circle.shares.map((s) => ({
+          email: s.userId, // resolved as the lookup email above — see createRecoveryCircle
+          shareIndex: s.shareIndex,
+          ephemeralPub: s.ephemeralPub,
+          wrapped: s.wrapped,
+          codewordSalt: s.codewordSalt,
+          codewordIterations: s.codewordIterations,
+        }));
+        await setCircle(token, k, resolved.length, delayMs, circle.recoveryWrappedDEK, entries);
+        await loadGuardianCircle();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't set up guardians.";
+      }
+    },
+    [loadGuardianCircle]
+  );
+
+  // Pull surfaces (deliberately no push/notify — see journal.ts's "never
+  // notifies" invariant): checked alongside ensureIdentity/loadSharedStrands,
+  // so any device shows a pending request next time it opens and syncs.
+  const refreshRecoveryStatus = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { request } = await fetchRecoveryStatus(token);
+      setRecoveryStatus(request);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  const cancelPendingRecovery = useCallback(async (): Promise<string | null> => {
+    const token = tokenRef.current;
+    const requestId = recoveryStatus?.requestId;
+    if (!token || !requestId) return "No pending request.";
+    try {
+      await apiCancelRecoveryRequest(token, requestId);
+      await refreshRecoveryStatus();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, [recoveryStatus, refreshRecoveryStatus]);
+
+  const refreshPendingGuardianRequests = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { requests } = await fetchPendingForMe(token);
+      setPendingGuardianRequests(requests);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  // Help a friend: unwrap my share (needs my identity key AND the codeword
+  // they told me out loud), re-wrap it to their device, submit. Wrong codeword
+  // fails loudly (AES-GCM) rather than silently sending garbage.
+  const approveGuardianRequest = useCallback(
+    async (requestId: string, codeword: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const identity = identityRef.current;
+      if (!token || !identity) return "Unlock your journal first.";
+      const entry = pendingGuardianRequests.find((r) => r.requestId === requestId);
+      if (!entry) return "That request isn't open anymore.";
+      try {
+        const wrappedShareForRequester = await approveAsGuardian(
+          identity.privateKey,
+          entry.myShare,
+          codeword,
+          entry.sessionPub
+        );
+        await approveRecovery(token, requestId, wrappedShareForRequester);
+        await refreshPendingGuardianRequests();
+        return null;
+      } catch {
+        return "That codeword isn't right.";
+      }
+    },
+    [pendingGuardianRequests, refreshPendingGuardianRequests]
+  );
+
+  // ---- Social recovery: RECOVERING (pre-unlock — no key, maybe no token) ----
+
+  // Sign in for the sole purpose of reaching a recovery circle — doesn't touch
+  // the local vault (unlike connectSignIn, which is for a brand-new device).
+  // Needed when this device was never connected to the account, or was
+  // disconnected, before the passphrase was forgotten.
+  const recoverySignIn = useCallback(async (email: string, password: string): Promise<string | null> => {
+    const em = email.trim().toLowerCase();
+    try {
+      const { token } = await login(em, password);
+      tokenRef.current = token;
+      await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
+      setAccount(em);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't sign in.";
+    }
+  }, []);
+
+  // Start a request: a fresh throwaway session keypair (saved locally, in the
+  // clear — this device only, see db.ts's RecoverySession), then ask the
+  // server to open the request so guardians can see it.
+  const startRecoveryRequest = useCallback(async (): Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  > => {
+    const token = tokenRef.current;
+    if (!token) return "Sign in to your account first.";
+    try {
+      const session = await generateIdentityKeypair();
+      const publicKeyB64 = await exportPublicKeyB64(session.publicKey);
+      const privateKeyPkcs8B64 = await exportPrivateKeyB64(session.privateKey);
+      const result = await startRequest(token, publicKeyB64);
+      await saveRecoverySession({ id: "session", requestId: result.requestId, publicKeyB64, privateKeyPkcs8B64 });
+      return result;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't start recovery.";
+    }
+  }, []);
+
+  const pollRecoveryRequest = useCallback(async (requestId: string) => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    try {
+      return await fetchRecoveryRequest(token, requestId);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const cancelRecoveryRequest = useCallback(async (requestId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    try {
+      await apiCancelRecoveryRequest(token, requestId);
+      await clearRecoverySession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, []);
+
+  // Once the delay window has cleared server-side: reconstruct the DEK from
+  // the approved shares, set a fresh passphrase from it, open the journal.
+  const finishRecoveryRequest = useCallback(
+    async (requestId: string, newPassphrase: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Not signed in.";
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      try {
+        const poll = await fetchRecoveryRequest(token, requestId);
+        if (!poll.recoveryWrappedDEK || !poll.approvalShares) {
+          return "Not ready yet — the delay window hasn't cleared.";
+        }
+        const session = await getRecoverySession();
+        if (!session || session.requestId !== requestId) {
+          return "This recovery attempt was started on a different device — finish it there.";
+        }
+        const sessionPriv = await importPrivateKeyB64(session.privateKeyPkcs8B64);
+        const dek = await reconstructDEK(sessionPriv, poll.approvalShares, poll.k, poll.recoveryWrappedDEK);
+
+        const v = await getVault();
+        if (!v) return "No journal on this device.";
+        const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+        const updated: VaultMeta = { ...v, ...fresh };
+        await saveVault(updated);
+        try {
+          await updateVault(token, {
+            salt: updated.salt,
+            verifier: updated.verifier,
+            iterations: updated.iterations,
+            wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+
+        keyRef.current = dek;
+        await loadEntries(dek);
+        await loadStrands(dek);
+        setVaultState("open");
+        void requestDurableStorage();
+
+        await apiCompleteRecoveryRequest(token, requestId).catch(() => {});
+        await clearRecoverySession();
+        return null;
+      } catch (e) {
+        // Wrong/insufficient shares fail loudly here (unwrapVaultKey's auth tag).
+        return e instanceof Error ? e.message : "Couldn't finish recovery — the shares didn't reconstruct your key.";
+      }
+    },
+    [loadEntries, loadStrands, requestDurableStorage]
+  );
+
+  // Same pull-only triggers as the background sync effect above (unlock,
+  // reconnect, returning to the app, a gentle interval) — this IS the
+  // notification for "someone is trying to recover your account" and "a
+  // friend needs your help," deliberately not a push.
+  useEffect(() => {
+    if (vaultState !== "open" || !tokenRef.current) return;
+    void loadGuardianCircle();
+    void refreshRecoveryStatus();
+    void refreshPendingGuardianRequests();
+    const onWake = () => {
+      void refreshRecoveryStatus();
+      void refreshPendingGuardianRequests();
+    };
+    const onVis = () => document.visibilityState === "visible" && onWake();
+    window.addEventListener("online", onWake);
+    document.addEventListener("visibilitychange", onVis);
+    const id = window.setInterval(onWake, 60_000);
+    return () => {
+      window.removeEventListener("online", onWake);
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(id);
+    };
+  }, [vaultState, loadGuardianCircle, refreshRecoveryStatus, refreshPendingGuardianRequests]);
+
   const lock = useCallback(() => {
     keyRef.current = null;
     setEntries([]);
@@ -574,6 +856,9 @@ export function useJournal() {
     setSharedStrands([]);
     myUserIdRef.current = null;
     setMyUserId(null);
+    setGuardianCircle(null);
+    setRecoveryStatus(null);
+    setPendingGuardianRequests([]);
     setVaultState("locked");
   }, []);
 
@@ -1576,5 +1861,19 @@ export function useJournal() {
     deleteSharedPiece,
     myUserId,
     refreshShared: loadSharedStrands,
+    guardianCircle,
+    loadGuardianCircle,
+    setupGuardians,
+    recoveryStatus,
+    refreshRecoveryStatus,
+    cancelPendingRecovery,
+    pendingGuardianRequests,
+    refreshPendingGuardianRequests,
+    approveGuardianRequest,
+    recoverySignIn,
+    startRecoveryRequest,
+    pollRecoveryRequest,
+    cancelRecoveryRequest,
+    finishRecoveryRequest,
   };
 }

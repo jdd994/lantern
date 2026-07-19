@@ -4,6 +4,7 @@
 // metadata only.
 import { createApiClient, ApiError } from "@lantern/core/api";
 import { createSharingClient } from "@lantern/core/sharing-api";
+import { createRecoveryClient } from "@lantern/core/recovery-api";
 
 export { ApiError };
 export type { VaultMetaDTO } from "@lantern/core/api";
@@ -30,6 +31,18 @@ export const {
   sharedPush, sharedPull, sharedLeave, sharedRemove,
   createInviteLink, listInvites, revokeInvite, joinClaim, joinFinish,
 } = createSharingClient(req);
+
+// Social recovery speaks its own small protocol (@lantern/core/recovery-api),
+// same shared-wrapper pattern as sharing above.
+export type {
+  GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll,
+} from "@lantern/core/recovery-api";
+export const {
+  setCircle, fetchCircle,
+  startRequest, fetchStatus: fetchRecoveryStatus, fetchRequest: fetchRecoveryRequest,
+  cancelRequest, completeRequest,
+  fetchPendingForMe, approve: approveRecovery,
+} = createRecoveryClient(req);
 
 // ---- media (M1: encrypted photo blobs over R2) ----
 // Binary, not JSON. The object is iv(12) || ciphertext — already encrypted on

@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { parseBackup, type Backup } from "../lib/backup";
 import { Welcome } from "./Welcome";
 import { IosSetupNote } from "./IosSetupNote";
+import { RecoveryFlow } from "./RecoveryFlow";
+import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 type Props = {
   mode: "needs-setup" | "locked";
@@ -15,9 +17,35 @@ type Props = {
   onBiometric: () => Promise<boolean>;
   onRestore: (backup: Backup) => Promise<void>;
   onSignIn: (email: string, password: string) => Promise<string | null>;
+  // Social recovery — "I forgot my passphrase." See RecoveryFlow.tsx.
+  account: string | null;
+  guardianCircle: RecoveryCircleInfo | null;
+  onRecoverySignIn: (email: string, password: string) => Promise<string | null>;
+  onLoadGuardianCircle: () => Promise<void>;
+  onStartRecovery: () => Promise<{ requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string>;
+  onPollRecovery: (requestId: string) => Promise<RecoveryRequestPoll | null>;
+  onCancelRecovery: (requestId: string) => Promise<string | null>;
+  onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
 };
 
-export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, onRestore, onSignIn }: Props) {
+export function LockScreen({
+  mode,
+  enrolled,
+  onCreate,
+  onUnlock,
+  onBiometric,
+  onRestore,
+  onSignIn,
+  account,
+  guardianCircle,
+  onRecoverySignIn,
+  onLoadGuardianCircle,
+  onStartRecovery,
+  onPollRecovery,
+  onCancelRecovery,
+  onFinishRecovery,
+}: Props) {
+  const [showRecovery, setShowRecovery] = useState(false);
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +177,22 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
 
   if (setup && showIntro) {
     return <Welcome onBegin={() => setShowIntro(false)} />;
+  }
+
+  if (!setup && showRecovery) {
+    return (
+      <RecoveryFlow
+        account={account}
+        guardianCircle={guardianCircle}
+        onRecoverySignIn={onRecoverySignIn}
+        onLoadGuardianCircle={onLoadGuardianCircle}
+        onStartRecovery={onStartRecovery}
+        onPollRecovery={onPollRecovery}
+        onCancelRecovery={onCancelRecovery}
+        onFinishRecovery={onFinishRecovery}
+        onBack={() => setShowRecovery(false)}
+      />
+    );
   }
 
   // Setup, step 2: the optional account.
@@ -326,6 +370,9 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
             {error && <p className="lock-error">{error}</p>}
             <button className="save-btn lock-btn" disabled={busy} onClick={submit}>
               {busy ? "Working…" : "Unlock"}
+            </button>
+            <button className="lock-restore" onClick={() => setShowRecovery(true)}>
+              Forgot your passphrase? Ask your guardians
             </button>
           </>
         )}

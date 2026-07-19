@@ -7,9 +7,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   exportKeyRaw, importKeyRaw, openJSON, sealJSON, PBKDF2_ITERATIONS, VERIFIER_TEXT,
-  exportPublicKeyB64,
+  exportPublicKeyB64, exportPrivateKeyB64, importPrivateKeyB64,
+  createRecoveryCircle, approveAsGuardian, reconstructDEK,
 } from "../lib/crypto";
-import { createVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
+import {
+  createVault, openVault, rewrapVault, verifyDEK, setPassphraseFromDEK,
+} from "@lantern/core/vault";
+import type { GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll } from "../lib/api";
 import * as db from "../lib/db";
 import * as api from "../lib/api";
 import { syncNow } from "../lib/sync";
@@ -28,7 +32,7 @@ import {
 import { startOfDay, type PlanContent, type PlanEntry } from "../lib/mealplan";
 import type { PantryItem } from "../lib/pantry";
 import { KITCHEN_META_ID, type Kitchen, type KitchenMeta, type SharedPlan, type SharedPlanContent } from "../lib/kitchen";
-import { unwrapPrivateKey, generateDEK } from "@lantern/core/crypto";
+import { unwrapPrivateKey, generateDEK, generateIdentityKeypair } from "@lantern/core/crypto";
 import { wrapDEKForRecipient, unwrapDEK, importPublicKeyB64 } from "@lantern/core/sharing";
 
 export type Status = "loading" | "setup" | "locked" | "unlocked";
@@ -64,6 +68,27 @@ export type Hearth = {
   deleteAccount: () => Promise<boolean>;
   changePassphrase: (current: string, next: string) => Promise<string | null>;
   syncNow: () => Promise<void>;
+
+  // Social recovery — guardians who can jointly help recover a forgotten
+  // passphrase. See @lantern/core/recovery.
+  guardianCircle: RecoveryCircleInfo | null;
+  loadGuardianCircle: () => Promise<void>;
+  setupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
+  recoveryStatus: RecoveryStatus; // a pending request on MY OWN account
+  refreshRecoveryStatus: () => Promise<void>;
+  cancelPendingRecovery: () => Promise<string | null>;
+  pendingGuardianRequests: PendingForMe[]; // requests I can approve, as a guardian
+  refreshPendingGuardianRequests: () => Promise<void>;
+  approveGuardianRequest: (requestId: string, codeword: string) => Promise<string | null>;
+  // Pre-unlock (the locked screen, before the key exists): sign in with
+  // connectSignIn first (it's safe to call with a local vault already present),
+  // then these.
+  startRecoveryRequest: () => Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  >;
+  pollRecoveryRequest: (requestId: string) => Promise<RecoveryRequestPoll | null>;
+  cancelRecoveryRequest: (requestId: string) => Promise<string | null>;
+  finishRecoveryRequest: (requestId: string, newPassphrase: string) => Promise<string | null>;
 
   setup: (passphrase: string) => Promise<void>;
   unlock: (passphrase: string) => Promise<boolean>;
@@ -143,6 +168,9 @@ export function useHearth(): Hearth {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [wearableBusy, setWearableBusy] = useState(false);
   const [wearableError, setWearableError] = useState<string | null>(null);
+  const [guardianCircle, setGuardianCircle] = useState<RecoveryCircleInfo | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(null);
+  const [pendingGuardianRequests, setPendingGuardianRequests] = useState<PendingForMe[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -395,6 +423,16 @@ export function useHearth(): Hearth {
     // If we've just come back from a vendor's consent page, finish that now that
     // the vault is open.
     void completePendingConnect(key);
+    // Pull-only recovery surfaces (no push/notify) — checked once per unlock,
+    // same spirit as runSync above. These three are declared further down this
+    // file, referenced here only inside the closure body (never in the deps
+    // array below), so there's no temporal-dead-zone issue at render time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadGuardianCircle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void refreshRecoveryStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void refreshPendingGuardianRequests();
   }, [loadAll, loadConnections, runSync, completePendingConnect]);
 
   const unlock = useCallback(async (passphrase: string): Promise<boolean> => {
@@ -458,6 +496,9 @@ export function useHearth(): Hearth {
     setConnections([]);
     identityRef.current = null;
     kitchenKeys.current.clear();
+    setGuardianCircle(null);
+    setRecoveryStatus(null);
+    setPendingGuardianRequests([]);
     setError(null);
     setStatus("locked");
   }, []);
@@ -594,6 +635,143 @@ export function useHearth(): Hearth {
     }
     return null;
   }, []);
+
+  // ---- social recovery: pull surfaces + the pre-unlock recovering flow ----
+  // (the setup side — setupGuardians/approveGuardianRequest, which need the
+  // identity keypair — lives just after ensureIdentity, below.)
+
+  const loadGuardianCircle = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      setGuardianCircle(await api.fetchCircle(token));
+    } catch {
+      setGuardianCircle(null); // none configured (404), or offline
+    }
+  }, []);
+
+  const refreshRecoveryStatus = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { request } = await api.fetchRecoveryStatus(token);
+      setRecoveryStatus(request);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  const cancelPendingRecovery = useCallback(async (): Promise<string | null> => {
+    const token = tokenRef.current;
+    const requestId = recoveryStatus?.requestId;
+    if (!token || !requestId) return "No pending request.";
+    try {
+      await api.cancelRecoveryRequest(token, requestId);
+      await refreshRecoveryStatus();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, [recoveryStatus, refreshRecoveryStatus]);
+
+  const refreshPendingGuardianRequests = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { requests } = await api.fetchPendingForMe(token);
+      setPendingGuardianRequests(requests);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  // Start a request: a fresh throwaway session keypair, saved locally in the
+  // clear (this device only — see db.ts's RecoverySession), then ask the
+  // server to open the request so guardians can see it. Sign in first with the
+  // existing connectSignIn (safe to call with a local vault already present).
+  const startRecoveryRequest = useCallback(async (): Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  > => {
+    const token = tokenRef.current;
+    if (!token) return "Sign in to your account first.";
+    try {
+      const session = await generateIdentityKeypair();
+      const publicKeyB64 = await exportPublicKeyB64(session.publicKey);
+      const privateKeyPkcs8B64 = await exportPrivateKeyB64(session.privateKey);
+      const result = await api.startRequest(token, publicKeyB64);
+      await db.saveRecoverySession({ id: "session", requestId: result.requestId, publicKeyB64, privateKeyPkcs8B64 });
+      return result;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't start recovery.";
+    }
+  }, []);
+
+  const pollRecoveryRequest = useCallback(async (requestId: string) => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    try {
+      return await api.fetchRecoveryRequest(token, requestId);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const cancelRecoveryRequest = useCallback(async (requestId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    try {
+      await api.cancelRecoveryRequest(token, requestId);
+      await db.clearRecoverySession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, []);
+
+  // Once the delay window has cleared server-side: reconstruct the DEK from
+  // the approved shares, set a fresh passphrase from it, unlock.
+  const finishRecoveryRequest = useCallback(
+    async (requestId: string, newPassphrase: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Not signed in.";
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      try {
+        const poll = await api.fetchRecoveryRequest(token, requestId);
+        if (!poll.recoveryWrappedDEK || !poll.approvalShares) {
+          return "Not ready yet — the delay window hasn't cleared.";
+        }
+        const session = await db.getRecoverySession();
+        if (!session || session.requestId !== requestId) {
+          return "This recovery attempt was started on a different device — finish it there.";
+        }
+        const sessionPriv = await importPrivateKeyB64(session.privateKeyPkcs8B64);
+        const dek = await reconstructDEK(sessionPriv, poll.approvalShares, poll.k, poll.recoveryWrappedDEK);
+
+        const vault = await db.getVault();
+        if (!vault) return "No log on this device.";
+        const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+        const updated = { ...vault, ...fresh };
+        await db.saveVault(updated);
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+
+        await finishUnlock(dek);
+
+        await api.completeRecoveryRequest(token, requestId).catch(() => {});
+        await db.clearRecoverySession();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't finish recovery — the shares didn't reconstruct your key.";
+      }
+    },
+    [finishUnlock]
+  );
 
   // ---- writes: encrypt -> update memory -> persist -----------------------
 
@@ -811,6 +989,65 @@ export function useHearth(): Hearth {
     }
   }, []);
 
+  // Configure (or rotate) K-of-N guardians. Each guardian's codeword must have
+  // been told to them OUT LOUD, never typed anywhere but here. Rotating cancels
+  // any recovery request already in flight (its shares wrap the OLD recovery
+  // key). Returns an error message, or null on success.
+  const setupGuardians = useCallback(
+    async (guardians: { email: string; codeword: string }[], k: number, delayMs: number): Promise<string | null> => {
+      const token = tokenRef.current;
+      const dek = keyRef.current;
+      if (!token || !dek) return "Unlock the log first.";
+      if (k < 2 || k > guardians.length) return "Pick at least 2, and no more than the number of guardians.";
+      try {
+        const resolved = await Promise.all(
+          guardians.map(async (g) => {
+            const em = g.email.trim().toLowerCase();
+            const { identityPublicKey } = await api.fetchKeys(token, em);
+            if (!identityPublicKey) throw new Error(`${em} doesn't have an account yet.`);
+            return { userId: em, identityPublicKey, codeword: g.codeword };
+          })
+        );
+        const circle = await createRecoveryCircle(dek, resolved, { k, n: resolved.length, delayMs });
+        const entries: GuardianEntry[] = circle.shares.map((s) => ({
+          email: s.userId,
+          shareIndex: s.shareIndex,
+          ephemeralPub: s.ephemeralPub,
+          wrapped: s.wrapped,
+          codewordSalt: s.codewordSalt,
+          codewordIterations: s.codewordIterations,
+        }));
+        await api.setCircle(token, k, resolved.length, delayMs, circle.recoveryWrappedDEK, entries);
+        await loadGuardianCircle();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't set up guardians.";
+      }
+    },
+    [loadGuardianCircle]
+  );
+
+  // Help a friend: unwrap my share (needs my identity key AND the codeword
+  // they told me out loud), re-wrap it to their device, submit.
+  const approveGuardianRequest = useCallback(
+    async (requestId: string, codeword: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const entry = pendingGuardianRequests.find((r) => r.requestId === requestId);
+      if (!token || !entry) return "That request isn't open anymore.";
+      const kp = await ensureIdentity();
+      if (!kp) return "Unlock the log first.";
+      try {
+        const wrappedShareForRequester = await approveAsGuardian(kp.privateKey, entry.myShare, codeword, entry.sessionPub);
+        await api.approveRecovery(token, requestId, wrappedShareForRequester);
+        await refreshPendingGuardianRequests();
+        return null;
+      } catch {
+        return "That codeword isn't right.";
+      }
+    },
+    [pendingGuardianRequests, refreshPendingGuardianRequests, ensureIdentity]
+  );
+
   const syncKitchens = useCallback(async () => {
     const token = tokenRef.current;
     if (!token) return;
@@ -993,5 +1230,9 @@ export function useHearth(): Hearth {
     logMetric, removeMetric,
     connections, wearableBusy, wearableError, canConnectWearable: fitbit.configured(),
     connectWearable, importWearable: importFrom, disconnectWearable,
+    guardianCircle, loadGuardianCircle, setupGuardians,
+    recoveryStatus, refreshRecoveryStatus, cancelPendingRecovery,
+    pendingGuardianRequests, refreshPendingGuardianRequests, approveGuardianRequest,
+    startRecoveryRequest, pollRecoveryRequest, cancelRecoveryRequest, finishRecoveryRequest,
   };
 }

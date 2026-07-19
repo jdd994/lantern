@@ -220,6 +220,33 @@ export function HelpSheet({
           </section>
 
           <section>
+            <h3>Guardians</h3>
+            <p>
+              A handful of people you trust can jointly help you back in if you ever forget your
+              passphrase — without us, or any single one of them, ever holding the key. Set a
+              number like <b>3 of 5</b>: that many guardians have to agree before recovery can
+              finish, and no smaller group can do it alone.
+            </p>
+            <p>
+              Each guardian also gets a <b>codeword</b> from you — said <b>out loud, in person or by
+              phone, never typed or sent</b>. It's a second lock: even someone who took over your
+              account can't finish recovery without a guardian's word too. Make it a few unrelated
+              words, not one.
+            </p>
+          </section>
+
+          <section>
+            <h3>Recovering your passphrase</h3>
+            <p>
+              From the lock screen, sign in and ask your guardians. Once enough have approved,
+              there's a waiting period (a day or more, depending on your setting) before it
+              completes — plenty of time for you, or any other device still signed in, to cancel
+              it if it wasn't you. This only works on the device you started it from, so if you
+              lose that device mid-recovery, start again on the new one.
+            </p>
+          </section>
+
+          <section>
             <h3>Keeping it safe</h3>
             <p>
               <b>Back up</b> saves an encrypted file you can restore later or on another device.{" "}

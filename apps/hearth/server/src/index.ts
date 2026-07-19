@@ -11,4 +11,8 @@ export default createServer({
   // member's key wrapped to their own public key, and never a plaintext ingredient.
   // Tables: packages/server/schema.sharing.sql (applied to the hearth D1).
   sharing: true,
+  // /recovery/* — guardian-based social recovery. Requires schema.recovery.sql
+  // applied to this app's D1 (see packages/server/schema.recovery.sql).
+  recovery: true,
+  recoveryMinDelayMs: 24 * 3_600_000,
 });

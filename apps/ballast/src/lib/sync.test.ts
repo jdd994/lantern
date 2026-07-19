@@ -9,6 +9,7 @@ import "fake-indexeddb/auto";
 import { openDB } from "idb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CipherBlob } from "./crypto";
+import { DB_VERSION } from "./db";
 
 // ---- the fake server (shared across "devices") ---------------------------
 
@@ -41,7 +42,7 @@ const blob = (n: number): CipherBlob => ({ iv: [n], data: [n, n] });
 // A fresh device = the same real DB with every synced store (and the cursor)
 // cleared. The module-level db handle in db.ts sees the clears immediately.
 async function wipeLocal() {
-  const raw = await openDB("ballast", 2);
+  const raw = await openDB("ballast", DB_VERSION);
   for (const s of ["accounts", "snapshots", "transactions", "goals", "sync"]) {
     if (raw.objectStoreNames.contains(s)) await raw.clear(s);
   }
