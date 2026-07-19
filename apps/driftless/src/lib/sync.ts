@@ -5,28 +5,43 @@
 import { createSyncEngine, createMediaSync, type SyncRecord } from "@lantern/core/sync";
 import { pushChanges, pullChanges, uploadMedia } from "./api";
 import {
-  dirtyEntries, dirtyStrands, dirtyMedia,
-  clearEntryDirty, clearStrandDirty, clearMediaDirty,
-  getStoredEntry, getStoredStrand, putStoredEntry, putStoredStrand,
+  dirtyEntries, dirtyStrands, dirtyDayNotes, dirtyMedia,
+  clearEntryDirty, clearStrandDirty, clearDayNoteDirty, clearMediaDirty,
+  getStoredEntry, getStoredStrand, getStoredDayNote,
+  putStoredEntry, putStoredStrand, putStoredDayNote,
   getSyncState, saveSyncState,
-  type StoredEntry, type StoredStrand,
+  type StoredEntry, type StoredStrand, type StoredDayNote,
 } from "./db";
 
-type EntryOrStrand = StoredEntry | StoredStrand;
+type SyncedRecord = StoredEntry | StoredStrand | StoredDayNote;
 
-const engine = createSyncEngine<EntryOrStrand>({
+const engine = createSyncEngine<SyncedRecord>({
   async collectDirty() {
-    const [entries, strands] = await Promise.all([dirtyEntries(), dirtyStrands()]);
+    const [entries, strands, dayNotes] = await Promise.all([
+      dirtyEntries(),
+      dirtyStrands(),
+      dirtyDayNotes(),
+    ]);
     return [
       ...entries.map((rec) => ({ kind: "entry", rec })),
       ...strands.map((rec) => ({ kind: "strand", rec })),
+      ...dayNotes.map((rec) => ({ kind: "dayNote", rec })),
     ];
   },
-  getByKind: (kind, id) => (kind === "entry" ? getStoredEntry(id) : getStoredStrand(id)),
+  getByKind: (kind, id) =>
+    kind === "entry" ? getStoredEntry(id) : kind === "strand" ? getStoredStrand(id) : getStoredDayNote(id),
   putByKind: (kind, rec) =>
-    kind === "entry" ? putStoredEntry(rec as StoredEntry) : putStoredStrand(rec as StoredStrand),
+    kind === "entry"
+      ? putStoredEntry(rec as StoredEntry)
+      : kind === "strand"
+        ? putStoredStrand(rec as StoredStrand)
+        : putStoredDayNote(rec as StoredDayNote),
   clearDirty: (kind, id, updatedAt) =>
-    kind === "entry" ? clearEntryDirty(id, updatedAt) : clearStrandDirty(id, updatedAt),
+    kind === "entry"
+      ? clearEntryDirty(id, updatedAt)
+      : kind === "strand"
+        ? clearStrandDirty(id, updatedAt)
+        : clearDayNoteDirty(id, updatedAt),
   async getCursor() {
     return (await getSyncState())?.cursor ?? 0;
   },
@@ -35,7 +50,7 @@ const engine = createSyncEngine<EntryOrStrand>({
     await saveSyncState({ ...(st ?? { id: "state" }), id: "state", cursor, token });
   },
   metaFor: () => undefined,
-  fromRecord: (rec: SyncRecord): EntryOrStrand => ({
+  fromRecord: (rec: SyncRecord): SyncedRecord => ({
     id: rec.id,
     createdAt: rec.createdAt,
     updatedAt: rec.updatedAt,
