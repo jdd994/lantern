@@ -69,7 +69,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
-  const [reading, setReading] = useState<{ entries: Entry[]; label: string } | null>(null);
+  const [reading, setReading] = useState<{ entries: Entry[]; label: string; note?: string } | null>(null);
   const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const toastTimer = useRef<number | null>(null);
   const joiningRef = useRef(false);
@@ -369,7 +369,9 @@ export default function App() {
           <Stream
             entries={visible}
             totalCount={j.entries.length}
-            onReadDay={(entries, label) => setReading({ entries, label })}
+            onReadDay={(entries, label, dk) => setReading({ entries, label, note: j.dayNotes[dk]?.text })}
+            dayNotes={j.dayNotes}
+            onSetDayNote={j.setDayNote}
             onSave={j.updateEntry}
             onDelete={handleDelete}
             onAnchor={j.setAnchor}
@@ -417,6 +419,7 @@ export default function App() {
           onSaveEntry={j.updateEntry}
           onDeleteEntry={handleDelete}
           onAnchor={j.setAnchor}
+          onSetHeading={j.setHeading}
           onExport={handleExportStrand}
           onAttachMedia={j.attachMedia}
           onRemoveMedia={j.removeMedia}
@@ -452,6 +455,7 @@ export default function App() {
         <Reader
           title={reading.label}
           subtitle={reading.entries.length + (reading.entries.length === 1 ? " thought" : " thoughts")}
+          note={reading.note}
           entries={reading.entries}
           onClose={() => setReading(null)}
         />

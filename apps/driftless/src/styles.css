@@ -381,6 +381,42 @@ kbd {
 }
 .dayhead .rule { flex: 1; height: 1px; background: var(--line-soft); }
 
+/* A light per-day note (STRANDS_PLAN.md §1) — a quiet pencil in the day
+   header, and the note itself reads like a caption above the day's thoughts. */
+.daynote-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.daynote-btn:hover { color: var(--amber); background: var(--amber-dim); }
+.daynote-input {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 8px;
+  flex: none;
+  width: 220px;
+}
+.daynote {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: -6px 0 12px;
+}
+
 .entry { position: relative; padding: 4px 0 18px var(--rail-x); min-height: 30px; }
 .entry::before {
   content: "";
@@ -1069,12 +1105,50 @@ kbd {
   color: var(--ink);
   margin: 0 0 4px;
 }
+.reader-note {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin: 0 0 6px;
+}
 .reader-sub {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--ink-faint);
   margin: 0;
 }
+
+/* The table of contents that falls out of a strand's headings, and the
+   section headings themselves — chapters, without a new data shape. */
+.reader-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 34px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+}
+.reader-toc-item {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.reader-toc-item:hover { color: var(--amber); }
+.reader-section-heading {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--ink);
+  margin: 44px 0 18px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
+}
+.reader-section-heading:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* Each fragment flows into the next; a faint time marker gives the day its
    rhythm without breaking the read. */
@@ -1258,9 +1332,55 @@ kbd {
 .strand-piece-ctl { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; flex: none; }
 .strand-piece-ctl .act { font-size: 14px; line-height: 1; padding: 3px; color: var(--ink-faint); }
 .strand-piece-ctl .act:disabled { opacity: 0.3; cursor: default; }
+.strand-piece-body { flex: 1; min-width: 0; }
 /* Inside a strand the time-rail isn't meaningful — show just the piece. */
-.strand-piece .entry { flex: 1; padding-left: 6px; min-width: 0; }
+.strand-piece .entry { padding-left: 6px; min-width: 0; }
 .strand-piece .entry::before, .strand-piece .entry::after, .strand-piece .entry .time { display: none; }
+
+/* Flagging a piece as a section heading (STRANDS_PLAN.md §2) lives on the
+   piece itself — a quiet link that turns into a badge — rather than an
+   unlabeled control-rail button, so the effect and the toggle sit together. */
+.heading-link {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 6px 2px 0;
+  margin-left: 6px;
+  transition: color 0.15s;
+}
+.heading-link:hover { color: var(--amber); }
+.heading-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 6px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.heading-badge:hover { border-color: rgba(224, 163, 62, 0.4); }
+.heading-badge-x { opacity: 0.7; }
+
+/* A piece flagged as a section heading reads like a chapter title in the
+   arrange list too, so it's obvious at a glance. */
+.strand-piece-heading .entry textarea,
+.strand-piece-heading .entry .body {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+}
 
 .strand-compose { margin: 14px 2px 0; }
 .strand-compose .edit { min-height: 70px; }

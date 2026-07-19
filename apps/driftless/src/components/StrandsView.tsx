@@ -3,7 +3,7 @@
 // pull in thoughts you've captured, write new pieces in place (each becomes an
 // ordinary thought too), arrange the order, and read the whole as one draft.
 import { useMemo, useRef, useState } from "react";
-import { strandEntries, type Entry, type Strand, type Anchor, type MediaConfig } from "../lib/journal";
+import { strandEntries, readAsOne, type Entry, type Strand, type Anchor, type MediaConfig } from "../lib/journal";
 import { EntryItem, MediaThumb } from "./EntryItem";
 
 type Props = {
@@ -20,6 +20,7 @@ type Props = {
   onSaveEntry: (id: string, text: string) => void;
   onDeleteEntry: (id: string) => void;
   onAnchor: (id: string, anchor: Anchor | null) => void;
+  onSetHeading: (id: string, heading: boolean) => void;
   onExport: (strand: Strand, ordered: Entry[]) => void;
   onAttachMedia: (entryId: string, file: File) => void;
   onRemoveMedia: (entryId: string, mediaId: string) => void;
@@ -106,6 +107,7 @@ function StrandDetail({
   onSaveEntry,
   onDeleteEntry,
   onAnchor,
+  onSetHeading,
   onExport,
   onAttachMedia,
   onRemoveMedia,
@@ -119,6 +121,8 @@ function StrandDetail({
   const photoRef = useRef<HTMLInputElement>(null);
 
   const ordered = strandEntries(strand.entryIds, byId);
+  const { sections } = readAsOne(ordered, { headings: true });
+  const toc = sections.filter((s) => s.heading).map((s) => s.heading!);
 
   function move(index: number, dir: -1 | 1) {
     const ids = [...strand.entryIds];
@@ -188,29 +192,49 @@ function StrandDetail({
           {ordered.length === 0 ? (
             <p className="strand-read-empty">Nothing here yet.</p>
           ) : (
-            ordered.map((e) => (
-              <div key={e.id} className="read-piece">
-                {e.text && <p>{e.text}</p>}
-                {e.mediaIds && e.mediaIds.length > 0 && (
-                  <div className="media-grid">
-                    {e.mediaIds.map((mid) => (
-                      <MediaThumb
-                        key={mid}
-                        mediaId={mid}
-                        getUrl={getMediaUrl}
-                        config={e.mediaConfig?.[mid]}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
+            <>
+              {toc.length > 1 && (
+                <nav className="reader-toc" aria-label="Sections">
+                  {toc.map((h) => (
+                    <a key={h.id} href={`#strand-section-${h.id}`} className="reader-toc-item">
+                      {h.text || "Untitled section"}
+                    </a>
+                  ))}
+                </nav>
+              )}
+              {sections.map((section, i) => (
+                <div key={section.heading?.id ?? `section-${i}`}>
+                  {section.heading && (
+                    <h3 className="reader-section-heading" id={`strand-section-${section.heading.id}`}>
+                      {section.heading.text || "Untitled section"}
+                    </h3>
+                  )}
+                  {section.body.map((e) => (
+                    <div key={e.id} className="read-piece">
+                      {e.text && <p>{e.text}</p>}
+                      {e.mediaIds && e.mediaIds.length > 0 && (
+                        <div className="media-grid">
+                          {e.mediaIds.map((mid) => (
+                            <MediaThumb
+                              key={mid}
+                              mediaId={mid}
+                              getUrl={getMediaUrl}
+                              config={e.mediaConfig?.[mid]}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </>
           )}
         </div>
       ) : (
         <>
           {ordered.map((e, i) => (
-            <div className="strand-piece" key={e.id}>
+            <div className={e.heading ? "strand-piece strand-piece-heading" : "strand-piece"} key={e.id}>
               <div className="strand-piece-ctl">
                 <button className="act" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
                   ↑
@@ -231,18 +255,33 @@ function StrandDetail({
                   ✕
                 </button>
               </div>
-              <EntryItem
-                entry={e}
-                recent={false}
-                displayTime=""
-                onSave={onSaveEntry}
-                onDelete={onDeleteEntry}
-                onAnchor={onAnchor}
-                onAttachMedia={onAttachMedia}
-                onRemoveMedia={onRemoveMedia}
-                onSetMediaConfig={onSetMediaConfig}
-                getMediaUrl={getMediaUrl}
-              />
+              <div className="strand-piece-body">
+                {e.heading ? (
+                  <button
+                    className="heading-badge"
+                    onClick={() => onSetHeading(e.id, false)}
+                    title="Unflag as a section heading"
+                  >
+                    Heading <span className="heading-badge-x">✕</span>
+                  </button>
+                ) : (
+                  <button className="heading-link" onClick={() => onSetHeading(e.id, true)}>
+                    + Make this a heading
+                  </button>
+                )}
+                <EntryItem
+                  entry={e}
+                  recent={false}
+                  displayTime=""
+                  onSave={onSaveEntry}
+                  onDelete={onDeleteEntry}
+                  onAnchor={onAnchor}
+                  onAttachMedia={onAttachMedia}
+                  onRemoveMedia={onRemoveMedia}
+                  onSetMediaConfig={onSetMediaConfig}
+                  getMediaUrl={getMediaUrl}
+                />
+              </div>
             </div>
           ))}
 

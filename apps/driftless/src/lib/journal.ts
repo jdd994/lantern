@@ -23,6 +23,10 @@ export type Entry = {
   anchor?: Anchor;
   mediaIds?: string[]; // attached images (stored encrypted in the media store)
   mediaConfig?: Record<string, MediaConfig>; // per-photo size/tilt
+  // A piece flagged as a section heading within a strand — see STRANDS_PLAN.md
+  // §2. Everything until the next heading reads as that section's body. Only
+  // meaningful inside a Strand; ignored in the Stream/Timeline.
+  heading?: boolean;
 };
 
 // A gentle, stable default tilt derived from the media id, so polaroids look
@@ -55,6 +59,7 @@ type Payload = {
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
   author?: string; // shared pieces only: the user id who wrote it
+  heading?: boolean; // private entries only: flagged as a strand section heading
 };
 
 export function encodePayload(
@@ -62,13 +67,15 @@ export function encodePayload(
   anchor?: Anchor,
   mediaIds?: string[],
   mediaConfig?: Record<string, MediaConfig>,
-  author?: string
+  author?: string,
+  heading?: boolean
 ): string {
   const p: Payload = { __driftless: 1, text };
   if (hasAnchor(anchor)) p.anchor = anchor;
   if (mediaIds && mediaIds.length) p.mediaIds = mediaIds;
   if (mediaConfig && Object.keys(mediaConfig).length) p.mediaConfig = mediaConfig;
   if (author) p.author = author;
+  if (heading) p.heading = true;
   return JSON.stringify(p);
 }
 
@@ -78,6 +85,7 @@ export function decodePayload(decrypted: string): {
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
   author?: string;
+  heading?: boolean;
 } {
   try {
     const obj = JSON.parse(decrypted) as Payload;
@@ -89,6 +97,7 @@ export function decodePayload(decrypted: string): {
         mediaConfig:
           obj.mediaConfig && typeof obj.mediaConfig === "object" ? obj.mediaConfig : undefined,
         author: typeof obj.author === "string" ? obj.author : undefined,
+        heading: obj.heading === true ? true : undefined,
       };
     }
   } catch {
@@ -349,6 +358,57 @@ export function strandEntries(entryIds: string[], byId: Map<string, Entry>): Ent
     if (e) out.push(e);
   }
   return out;
+}
+
+// ---- The reading engine (STRANDS_PLAN.md §3) -----------------------------
+// Render an ordered sequence of fragments as one continuous, flowing piece,
+// with optional headings breaking it into sections. One primitive, several
+// lenses: a day read as one, a chaptered strand, a plain strand (all headings
+// off — the whole thing is a single, heading-less section).
+
+export type ReadSection = { heading?: Entry; body: Entry[] };
+
+export function readAsOne(
+  entries: Entry[],
+  opts?: { headings?: boolean }
+): { sections: ReadSection[] } {
+  if (!opts?.headings) return { sections: [{ body: entries }] };
+
+  const sections: ReadSection[] = [];
+  let current: ReadSection | null = null;
+  for (const e of entries) {
+    if (e.heading) {
+      current = { heading: e, body: [] };
+      sections.push(current);
+      continue;
+    }
+    if (!current) {
+      current = { body: [] };
+      sections.push(current);
+    }
+    current.body.push(e);
+  }
+  return { sections };
+}
+
+// ---- Day notes ------------------------------------------------------------
+// The one authored bit worth storing about a day (STRANDS_PLAN.md §1): a
+// light title or line of reflection, keyed by dayKey — never a full Strand.
+
+export type DayNote = { key: string; text: string; updatedAt: number };
+
+export function encodeDayNote(text: string): string {
+  return JSON.stringify({ __daynote: 1, text });
+}
+
+export function decodeDayNote(decrypted: string): { text: string } {
+  try {
+    const o = JSON.parse(decrypted);
+    if (o && o.__daynote === 1 && typeof o.text === "string") return { text: o.text };
+  } catch {
+    // fall through
+  }
+  return { text: "" };
 }
 
 // The "lived time" view: anchored thoughts arranged chronologically. Dated
