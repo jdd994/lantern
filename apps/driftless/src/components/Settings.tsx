@@ -4,6 +4,7 @@
 // see each mood even while a different one is active.
 import { useEffect, useState } from "react";
 import type { Mood } from "../hooks/useSettings";
+import type { RecoveryCircleInfo, RecoveryStatus, PendingForMe } from "../lib/api";
 
 type MoodInfo = { id: Mood; name: string; desc: string; bg: string; ink: string; amber: string };
 
@@ -26,7 +27,232 @@ type Props = {
   onDeleteAccount: () => Promise<string | null>;
   onSyncNow: () => void;
   onChangePassphrase: (current: string, next: string) => Promise<string | null>;
+  guardianCircle: RecoveryCircleInfo | null;
+  onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
+  recoveryStatus: RecoveryStatus;
+  onCancelPendingRecovery: () => Promise<string | null>;
+  pendingGuardianRequests: PendingForMe[];
+  onApproveGuardianRequest: (requestId: string, codeword: string) => Promise<string | null>;
 };
+
+const DELAY_OPTIONS = [
+  { label: "24 hours", ms: 24 * 3_600_000 },
+  { label: "48 hours", ms: 48 * 3_600_000 },
+  { label: "4 days", ms: 96 * 3_600_000 },
+  { label: "1 week", ms: 7 * 24 * 3_600_000 },
+];
+
+// Guardians who can jointly help recover a forgotten passphrase — see
+// HelpSheet's "Guardians" section for the plain-language explanation and why
+// the codeword must never be typed anywhere but the setup form below and the
+// guardian's own approval, never sent in a message or email.
+function GuardiansSection({
+  guardianCircle,
+  onSetupGuardians,
+  recoveryStatus,
+  onCancelPendingRecovery,
+}: Pick<Props, "guardianCircle" | "onSetupGuardians" | "recoveryStatus" | "onCancelPendingRecovery">) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<{ email: string; codeword: string }[]>([
+    { email: "", codeword: "" },
+    { email: "", codeword: "" },
+    { email: "", codeword: "" },
+  ]);
+  const [k, setK] = useState(2);
+  const [delayMs, setDelayMs] = useState(DELAY_OPTIONS[1].ms);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  function updateRow(i: number, field: "email" | "codeword", value: string) {
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+
+  async function submit() {
+    setError(null);
+    const guardians = rows.filter((r) => r.email.trim() && r.codeword.trim());
+    if (guardians.length < 2) return setError("Add at least 2 guardians, each with a codeword.");
+    if (k < 2 || k > guardians.length) return setError("Choose how many must approve — at least 2, at most the number of guardians.");
+    setBusy(true);
+    const err = await onSetupGuardians(guardians, k, delayMs);
+    setBusy(false);
+    if (err) return setError(err);
+    setOpen(false);
+    setDone(true);
+    setTimeout(() => setDone(false), 4000);
+  }
+
+  return (
+    <section>
+      <h3>Guardians</h3>
+      {recoveryStatus && (
+        <div className="danger-zone">
+          <p className="lock-error">
+            Someone started recovering this account {new Date(recoveryStatus.createdAt).toLocaleString()} —{" "}
+            {recoveryStatus.approvals} of {recoveryStatus.k} guardians have approved. If this wasn't you, cancel it now.
+          </p>
+          <button
+            className="ghost-btn danger"
+            disabled={cancelBusy}
+            onClick={async () => {
+              setCancelBusy(true);
+              await onCancelPendingRecovery();
+              setCancelBusy(false);
+            }}
+          >
+            {cancelBusy ? "Cancelling…" : "This wasn't me — cancel it"}
+          </button>
+        </div>
+      )}
+      {done ? (
+        <p className="account-status">Guardians are set. Ask each one to expect a request someday, never today.</p>
+      ) : !open ? (
+        <>
+          {guardianCircle ? (
+            <p className="account-status">
+              {guardianCircle.k} of {guardianCircle.n} guardians can recover this account:{" "}
+              {guardianCircle.guardians.map((g) => g.email).join(", ")}.
+            </p>
+          ) : (
+            <p className="account-blurb">
+              If you ever forget your passphrase, trusted guardians can jointly help you back in —
+              without us, or any one of them alone, ever holding the key. See Help for how it works.
+            </p>
+          )}
+          <button className="ghost-btn" onClick={() => setOpen(true)}>
+            {guardianCircle ? "Change guardians" : "Set up guardians"}
+          </button>
+        </>
+      ) : (
+        <div className="account-form">
+          <p className="account-hint">
+            Tell each guardian their codeword <b>out loud</b> — in person or by phone, never by
+            message or email. It's the second lock; we never see it either.
+          </p>
+          {rows.map((row, i) => (
+            <div className="edit-foot" key={i}>
+              <input
+                className="anchor-input"
+                type="email"
+                placeholder="Guardian's email"
+                value={row.email}
+                onChange={(e) => updateRow(i, "email", e.target.value)}
+              />
+              <input
+                className="anchor-input"
+                type="text"
+                placeholder="Codeword (told out loud)"
+                value={row.codeword}
+                onChange={(e) => updateRow(i, "codeword", e.target.value)}
+              />
+            </div>
+          ))}
+          <button className="linklike" onClick={() => setRows((r) => [...r, { email: "", codeword: "" }])}>
+            + Add another guardian
+          </button>
+          <div className="edit-foot">
+            <label>
+              How many must approve:{" "}
+              <select value={k} onChange={(e) => setK(Number(e.target.value))}>
+                {rows.map((_, i) => (
+                  <option key={i} value={i + 1} disabled={i + 1 < 2}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="edit-foot">
+            <label>
+              Waiting period before it completes:{" "}
+              <select value={delayMs} onChange={(e) => setDelayMs(Number(e.target.value))}>
+                {DELAY_OPTIONS.map((o) => (
+                  <option key={o.ms} value={o.ms}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {error && <p className="lock-error">{error}</p>}
+          <div className="edit-foot">
+            <button className="ghost-btn" onClick={() => { setOpen(false); setError(null); }}>
+              Cancel
+            </button>
+            <button className="ghost-btn" disabled={busy} onClick={submit}>
+              {busy ? "Saving…" : "Save guardians"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// "Help a friend" — approving someone else's recovery request. Low-key on
+// purpose: only shows up when there's actually something to do, no badge, no
+// count elsewhere in the app.
+function GuardianApprovalsSection({
+  pendingGuardianRequests,
+  onApproveGuardianRequest,
+}: Pick<Props, "pendingGuardianRequests" | "onApproveGuardianRequest">) {
+  const [codewords, setCodewords] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Tracked separately from pendingGuardianRequests: approving a request makes
+  // the server stop returning it (see GET /recovery/pending-for-me's "haven't
+  // approved yet" filter), which refreshes the list out from under this
+  // component the instant approval succeeds. Without its own memory of what
+  // it just did, the "Approved for X" confirmation would never be visible —
+  // the section would just silently lose that row.
+  const [done, setDone] = useState<{ requestId: string; ownerEmail: string }[]>([]);
+
+  if (pendingGuardianRequests.length === 0 && done.length === 0) return null;
+
+  async function approve(requestId: string, ownerEmail: string) {
+    setErrors((e) => ({ ...e, [requestId]: "" }));
+    setBusyId(requestId);
+    const err = await onApproveGuardianRequest(requestId, codewords[requestId] ?? "");
+    setBusyId(null);
+    if (err) setErrors((e) => ({ ...e, [requestId]: err }));
+    else setDone((d) => [...d, { requestId, ownerEmail }]);
+  }
+
+  return (
+    <section>
+      <h3>Help a friend</h3>
+      {done.map((d) => (
+        <p key={d.requestId} className="account-status">Approved for {d.ownerEmail}.</p>
+      ))}
+      {pendingGuardianRequests.map((r) => (
+          <div key={r.requestId} className="account-form">
+            <p className="account-blurb">
+              {r.ownerEmail} is trying to recover their account ({r.k} of {r.n} guardians needed).
+              Ask them for their codeword, out loud, before approving.
+            </p>
+            <input
+              className="anchor-input"
+              type="text"
+              placeholder="Their codeword"
+              value={codewords[r.requestId] ?? ""}
+              onChange={(e) => setCodewords((c) => ({ ...c, [r.requestId]: e.target.value }))}
+            />
+            {errors[r.requestId] && <p className="lock-error">{errors[r.requestId]}</p>}
+            <div className="edit-foot">
+              <button
+                className="ghost-btn"
+                disabled={busyId === r.requestId}
+                onClick={() => approve(r.requestId, r.ownerEmail)}
+              >
+                {busyId === r.requestId ? "Approving…" : "Approve"}
+              </button>
+            </div>
+          </div>
+      ))}
+    </section>
+  );
+}
 
 // Change the passphrase (only while unlocked). Thanks to envelope encryption this
 // is instant and doesn't re-encrypt anything; the copy explains it won't lock out
@@ -250,6 +476,12 @@ export function Settings({
   onDeleteAccount,
   onSyncNow,
   onChangePassphrase,
+  guardianCircle,
+  onSetupGuardians,
+  recoveryStatus,
+  onCancelPendingRecovery,
+  pendingGuardianRequests,
+  onApproveGuardianRequest,
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -322,6 +554,18 @@ export function Settings({
           />
 
           <ChangePassphraseSection onChangePassphrase={onChangePassphrase} />
+
+          <GuardiansSection
+            guardianCircle={guardianCircle}
+            onSetupGuardians={onSetupGuardians}
+            recoveryStatus={recoveryStatus}
+            onCancelPendingRecovery={onCancelPendingRecovery}
+          />
+
+          <GuardianApprovalsSection
+            pendingGuardianRequests={pendingGuardianRequests}
+            onApproveGuardianRequest={onApproveGuardianRequest}
+          />
         </div>
       </div>
     </div>

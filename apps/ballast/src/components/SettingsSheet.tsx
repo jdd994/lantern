@@ -42,7 +42,8 @@ export function SettingsSheet({
         </p>
         <p className="hint">
           The trade: your passphrase never leaves this device, so there's no reset. Forget it and
-          nobody — not us, not anyone — can get your data back. Keep it somewhere safe.
+          nobody — not us, not anyone — can get your data back. Keep it somewhere safe — or set up
+          Guardians (in Sync) so a few people you trust can jointly help you back in.
         </p>
       </section>
 

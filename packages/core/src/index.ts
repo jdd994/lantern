@@ -9,5 +9,7 @@ export * from "./api";
 export * from "./vault";
 export * from "./sharing";
 export * from "./sharing-api";
+export * from "./recovery";
+export * from "./recovery-api";
 export * from "./vibe";
 export * from "./connect";

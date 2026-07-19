@@ -14,7 +14,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob } from "./crypto";
 
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export type VaultMeta = {
   id: "vault";
@@ -85,6 +85,19 @@ export type StoredMedia = {
   dirty: boolean;
 };
 
+// A recovery attempt's throwaway session keypair — generated fresh per
+// attempt, lives here in the clear for its duration, and is what guardians'
+// approved shares get wrapped to (never the account's real identity key,
+// which is itself locked). Same risk tier as SyncState.token: plaintext-local,
+// device-scoped, useless alone. This is also why recovery only completes on
+// the SAME device it was started from — see @lantern/core/recovery.
+export type RecoverySession = {
+  id: "session";
+  requestId: string;
+  publicKeyB64: string;
+  privateKeyPkcs8B64: string;
+};
+
 interface DriftlessDB extends DBSchema {
   vault: { key: string; value: VaultMeta };
   entries: { key: string; value: StoredEntry; indexes: { byCreated: number } };
@@ -92,6 +105,7 @@ interface DriftlessDB extends DBSchema {
   device: { key: string; value: DeviceEnrollment };
   strands: { key: string; value: StoredStrand };
   media: { key: string; value: StoredMedia };
+  recoverySession: { key: string; value: RecoverySession };
 }
 
 let dbPromise: Promise<IDBPDatabase<DriftlessDB>> | null = null;
@@ -134,6 +148,10 @@ function db() {
         // v5: media (encrypted image bytes, local-first).
         if (oldVersion < 5) {
           database.createObjectStore("media", { keyPath: "id" });
+        }
+        // v6: social recovery's throwaway per-attempt session keypair.
+        if (oldVersion < 6) {
+          database.createObjectStore("recoverySession", { keyPath: "id" });
         }
       },
     });
@@ -234,6 +252,18 @@ export async function clearMediaDirty(id: string): Promise<void> {
   const d = await db();
   const m = await d.get("media", id);
   if (m && m.dirty) await d.put("media", { ...m, dirty: false });
+}
+
+export async function getRecoverySession(): Promise<RecoverySession | undefined> {
+  return (await db()).get("recoverySession", "session");
+}
+
+export async function saveRecoverySession(session: RecoverySession): Promise<void> {
+  await (await db()).put("recoverySession", session);
+}
+
+export async function clearRecoverySession(): Promise<void> {
+  await (await db()).delete("recoverySession", "session");
 }
 
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {

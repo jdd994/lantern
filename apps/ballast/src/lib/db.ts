@@ -30,7 +30,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob, WrappedKey } from "./crypto";
 
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export type VaultMeta = {
   id: "vault";
@@ -129,6 +129,16 @@ export type DeviceEnrollment = {
   wrapped: CipherBlob;
 };
 
+// A recovery attempt's throwaway session keypair — see Driftless/Hearth's db.ts
+// for the full rationale. Plaintext-local, device-scoped, useless alone; this
+// is why a recovery attempt only completes on the device it started on.
+export type RecoverySession = {
+  id: "session";
+  requestId: string;
+  publicKeyB64: string;
+  privateKeyPkcs8B64: string;
+};
+
 interface BallastDB extends DBSchema {
   vault: { key: string; value: VaultMeta };
   accounts: { key: string; value: StoredAccount };
@@ -143,6 +153,7 @@ interface BallastDB extends DBSchema {
   goals: { key: string; value: StoredGoal };
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
+  recoverySession: { key: string; value: RecoverySession };
 }
 
 let dbPromise: Promise<IDBPDatabase<BallastDB>> | null = null;
@@ -168,6 +179,10 @@ function db() {
           txns.createIndex("byTime", "at");
           database.createObjectStore("media", { keyPath: "id" });
           database.createObjectStore("memory", { keyPath: "id" });
+        }
+        // v3: social recovery's throwaway per-attempt session keypair.
+        if (oldVersion < 3) {
+          database.createObjectStore("recoverySession", { keyPath: "id" });
         }
       },
     });
@@ -251,6 +266,17 @@ export async function getStoredMemory(): Promise<StoredMemory | undefined> {
 
 export async function saveStoredMemory(m: StoredMemory): Promise<void> {
   await (await db()).put("memory", m);
+}
+
+// ---- social recovery ------------------------------------------------------
+export async function getRecoverySession(): Promise<RecoverySession | undefined> {
+  return (await db()).get("recoverySession", "session");
+}
+export async function saveRecoverySession(s: RecoverySession): Promise<void> {
+  await (await db()).put("recoverySession", s);
+}
+export async function clearRecoverySession(): Promise<void> {
+  await (await db()).delete("recoverySession", "session");
 }
 
 // ---- sync + device -------------------------------------------------------
@@ -341,6 +367,7 @@ const ALL_STORES = [
   "goals",
   "sync",
   "device",
+  "recoverySession",
 ] as const;
 
 // Wipe everything. Used by "forget this device" — the local copy goes, and

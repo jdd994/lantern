@@ -56,7 +56,9 @@ export function Welcome({ onBegin }: Props) {
           Next you'll choose a <strong>passphrase</strong>. It's the only key to
           your journal — there's no reset and no back door. If you forget it, not
           even we can recover what you wrote. That's the trade for real privacy:
-          pick a few words you'll remember, and keep them somewhere safe.
+          pick a few words you'll remember, and keep them somewhere safe. If
+          you'd rather have a family safety net, you can also set up{" "}
+          <strong>guardians</strong> later, in Settings.
         </p>
 
         <IosSetupNote />

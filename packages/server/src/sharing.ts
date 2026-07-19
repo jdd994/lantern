@@ -2,7 +2,10 @@
 //
 // Extracted from Driftless (shared strands) when Hearth became the second app to
 // need it. Enabled per app with createServer({ sharing: true }); an app without it
-// is exactly as private as before — no tables consulted, no routes mounted.
+// is exactly as private as before — no tables consulted, no routes mounted. The
+// identity key directory (/identity, /keys) that this used to own now lives in
+// identity.ts, always mounted — recovery.ts needs it too, without pulling in
+// full family-strand sharing.
 //
 // The server's job here is deliberately small and blind:
 //  • It gates access by MEMBERSHIP, and stores each shared object's ciphertext with
@@ -95,38 +98,6 @@ type InviteRow = {
  * order is preserved from the original Driftless implementation.
  */
 export function mountSharing<E extends BaseEnv>(app: App<E>): void {
-  // ---- Identity / key directory -----------------------------------------
-  // Sharing needs a way to reach someone's PUBLIC key. The private half is
-  // wrapped by their vault key and stored opaquely — we can never read it.
-
-  app.post("/identity", requireAuth, async (c) => {
-    const userId = c.get("userId");
-    const body = await c.req.json().catch(() => null);
-    const pub = body?.identityPublicKey;
-    const wrapped = body?.identityPrivWrapped;
-    if (typeof pub !== "string" || !wrapped) return c.json({ error: "missing identity keys" }, 400);
-    await c.env.DB.batch([
-      c.env.DB.prepare("UPDATE users SET identity_pub = ? WHERE id = ?").bind(pub, userId),
-      c.env.DB.prepare("UPDATE vaults SET identity_priv_wrapped = ? WHERE user_id = ?").bind(
-        JSON.stringify(wrapped),
-        userId
-      ),
-    ]);
-    return c.json({ ok: true });
-  });
-
-  // Look up one person's public key, by an address you already know. Deliberately
-  // NOT a search: you can't browse people here.
-  app.get("/keys", requireAuth, async (c) => {
-    const email = (c.req.query("email") ?? "").trim().toLowerCase();
-    if (!email) return c.json({ error: "email required" }, 400);
-    const u = await c.env.DB.prepare("SELECT identity_pub FROM users WHERE email = ?")
-      .bind(email)
-      .first<{ identity_pub: string | null }>();
-    if (!u) return c.json({ error: "No such user." }, 404);
-    return c.json({ identityPublicKey: u.identity_pub });
-  });
-
   // ---- Collections + membership -----------------------------------------
 
   // Create a shared collection + the owner's own membership (their wrapped key).

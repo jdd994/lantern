@@ -77,6 +77,12 @@ export default function App() {
             onChangePassphrase={l.changePassphrase}
             onSyncNow={l.syncNow}
             onClose={() => setSync(false)}
+            guardianCircle={l.guardianCircle}
+            onSetupGuardians={l.setupGuardians}
+            recoveryStatus={l.recoveryStatus}
+            onCancelPendingRecovery={l.cancelPendingRecovery}
+            pendingGuardianRequests={l.pendingGuardianRequests}
+            onApproveGuardianRequest={l.approveGuardianRequest}
           />
         ) : null}
       </>
@@ -91,6 +97,15 @@ export default function App() {
         hasBiometric={l.hasBiometric}
         error={l.error}
         busy={l.busy}
+        account={l.account}
+        syncError={l.syncError}
+        guardianCircle={l.guardianCircle}
+        onRecoverySignIn={l.connectSignIn}
+        onLoadGuardianCircle={l.loadGuardianCircle}
+        onStartRecovery={l.startRecoveryRequest}
+        onPollRecovery={l.pollRecoveryRequest}
+        onCancelRecovery={l.cancelRecoveryRequest}
+        onFinishRecovery={l.finishRecoveryRequest}
       />
     );
   }
@@ -270,6 +285,12 @@ export default function App() {
           onChangePassphrase={l.changePassphrase}
             onSyncNow={l.syncNow}
           onClose={() => setSync(false)}
+          guardianCircle={l.guardianCircle}
+          onSetupGuardians={l.setupGuardians}
+          recoveryStatus={l.recoveryStatus}
+          onCancelPendingRecovery={l.cancelPendingRecovery}
+          pendingGuardianRequests={l.pendingGuardianRequests}
+          onApproveGuardianRequest={l.approveGuardianRequest}
         />
       ) : null}
 
