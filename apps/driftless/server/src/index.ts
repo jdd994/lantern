@@ -99,7 +99,7 @@ async function deleteDriftlessAccount(c: ServerContext<Env>, userId: string): Pr
 }
 
 const app = createServer<Env>({
-  kinds: ["entry", "strand"],
+  kinds: ["entry", "strand", "dayNote"],
   service: "driftless-server",
   // /shared/*, /identity and /keys now come from @lantern/server — same routes,
   // same SQL, same wire format. Below, Driftless keeps only what's truly its own:
