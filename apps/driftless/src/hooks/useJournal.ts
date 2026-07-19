@@ -53,6 +53,8 @@ import {
   putStoredEntry,
   allStoredStrands,
   putStoredStrand,
+  allStoredDayNotes,
+  putStoredDayNote,
   putMedia,
   getMedia,
   deleteMedia,
@@ -68,6 +70,7 @@ import {
   clearRecoverySession,
   type StoredEntry,
   type StoredStrand,
+  type StoredDayNote,
   type VaultMeta,
 } from "../lib/db";
 import {
@@ -114,10 +117,13 @@ import {
 import { syncNow } from "../lib/sync";
 import {
   uid,
+  dayKey,
   encodePayload,
   decodePayload,
   encodeStrand,
   decodeStrand,
+  encodeDayNote,
+  decodeDayNote,
   sharedPieces,
   type Entry,
   type Anchor,
@@ -125,6 +131,7 @@ import {
   type MediaConfig,
   type SharedStrandView,
   type SharedPiece,
+  type DayNote,
 } from "../lib/journal";
 import { buildBackup, type Backup } from "../lib/backup";
 
@@ -151,6 +158,7 @@ export function useJournal() {
   const [vaultState, setVaultState] = useState<VaultState>("loading");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [strands, setStrands] = useState<Strand[]>([]);
+  const [dayNotes, setDayNotes] = useState<Record<string, DayNote>>({});
   const [saveError, setSaveError] = useState<SaveError>(null);
   const [bioSupported, setBioSupported] = useState(false);
   const [bioEnrolled, setBioEnrolled] = useState(false);
@@ -203,8 +211,8 @@ export function useJournal() {
     for (const s of stored) {
       if (s.deleted) continue; // tombstones aren't shown
       try {
-        const { text, anchor, mediaIds, mediaConfig } = decodePayload(await decryptString(key, s.content));
-        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, createdAt: s.createdAt, updatedAt: s.updatedAt });
+        const { text, anchor, mediaIds, mediaConfig, heading } = decodePayload(await decryptString(key, s.content));
+        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, heading, createdAt: s.createdAt, updatedAt: s.updatedAt });
       } catch {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
@@ -228,6 +236,21 @@ export function useJournal() {
     setStrands(out);
   }, []);
 
+  const loadDayNotes = useCallback(async (key: CryptoKey) => {
+    const stored = await allStoredDayNotes();
+    const out: Record<string, DayNote> = {};
+    for (const s of stored) {
+      if (s.deleted) continue;
+      try {
+        const { text } = decodeDayNote(await decryptString(key, s.content));
+        if (text) out[s.id] = { key: s.id, text, updatedAt: s.updatedAt };
+      } catch {
+        // skip undecryptable
+      }
+    }
+    setDayNotes(out);
+  }, []);
+
   // Reconcile with the server (pull others' changes, push ours), then refresh
   // the decrypted view if anything arrived. Runs only while unlocked (needs the
   // key to re-decrypt) and never overlaps itself. No-op when not signed in.
@@ -241,13 +264,14 @@ export function useJournal() {
       if (changed) {
         await loadEntries(key);
         await loadStrands(key);
+        await loadDayNotes(key);
       }
     } catch {
       // offline / transient — a later trigger will retry
     } finally {
       syncingRef.current = false;
     }
-  }, [loadEntries, loadStrands]);
+  }, [loadEntries, loadStrands, loadDayNotes]);
 
   // Debounced: after you stop editing, push (and pull) shortly after.
   const scheduleSync = useCallback(() => {
@@ -480,6 +504,7 @@ export function useJournal() {
         keyRef.current = dek;
         setEntries([]);
         setStrands([]);
+        setDayNotes({});
       }
       if (account) {
         const err = await connectCreateAccount(account.email, account.password);
@@ -507,11 +532,12 @@ export function useJournal() {
       keyRef.current = opened.dek;
       await loadEntries(opened.dek);
       await loadStrands(opened.dek);
+      await loadDayNotes(opened.dek);
       setVaultState("open");
       void requestDurableStorage();
       return true;
     },
-    [loadEntries, loadStrands, requestDurableStorage]
+    [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]
   );
 
   // Returning via biometrics: a passkey + PRF unwrap a device-stored copy of
@@ -529,10 +555,11 @@ export function useJournal() {
     keyRef.current = key;
     await loadEntries(key);
     await loadStrands(key);
+    await loadDayNotes(key);
     setVaultState("open");
     void requestDurableStorage();
     return true;
-  }, [loadEntries, loadStrands, requestDurableStorage]);
+  }, [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]);
 
   // Opt in on this device (must be unlocked): wrap the in-memory key behind a
   // platform passkey. Returns false if the platform can't do PRF.
@@ -808,6 +835,7 @@ export function useJournal() {
         keyRef.current = dek;
         await loadEntries(dek);
         await loadStrands(dek);
+        await loadDayNotes(dek);
         setVaultState("open");
         void requestDurableStorage();
 
@@ -819,7 +847,7 @@ export function useJournal() {
         return e instanceof Error ? e.message : "Couldn't finish recovery — the shares didn't reconstruct your key.";
       }
     },
-    [loadEntries, loadStrands, requestDurableStorage]
+    [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]
   );
 
   // Same pull-only triggers as the background sync effect above (unlock,
@@ -871,7 +899,9 @@ export function useJournal() {
     if (!key) return;
     const content = await encryptString(
       key,
-      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig)
+      deleted
+        ? ""
+        : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig, undefined, entry.heading)
     );
     const record: StoredEntry = {
       id: entry.id,
@@ -948,6 +978,23 @@ export function useJournal() {
         prev.map((e) => {
           if (e.id !== id) return e;
           updated = { ...e, anchor: anchor ?? undefined, updatedAt: Date.now() };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
+    },
+    [guardedPersist]
+  );
+
+  // Flag/unflag a thought as a strand section heading (STRANDS_PLAN.md §2).
+  // Only meaningful inside a Strand — the Stream/Timeline ignore it.
+  const setHeading = useCallback(
+    async (id: string, heading: boolean) => {
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== id) return e;
+          updated = { ...e, heading: heading || undefined, updatedAt: Date.now() };
           return updated;
         })
       );
@@ -1111,7 +1158,8 @@ export function useJournal() {
     // A backup is a clean snapshot — leave tombstones out.
     const liveEntries = (await allStoredEntries()).filter((e) => !e.deleted);
     const liveStrands = (await allStoredStrands()).filter((s) => !s.deleted);
-    return buildBackup(v, liveEntries, liveStrands);
+    const liveDayNotes = (await allStoredDayNotes()).filter((n) => !n.deleted);
+    return buildBackup(v, liveEntries, liveStrands, liveDayNotes);
   }, []);
 
   // Restore a parsed backup onto a fresh device. Writes the vault + ciphertext,
@@ -1142,9 +1190,49 @@ export function useJournal() {
       deleted: false,
       dirty: true,
     }));
-    await importData(vault, entries, strands);
+    const dayNotesToRestore: StoredDayNote[] = backup.dayNotes.map((n) => ({
+      id: n.id,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+      content: n.content,
+      deleted: false,
+      dirty: true,
+    }));
+    await importData(vault, entries, strands, dayNotesToRestore);
     setVaultState("locked");
   }, []);
+
+  // ---- Day notes -----------------------------------------------------------
+  // A light title/reflection for a single day, keyed by dayKey — never a full
+  // Strand (STRANDS_PLAN.md §1). Pass an empty string to clear it.
+
+  const setDayNote = useCallback(
+    async (ts: number, text: string) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const k = dayKey(ts);
+      const trimmed = text.trim();
+      const updatedAt = Date.now();
+      setDayNotes((prev) => {
+        const next = { ...prev };
+        if (trimmed) next[k] = { key: k, text: trimmed, updatedAt };
+        else delete next[k];
+        return next;
+      });
+      const content = await encryptString(key, trimmed ? encodeDayNote(trimmed) : "");
+      const record: StoredDayNote = {
+        id: k,
+        createdAt: updatedAt,
+        updatedAt,
+        content,
+        deleted: !trimmed,
+        dirty: true,
+      };
+      await putStoredDayNote(record);
+      scheduleSync();
+    },
+    [scheduleSync]
+  );
 
   // ---- Strands -----------------------------------------------------------
 
@@ -1821,10 +1909,13 @@ export function useJournal() {
     removeEntry,
     restoreEntry,
     setAnchor,
+    setHeading,
     attachMedia,
     removeMedia,
     setMediaConfig,
     getMediaUrl,
+    dayNotes,
+    setDayNote,
     strands,
     createStrand,
     renameStrand,

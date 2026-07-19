@@ -7,12 +7,12 @@
 // ever leaves the device.
 
 import type { CipherBlob } from "./crypto";
-import type { StoredEntry, StoredStrand, VaultMeta } from "./db";
+import type { StoredEntry, StoredStrand, StoredDayNote, VaultMeta } from "./db";
 
 export const BACKUP_FORMAT = "driftless-backup";
 // v2 adds strands. v1 backups (entries only) still restore — strands default
-// to empty.
-export const BACKUP_VERSION = 2;
+// to empty. v3 adds day notes; older backups default them to empty too.
+export const BACKUP_VERSION = 3;
 
 export type BackupVault = {
   salt: number[];
@@ -39,9 +39,10 @@ export type Backup = {
   vault: BackupVault;
   entries: BackupRecord[];
   strands: BackupRecord[];
+  dayNotes: BackupRecord[];
 };
 
-const toRecord = (r: StoredEntry | StoredStrand): BackupRecord => ({
+const toRecord = (r: StoredEntry | StoredStrand | StoredDayNote): BackupRecord => ({
   id: r.id,
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
@@ -51,7 +52,8 @@ const toRecord = (r: StoredEntry | StoredStrand): BackupRecord => ({
 export function buildBackup(
   vault: VaultMeta,
   entries: StoredEntry[],
-  strands: StoredStrand[]
+  strands: StoredStrand[],
+  dayNotes: StoredDayNote[] = []
 ): Backup {
   return {
     format: BACKUP_FORMAT,
@@ -66,6 +68,7 @@ export function buildBackup(
     },
     entries: entries.map(toRecord),
     strands: strands.map(toRecord),
+    dayNotes: dayNotes.map(toRecord),
   };
 }
 
@@ -98,9 +101,11 @@ export function parseBackup(text: string): Backup {
   ) {
     throw new Error("This backup is incomplete or corrupted.");
   }
-  // Strands are optional (absent in v1 backups) — default to none.
+  // Strands are optional (absent in v1 backups) — default to none. Same for
+  // day notes (absent before v3).
   if (b.strands === undefined) b.strands = [];
-  for (const r of [...b.entries, ...b.strands]) {
+  if (b.dayNotes === undefined) b.dayNotes = [];
+  for (const r of [...b.entries, ...b.strands, ...b.dayNotes]) {
     if (!r || typeof r.id !== "string" || !isCipherBlob(r.content)) {
       throw new Error("This backup is incomplete or corrupted.");
     }
