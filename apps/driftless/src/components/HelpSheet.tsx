@@ -1,7 +1,7 @@
 // HelpSheet.tsx
 // A quiet in-app guide. Opened from the “?” in the header; dismissed by the ✕,
 // a tap outside, or Escape. Calm, second-person copy that matches the app.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { sendFeedback } from "../lib/api";
 
 // Tip / support options. A card link (Ko-fi, PayPal underneath) leads, since it's
@@ -101,6 +101,26 @@ function NoteToMaker() {
   );
 }
 
+// A quiet, native disclosure — no extra JS state, no animation to fuss over.
+// Collapsed by default so the sheet reads as a list of topics, not a wall of
+// text; open just the one or two that matter right now.
+function HelpItem({
+  title,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="help-item" open={defaultOpen}>
+      <summary>{title}</summary>
+      <div className="help-item-body">{children}</div>
+    </details>
+  );
+}
+
 export function HelpSheet({
   onClose,
   focus,
@@ -139,16 +159,14 @@ export function HelpSheet({
         </div>
 
         <div className="help-body">
-          <section>
-            <h3>Catch a thought</h3>
+          <HelpItem title="Catch a thought" defaultOpen>
             <p>
               The cursor is already waiting. Type, then keep it — it's saved on your device the
               moment you do, online or off.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Three ways to see your thoughts</h3>
+          <HelpItem title="Three ways to see your thoughts">
             <p>
               <b>Stream</b> — everything in the order you wrote it.
             </p>
@@ -161,15 +179,31 @@ export function HelpSheet({
               chapter. Pull in thoughts you've written, or compose new ones in place, then arrange
               and read them as one.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Tags</h3>
+          <HelpItem title="A line about the day">
+            <p>
+              Next to <b>read</b> on any day in your Stream, tap the pencil (<b>+ note</b>) to leave
+              a short line about that day — “the day Mum called”. It's not a thought of its own,
+              just a light caption; it shows above the day, and again if you read that day as one.
+            </p>
+          </HelpItem>
+
+          <HelpItem title="Chapters in a strand">
+            <p>
+              Inside a strand's <b>Arrange</b> view, tap <b>+ Make this a heading</b> under any
+              piece to turn it into a chapter title — it grows into a heading, and everything until
+              the next one becomes its section. Switch to <b>Read</b> and headings become chapter
+              breaks, with a table of contents at the top once you have more than one. Nothing to
+              nest or configure — a heading is just a piece, flagged.
+            </p>
+          </HelpItem>
+
+          <HelpItem title="Tags">
             <p>Start a word with # to tag it. Tap a tag to filter your Stream.</p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Install it as an app</h3>
+          <HelpItem title="Install it as an app">
             <p>
               Driftless runs in your browser, but you can add it to your home
               screen so it opens on its own, full-screen, like any app.
@@ -182,20 +216,18 @@ export function HelpSheet({
               <b>Android / computer:</b> open the browser menu (<b>⋮</b>) and
               choose <b>Install app</b> or <b>Add to Home screen</b>.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Your privacy</h3>
+          <HelpItem title="Your privacy">
             <p>
               Everything is end-to-end encrypted with your passphrase. It never leaves your device,
               and no one — not even us — can read your journal. There's no password reset: if you
               forget the passphrase, the entries can't be recovered by anyone. Keep it somewhere
               safe.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Staying safe</h3>
+          <HelpItem title="Staying safe">
             <p>
               There are two separate secrets: your <b>passphrase</b> unlocks your
               writing and never leaves your device — there's no reset, so keep it
@@ -208,19 +240,17 @@ export function HelpSheet({
               — share it privately, and if it might have leaked, remove that person
               (the strand re-keys itself). Never screenshot or text your passphrase.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Quick unlock</h3>
+          <HelpItem title="Quick unlock">
             <p>
               If your device supports it, turn on <b>Quick unlock</b> to open with your fingerprint
               or face instead of typing. Your passphrase still works, and is still what you'll use on
               a new device.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Guardians</h3>
+          <HelpItem title="Guardians">
             <p>
               A handful of people you trust can jointly help you back in if you ever forget your
               passphrase — without us, or any single one of them, ever holding the key. Set a
@@ -233,10 +263,9 @@ export function HelpSheet({
               account can't finish recovery without a guardian's word too. Make it a few unrelated
               words, not one.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Recovering your passphrase</h3>
+          <HelpItem title="Recovering your passphrase">
             <p>
               From the lock screen, sign in and ask your guardians. Once enough have approved,
               there's a waiting period (a day or more, depending on your setting) before it
@@ -244,16 +273,15 @@ export function HelpSheet({
               it if it wasn't you. This only works on the device you started it from, so if you
               lose that device mid-recovery, start again on the new one.
             </p>
-          </section>
+          </HelpItem>
 
-          <section>
-            <h3>Keeping it safe</h3>
+          <HelpItem title="Keeping it safe">
             <p>
               <b>Back up</b> saves an encrypted file you can restore later or on another device.{" "}
               <b>Export</b> saves a plain, readable copy. Your thoughts live on this device for now,
               so back up now and then.
             </p>
-          </section>
+          </HelpItem>
 
           <NoteToMaker />
 
