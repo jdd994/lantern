@@ -17,6 +17,7 @@ import { InstallHint } from "./components/InstallHint";
 import { Heart, Gear } from "./components/icons";
 import { useTheme } from "@lantern/ui";
 import type { SnapshotContent } from "./lib/ledger";
+import type { Transaction } from "./lib/spend";
 
 type Tab = "worth" | "spending";
 
@@ -36,9 +37,10 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingExpense, setAddingExpense] = useState(false);
+  const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
   const [importing, setImporting] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ dataUrl: string; type: string } | null>(null);
   const [support, setSupport] = useState(false);
   const [sync, setSync] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -237,6 +239,8 @@ export default function App() {
             transactions={l.transactions}
             currency={l.currency}
             onRemove={(id) => void l.removeTransaction(id)}
+            onEdit={(t) => setEditingTxn(t)}
+            onMarkReimbursed={(id, at) => void l.markReimbursed(id, at)}
             onViewReceipt={(id) => void viewReceipt(id)}
           />
         </section>
@@ -264,7 +268,21 @@ export default function App() {
         />
       ) : null}
 
-      {receipt ? <ReceiptView src={receipt} onClose={() => setReceipt(null)} /> : null}
+      {editingTxn ? (
+        <AddExpense
+          currency={l.currency}
+          accounts={l.accounts}
+          busy={l.busy}
+          suggest={l.suggest}
+          onAdd={l.addTransaction}
+          editing={editingTxn}
+          onUpdate={l.updateTransaction}
+          onLoadReceipt={l.loadReceipt}
+          onClose={() => setEditingTxn(null)}
+        />
+      ) : null}
+
+      {receipt ? <ReceiptView receipt={receipt} onClose={() => setReceipt(null)} /> : null}
 
       {support ? <Support onClose={() => setSupport(false)} /> : null}
 

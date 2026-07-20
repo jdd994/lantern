@@ -16,11 +16,14 @@ import { CATEGORIES, type Category } from "./categorize";
 
 // A line item off a receipt. Amounts are positive magnitudes — the sign lives
 // on the transaction, once. `category` is set only when it differs from the
-// transaction's own; most receipts are all one thing.
+// transaction's own; most receipts are all one thing. `hsaEligible` follows
+// the same rule: set only when it differs from (overrides) the transaction's
+// own flag — a mixed receipt can have some HSA-eligible items and some not.
 export type TransactionItem = {
   label: string;
   amount: Money;
   category?: Category;
+  hsaEligible?: boolean;
 };
 
 export type TransactionContent = {
@@ -33,6 +36,14 @@ export type TransactionContent = {
   receiptId?: string; // -> the encrypted image in the media store
   accountId?: string;
   items?: TransactionItem[]; // read off the receipt; encrypted with the rest
+  // HSA shorthand for an un-itemized transaction — see `hsaAmount` for how
+  // this interacts with per-item flags. Eligibility is a fact about the
+  // purchase, not a budget category, so it lives alongside `category` rather
+  // than inside it.
+  hsaEligible?: boolean;
+  // Set once you've drawn the matching amount back out of the HSA. All-or-
+  // nothing per transaction — no partial/linked-withdrawal tracking.
+  reimbursedAt?: number;
 };
 
 export type Transaction = TransactionContent & {
@@ -120,6 +131,46 @@ export function byCategory(
       share: grand === 0 ? 0 : minor / grand,
     }))
     .sort((a, b) => b.total.minor - a.total.minor);
+}
+
+// ---- HSA banking -----------------------------------------------------------
+// The "shoebox strategy": pay HSA-eligible things out of pocket, bank the
+// receipt, reimburse yourself from the HSA whenever — there's no deadline.
+// This only tracks what you've flagged and whether you've since drawn the
+// matching amount back out; it never touches the HSA's actual balance.
+
+// The HSA-eligible slice of a transaction's magnitude. Same rule as
+// `attribute()`: per-item flags are authoritative once any item overrides,
+// otherwise the transaction-level flag covers the whole signed amount.
+export function hsaAmount(t: Transaction): number {
+  const magnitude = Math.abs(t.amount.minor);
+  const items = t.items ?? [];
+  const overridden = items.some((i) => i.hsaEligible !== undefined);
+  if (!overridden) return t.hsaEligible ? magnitude : 0;
+  return items.reduce((sum, i) => sum + (i.hsaEligible ? Math.abs(i.amount.minor) : 0), 0);
+}
+
+export type HsaBanked = {
+  total: Money; // everything ever flagged
+  unreimbursed: Money; // the subset not yet marked reimbursed
+  items: Transaction[]; // the flagged transactions, for a list view
+};
+
+// Deliberately no window arg — "reimburse yourself years later" is the whole
+// point, so this looks at the entire ledger, not "this month".
+export function hsaBanked(transactions: Transaction[], currency: string): HsaBanked {
+  let total = zero(currency);
+  let unreimbursed = zero(currency);
+  const items: Transaction[] = [];
+  for (const t of transactions) {
+    if (!isSpend(t)) continue;
+    const minor = hsaAmount(t);
+    if (minor === 0) continue;
+    items.push(t);
+    total = add(total, { minor, currency });
+    if (!t.reimbursedAt) unreimbursed = add(unreimbursed, { minor, currency });
+  }
+  return { total, unreimbursed, items };
 }
 
 // ---- windows -------------------------------------------------------------

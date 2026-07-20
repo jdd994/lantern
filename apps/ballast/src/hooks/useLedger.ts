@@ -142,6 +142,15 @@ export type Ledger = {
   // indexes the store), not part of the encrypted payload — and because a
   // receipt is usually from yesterday, not from now.
   addTransaction: (content: TransactionContent, at: number, receipt?: File) => Promise<void>;
+  // Edit an existing transaction. `receipt` is tri-state: undefined leaves the
+  // current receipt (if any) untouched, null explicitly detaches it, and a
+  // File replaces it — the old one is deleted either way a new one lands.
+  updateTransaction: (
+    id: string,
+    content: TransactionContent,
+    at: number,
+    receipt?: File | null
+  ) => Promise<void>;
   // Bulk import (CSV/OFX — tier 0). Record ids are HMACs of each row's natural
   // key (@lantern/core/connect), so importing the same file twice lands on the
   // same ids: rows already present — including ones you've since deleted — are
@@ -150,14 +159,44 @@ export type Ledger = {
     rows: Array<{ content: TransactionContent; at: number; natural: string }>
   ) => Promise<{ added: number; skipped: number }>;
   removeTransaction: (id: string) => Promise<void>;
-  // Decrypt a receipt photo into a data: URL for display. Nothing is cached to
-  // disk in the clear — the plaintext image exists only in the open <img>.
-  loadReceipt: (mediaId: string) => Promise<string | null>;
+  // The HSA "shoebox strategy": mark a banked expense reimbursed (or, passing
+  // undefined, un-mark it — cheap to support, and no banking decision should
+  // be a one-way door).
+  markReimbursed: (id: string, reimbursedAt: number | undefined) => Promise<void>;
+  // Decrypt a receipt into a data: URL for display, plus the media type so the
+  // caller knows what it's rendering (a photo vs. an opaque PDF attachment).
+  // Nothing is cached to disk in the clear — the plaintext exists only in the
+  // open <img>/<embed>.
+  loadReceipt: (mediaId: string) => Promise<{ dataUrl: string; type: string } | null>;
   // What the categoriser thinks, and whether it learned it from you or guessed.
   suggest: (merchant: string) => Suggestion | null;
 };
 
 const uid = () => crypto.randomUUID();
+
+// Downscaled/re-encoded + encrypted + stored for a photo; passed through
+// as-is for a PDF (compressImage assumes an image `createImageBitmap` can
+// decode, which a PDF isn't — there's no OCR path for one either, so there's
+// nothing to lose by skipping the re-encode). Shared by add and edit, since
+// both write a receipt the same way.
+async function storeReceiptMedia(key: CryptoKey, file: File): Promise<string> {
+  const isPdf = file.type === "application/pdf";
+  const { bytes, type } = isPdf
+    ? { bytes: await file.arrayBuffer(), type: file.type }
+    : await compressImage(file);
+  const sealed = await encryptBytes(key, bytes);
+  const id = uid();
+  await db.putMedia({
+    id,
+    type,
+    createdAt: Date.now(),
+    iv: sealed.iv,
+    data: sealed.data,
+    deleted: false,
+    dirty: true,
+  });
+  return id;
+}
 
 export function useLedger(): Ledger {
   // The key. In a ref, never in state, never persisted. React state can end up
@@ -960,25 +999,9 @@ export function useLedger(): Ledger {
       setBusy(true);
       setError(null);
       try {
-        let receiptId: string | undefined;
-
-        // The photo. Downscaled, re-encoded, encrypted, stored. It never touches
-        // the network — there is no code path from here to a server, and the CSP
-        // would refuse one if there were.
-        if (receipt) {
-          const { bytes, type } = await compressImage(receipt);
-          const sealed = await encryptBytes(key, bytes);
-          receiptId = uid();
-          await db.putMedia({
-            id: receiptId,
-            type,
-            createdAt: Date.now(),
-            iv: sealed.iv,
-            data: sealed.data,
-            deleted: false,
-            dirty: true,
-          });
-        }
+        // Never touches the network — there is no code path from here to a
+        // server, and the CSP would refuse one if there were.
+        const receiptId = receipt ? await storeReceiptMedia(key, receipt) : undefined;
 
         const full: TransactionContent = { ...content, receiptId };
         const id = uid();
@@ -998,6 +1021,63 @@ export function useLedger(): Ledger {
         // Teach the categoriser. Every confirmed category is a correction, which
         // is why a hint the user accepts is promoted to something learned — and
         // why the thing gets quietly better the more you use it.
+        if (content.merchant.trim()) {
+          const next = remember(content.merchant, content.category, memory);
+          setMemory(next);
+          await db.saveStoredMemory({
+            id: "memory",
+            updatedAt: Date.now(),
+            dirty: true,
+            content: await sealJSON(key, next),
+          });
+        }
+        scheduleSync();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't save that.");
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [memory, scheduleSync]
+  );
+
+  const updateTransaction = useCallback(
+    async (id: string, content: TransactionContent, at: number, receipt?: File | null) => {
+      const key = keyRef.current;
+      if (!key) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const existing = (await db.allStoredTransactions()).find((t) => t.id === id);
+        if (!existing) throw new Error("Couldn't find that expense.");
+        const prior = await openJSON<TransactionContent>(key, existing.content);
+
+        // Tri-state: undefined keeps the current receipt, null detaches it,
+        // a File replaces it. Replacing or removing always cleans up the old
+        // one — a stale photo of last year's lunch is not "kept for safety",
+        // it's an orphan.
+        let receiptId = prior.receiptId;
+        if (receipt === null) {
+          if (prior.receiptId) await db.deleteMedia(prior.receiptId);
+          receiptId = undefined;
+        } else if (receipt) {
+          if (prior.receiptId) await db.deleteMedia(prior.receiptId);
+          receiptId = await storeReceiptMedia(key, receipt);
+        }
+
+        const full: TransactionContent = { ...content, receiptId };
+
+        setTransactions((prev) => prev.map((t) => (t.id === id ? { ...full, id, at } : t)));
+
+        await db.putStoredTransaction({
+          ...existing,
+          at,
+          updatedAt: Date.now(),
+          dirty: true,
+          content: await sealJSON(key, full),
+        });
+
         if (content.merchant.trim()) {
           const next = remember(content.merchant, content.category, memory);
           setMemory(next);
@@ -1089,18 +1169,44 @@ export function useLedger(): Ledger {
     scheduleSync();
   }, [scheduleSync]);
 
-  const loadReceipt = useCallback(async (mediaId: string): Promise<string | null> => {
-    const key = keyRef.current;
-    if (!key) return null;
-    const m = await db.getMedia(mediaId);
-    if (!m) return null;
-    try {
-      const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
-      return dataUrl(bytes, m.type);
-    } catch {
-      return null;
-    }
-  }, []);
+  // Mark (or, passing undefined, un-mark) a banked HSA expense as reimbursed.
+  // Its own action, separate from the full edit form — flipping one fact
+  // shouldn't require opening the whole sheet.
+  const markReimbursed = useCallback(
+    async (id: string, reimbursedAt: number | undefined) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const existing = (await db.allStoredTransactions()).find((t) => t.id === id);
+      if (!existing) return;
+      const prior = await openJSON<TransactionContent>(key, existing.content);
+      const full: TransactionContent = { ...prior, reimbursedAt };
+      setTransactions((prev) => prev.map((t) => (t.id === id ? { ...full, id, at: t.at } : t)));
+      await db.putStoredTransaction({
+        ...existing,
+        updatedAt: Date.now(),
+        dirty: true,
+        content: await sealJSON(key, full),
+      });
+      scheduleSync();
+    },
+    [scheduleSync]
+  );
+
+  const loadReceipt = useCallback(
+    async (mediaId: string): Promise<{ dataUrl: string; type: string } | null> => {
+      const key = keyRef.current;
+      if (!key) return null;
+      const m = await db.getMedia(mediaId);
+      if (!m) return null;
+      try {
+        const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
+        return { dataUrl: dataUrl(bytes, m.type), type: m.type };
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
 
   const suggest = useCallback(
     (merchant: string): Suggestion | null => suggestCategory(merchant, memory),
@@ -1187,8 +1293,10 @@ export function useLedger(): Ledger {
     addGoal,
     removeGoal,
     addTransaction,
+    updateTransaction,
     importTransactions,
     removeTransaction,
+    markReimbursed,
     loadReceipt,
     suggest,
   };
