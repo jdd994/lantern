@@ -15,6 +15,8 @@
     "./sharing-api": "./src/sharing-api.ts",
     "./recovery": "./src/recovery.ts",
     "./recovery-api": "./src/recovery-api.ts",
+    "./pairing": "./src/pairing.ts",
+    "./pairing-api": "./src/pairing-api.ts",
     "./vibe": "./src/vibe.ts",
     "./vibe-relay": "./src/vibe-relay.ts",
     "./connect": "./src/connect.ts"

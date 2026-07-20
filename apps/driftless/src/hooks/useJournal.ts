@@ -32,6 +32,13 @@ import {
   createRecoveryCircle,
   approveAsGuardian,
   reconstructDEK,
+  PBKDF2_ITERATIONS,
+  startPairingSession,
+  wrapPairingPayload,
+  unwrapPairingPayload,
+  encodePairingQr,
+  decodePairingQr,
+  type PairingSession,
 } from "../lib/crypto";
 import {
   createVault as makeVault,
@@ -104,6 +111,10 @@ import {
   completeRequest as apiCompleteRecoveryRequest,
   fetchPendingForMe,
   approveRecovery,
+  startPairing,
+  pollPairing,
+  deliverPairing,
+  cancelPairing,
   type SharedRecord,
   type StrandMember,
   type GuardianEntry,
@@ -168,6 +179,7 @@ export function useJournal() {
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
   const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
   const sharedRef = useRef<Map<string, LiveShared>>(new Map()); // shared strands live (with unwrapped DEKs)
+  const pairingSessionRef = useRef<PairingSession | null>(null); // this device's throwaway keypair while showing a pairing QR
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
@@ -1774,6 +1786,118 @@ export function useJournal() {
     []
   );
 
+  // ---- QR device linking (opt-in alternative to typing email+password+passphrase) ----
+
+  // NEW, unset-up device: generate a throwaway keypair, register it with the
+  // server, and return the text to render as a QR. Refuses if this device
+  // already has a journal — same guard as connectSignIn.
+  const startLinkAsNewDevice = useCallback(async (): Promise<{ qr: string } | { error: string }> => {
+    if (await getVault()) return { error: "This device already has a journal." };
+    try {
+      const session = await startPairingSession();
+      await startPairing(session.id, session.publicKeyB64);
+      pairingSessionRef.current = session;
+      return { qr: encodePairingQr(session) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Couldn't start linking. Check your connection." };
+    }
+  }, []);
+
+  // NEW device: poll once. "delivered" means another device scanned the QR and
+  // handed everything over — install the vault and open it immediately, no
+  // passphrase needed (see @lantern/core/pairing's file-top note on why that's
+  // an intentional tradeoff, not an oversight).
+  const pollLinkAsNewDevice = useCallback(async (): Promise<
+    "pending" | "expired" | "cancelled" | "linked" | string
+  > => {
+    const session = pairingSessionRef.current;
+    if (!session) return "No pairing in progress.";
+    try {
+      const res = await pollPairing(session.id);
+      if (res.status !== "delivered") return res.status;
+      if (!res.wrapped) return "pending";
+
+      const payload = await unwrapPairingPayload(session.privateKeyPkcs8B64, res.wrapped);
+      await saveVault({
+        id: "vault",
+        salt: payload.vault.salt,
+        verifier: payload.vault.verifier,
+        iterations: payload.vault.iterations,
+        wrappedDEK: payload.vault.wrappedDEK,
+        createdAt: Date.now(),
+      });
+      const dek = await importKeyRaw(payload.dekRaw);
+      keyRef.current = dek;
+      tokenRef.current = payload.token;
+      myUserIdRef.current = payload.userId;
+      setMyUserId(payload.userId);
+      await saveSyncState({ id: "state", cursor: 0, token: payload.token, accountEmail: payload.accountEmail });
+      setAccount(payload.accountEmail);
+      await loadEntries(dek);
+      await loadStrands(dek);
+      setVaultState("open");
+      void requestDurableStorage();
+      pairingSessionRef.current = null;
+      return "linked";
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't finish linking this device.";
+    }
+  }, [loadEntries, loadStrands, requestDurableStorage]);
+
+  // EXISTING, already-unlocked device, right after scanning the new device's
+  // QR: hand over a live copy of everything — the account token, the vault's
+  // envelope metadata, and the DEK itself — wrapped so only that device can
+  // read it. Returns an error message, or null on success.
+  const linkNewDeviceFromScan = useCallback(
+    async (qrText: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const key = keyRef.current;
+      if (!token || !key) return "Unlock your journal first.";
+      const scanned = decodePairingQr(qrText);
+      if (!scanned) return "That code doesn't look like a Driftless pairing QR.";
+      const v = await getVault();
+      const state = await getSyncState();
+      if (!v || !v.wrappedDEK || !myUserIdRef.current || !state?.accountEmail) {
+        return "This device needs its own synced account before it can link another one.";
+      }
+      try {
+        const payload = {
+          token,
+          userId: myUserIdRef.current,
+          accountEmail: state.accountEmail,
+          vault: {
+            salt: v.salt,
+            verifier: v.verifier,
+            iterations: v.iterations ?? PBKDF2_ITERATIONS,
+            wrappedDEK: v.wrappedDEK,
+          },
+          dekRaw: await exportKeyRaw(key),
+        };
+        const wrapped = await wrapPairingPayload(scanned.publicKeyB64, payload);
+        await deliverPairing(token, scanned.id, wrapped);
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't link that device.";
+      }
+    },
+    []
+  );
+
+  // EXISTING device: "that wasn't me" — undo a delivery just made from the same
+  // scanned QR, within its short (~5 minute) window.
+  const cancelDeviceLink = useCallback(async (qrText: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    const scanned = decodePairingQr(qrText);
+    if (!scanned) return "That code doesn't look like a Driftless pairing QR.";
+    try {
+      await cancelPairing(token, scanned.id);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't undo that.";
+    }
+  }, []);
+
   // Stop syncing on this device. Local data stays; the account is untouched.
   const disconnectAccount = useCallback(async () => {
     tokenRef.current = null;
@@ -1839,6 +1963,10 @@ export function useJournal() {
     account,
     connectCreateAccount,
     connectSignIn,
+    startLinkAsNewDevice,
+    pollLinkAsNewDevice,
+    linkNewDeviceFromScan,
+    cancelDeviceLink,
     disconnectAccount,
     deleteAccount,
     changePassphrase,

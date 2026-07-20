@@ -822,6 +822,30 @@ kbd {
 .account-form .anchor-input { border-color: var(--line); }
 .signin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 
+/* ---------- QR device linking ---------- */
+.lock-card img[alt="Pairing code"] {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: auto;
+  margin: 14px auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff; /* QR needs real white/black contrast, independent of theme */
+  padding: 10px;
+}
+.pairing-scanner {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  margin: 10px 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
 /* ---------- lock screen ---------- */
 .lock {
   min-height: 100vh;

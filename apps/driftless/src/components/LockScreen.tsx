@@ -1,5 +1,6 @@
 // LockScreen.tsx
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { parseBackup, type Backup } from "../lib/backup";
 import { Welcome } from "./Welcome";
 import { IosSetupNote } from "./IosSetupNote";
@@ -17,6 +18,10 @@ type Props = {
   onBiometric: () => Promise<boolean>;
   onRestore: (backup: Backup) => Promise<void>;
   onSignIn: (email: string, password: string) => Promise<string | null>;
+  // QR device linking — see AccountSection in Settings.tsx for the other half
+  // (an already-signed-in device scanning this screen's code).
+  onStartLink: () => Promise<{ qr: string } | { error: string }>;
+  onPollLink: () => Promise<"pending" | "expired" | "cancelled" | "linked" | string>;
   // Social recovery — "I forgot my passphrase." See RecoveryFlow.tsx.
   account: string | null;
   guardianCircle: RecoveryCircleInfo | null;
@@ -28,6 +33,87 @@ type Props = {
   onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
 };
 
+// New, unset-up device: show a throwaway pairing code as a QR and poll until
+// an already-signed-in device scans it and hands the vault over. No
+// passphrase, no email/password — see @lantern/core/pairing for why that's
+// an intentional tradeoff.
+function LinkNewDevice({
+  onStartLink,
+  onPollLink,
+  onBack,
+}: Pick<Props, "onStartLink" | "onPollLink"> & { onBack: () => void }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<"starting" | "waiting" | "expired" | "cancelled">("starting");
+  const pollBusy = useRef(false);
+
+  const begin = useCallback(async () => {
+    setError(null);
+    setQrDataUrl(null);
+    setState("starting");
+    const res = await onStartLink();
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    setQrDataUrl(await QRCode.toDataURL(res.qr, { margin: 1, width: 240 }));
+    setState("waiting");
+  }, [onStartLink]);
+
+  useEffect(() => {
+    void begin();
+    // Only ever run once per mount — `begin` re-runs itself via the retry buttons.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (state !== "waiting") return;
+    const id = window.setInterval(async () => {
+      if (pollBusy.current) return;
+      pollBusy.current = true;
+      const res = await onPollLink();
+      pollBusy.current = false;
+      if (res === "pending" || res === "linked") return; // "linked": the app opens itself, this screen just unmounts
+      if (res === "expired" || res === "cancelled") {
+        setState(res);
+        return;
+      }
+      setError(res);
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [state, onPollLink]);
+
+  return (
+    <div className="lock-card">
+      <div className="brand">
+        Driftless<span className="dot">.</span>
+      </div>
+      <p className="lock-lead">
+        Open Driftless on your other device, go to <b>Settings → Link a new device</b>, and scan
+        this code.
+      </p>
+      {error && <p className="lock-error">{error}</p>}
+      {state === "starting" && !error && <p className="account-status">Generating a code…</p>}
+      {qrDataUrl && state === "waiting" && (
+        <>
+          <img src={qrDataUrl} alt="Pairing code" width={240} height={240} />
+          <p className="account-hint">Waiting for your other device…</p>
+        </>
+      )}
+      {state === "expired" && <p className="lock-error">That code expired.</p>}
+      {state === "cancelled" && <p className="lock-error">That link was cancelled from the other device.</p>}
+      {(error || state === "expired" || state === "cancelled") && (
+        <button className="save-btn lock-btn" onClick={begin}>
+          Generate a new code
+        </button>
+      )}
+      <button className="lock-restore" onClick={onBack}>
+        ‹ Back
+      </button>
+    </div>
+  );
+}
+
 export function LockScreen({
   mode,
   enrolled,
@@ -36,6 +122,8 @@ export function LockScreen({
   onBiometric,
   onRestore,
   onSignIn,
+  onStartLink,
+  onPollLink,
   account,
   guardianCircle,
   onRecoverySignIn,
@@ -46,6 +134,7 @@ export function LockScreen({
   onFinishRecovery,
 }: Props) {
   const [showRecovery, setShowRecovery] = useState(false);
+  const [linkingNewDevice, setLinkingNewDevice] = useState(false);
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +266,18 @@ export function LockScreen({
 
   if (setup && showIntro) {
     return <Welcome onBegin={() => setShowIntro(false)} />;
+  }
+
+  if (setup && linkingNewDevice) {
+    return (
+      <div className="lock">
+        <LinkNewDevice
+          onStartLink={onStartLink}
+          onPollLink={onPollLink}
+          onBack={() => setLinkingNewDevice(false)}
+        />
+      </div>
+    );
   }
 
   if (!setup && showRecovery) {
@@ -346,6 +447,12 @@ export function LockScreen({
                   Cancel
                 </button>
               </div>
+            )}
+
+            {!signingIn && (
+              <button className="lock-restore" onClick={() => setLinkingNewDevice(true)}>
+                Or scan a code from your other device
+              </button>
             )}
           </>
         ) : (
