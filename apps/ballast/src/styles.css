@@ -635,6 +635,25 @@ input.mono, input[inputmode="decimal"] {
 }
 .choice-main { flex: 1; }
 
+/* A small in-section filter — visually distinct from `.tabs` (that's
+   top-level nav) and from `.choices` (that's a vertical picker with
+   descriptions). Just two calm pill buttons. */
+.subfilter { display: flex; gap: 6px; margin-bottom: 18px; }
+.subfilter-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.subfilter-btn:hover { border-color: var(--ink-faint); color: var(--ink); }
+.subfilter-btn[aria-pressed="true"] {
+  border-color: var(--brass);
+  background: var(--brass-dim);
+  color: var(--ink);
+}
+
 /* ---------- tabs ---------- */
 .tabs {
   display: flex;
@@ -794,6 +813,27 @@ input.mono, input[inputmode="decimal"] {
 .receipt-preview img {
   max-width: 100%;
   max-height: 220px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+/* A PDF attachment has no image to preview — a plain, calm chip stands in
+   for it, same idiom as `.receipt-chip` but for the picker/edit surfaces
+   rather than the transaction row. */
+.receipt-pdf-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.receipt-pdf {
+  width: 100%;
+  height: 70vh;
   border-radius: var(--radius);
   border: 1px solid var(--line);
 }
@@ -1108,6 +1148,15 @@ input.mono, input[inputmode="decimal"] {
 }
 .item-row .item-category { width: 130px; flex: none; }
 .item-row input, .item-row select { padding: 7px 9px; font-size: 13.5px; }
+
+/* The per-item HSA toggle. Three states, three treatments — "not eligible" is
+   a plain fact, not a problem, so it's muted rather than alarm-colored. */
+.item-hsa { font-size: 11px; letter-spacing: 0.03em; }
+.item-hsa-yes { color: var(--above); border-color: rgba(143, 191, 163, 0.35); }
+.item-hsa-no { color: var(--ink-faint); }
+
+/* "Mark reimbursed", once reimbursed — a calm confirmation, not a celebration. */
+.is-reimbursed { color: var(--above); }
 .items-block > .hint {
   display: block;
   font-size: 12.5px;
@@ -1157,7 +1206,7 @@ input.mono, input[inputmode="decimal"] {
   line-height: 1.55;
   color: var(--ink-soft);
 }
-.import-flip {
+.import-flip, .check-row {
   display: flex;
   gap: 9px;
   align-items: center;

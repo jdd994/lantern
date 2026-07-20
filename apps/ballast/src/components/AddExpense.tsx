@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { minorDigits, parseMoney } from "../lib/money";
 import { CATEGORIES, SPEND_CATEGORIES, type Category, type Suggestion } from "../lib/categorize";
-import type { TransactionContent, TransactionItem } from "../lib/spend";
+import type { Transaction, TransactionContent, TransactionItem } from "../lib/spend";
 import { readReceipt } from "../lib/receipt";
 import { compressImage, dataUrl, imageForOcr } from "../lib/media";
 import type { Account } from "../lib/ledger";
@@ -37,12 +37,15 @@ const cameraPossible = (): boolean =>
 // `uncertain` = the OCR read this line shakily (calm marker, never hidden);
 // `gap` = the arithmetic remainder the reader couldn't itemise, offered as an
 // editable row — name it and it becomes real, ignore it and it saves nothing.
+// `hsaEligible` mirrors `category`: undefined means "no per-item override",
+// so it round-trips untouched through a plain edit until something sets it.
 type ItemRow = {
   label: string;
   amount: string;
   category: Category | "";
   uncertain?: boolean;
   gap?: boolean;
+  hsaEligible?: boolean;
 };
 
 function today(): string {
@@ -81,6 +84,9 @@ export function AddExpense({
   busy,
   suggest,
   onAdd,
+  editing,
+  onUpdate,
+  onLoadReceipt,
   onClose,
 }: {
   currency: string;
@@ -88,18 +94,39 @@ export function AddExpense({
   busy: boolean;
   suggest: (merchant: string) => Suggestion | null;
   onAdd: (content: TransactionContent, at: number, receipt?: File) => Promise<void>;
+  // Present only when editing an existing transaction. `onUpdate`'s `receipt`
+  // is tri-state: undefined keeps whatever's already attached, null detaches
+  // it, a File replaces it.
+  editing?: Transaction;
+  onUpdate?: (
+    id: string,
+    content: TransactionContent,
+    at: number,
+    receipt?: File | null
+  ) => Promise<void>;
+  onLoadReceipt?: (mediaId: string) => Promise<{ dataUrl: string; type: string } | null>;
   onClose: () => void;
 }) {
-  const [merchant, setMerchant] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<Category>("other");
-  const [date, setDate] = useState(today());
-  const [accountId, setAccountId] = useState<string>("");
-  const [note, setNote] = useState("");
-  const [income, setIncome] = useState(false);
+  const [merchant, setMerchant] = useState(editing?.merchant ?? "");
+  const [amount, setAmount] = useState(
+    editing ? minorToText(Math.abs(editing.amount.minor), currency) : ""
+  );
+  const [category, setCategory] = useState<Category>(
+    editing && editing.category !== "income" ? editing.category : "other"
+  );
+  const [date, setDate] = useState(editing ? dateKey(new Date(editing.at)) : today());
+  const [accountId, setAccountId] = useState<string>(editing?.accountId ?? "");
+  const [note, setNote] = useState(editing?.note ?? "");
+  const [income, setIncome] = useState(editing?.category === "income");
+  // The HSA "shoebox" flag — a fact about the purchase, not a budget category,
+  // so it lives beside `category` rather than as one more option inside it.
+  const [hsaEligible, setHsaEligible] = useState(editing?.hsaEligible ?? false);
 
   const [receipt, setReceipt] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // Set instead of `preview` for a PDF — there's no image to show, just the
+  // name of the file that's attached.
+  const [pdfName, setPdfName] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Soft, not an error: "the reader ran and got nothing" must be said — a
@@ -112,7 +139,15 @@ export function AddExpense({
   // (and, ultimately, a parser test fixture) instead of a mystery.
   const [rawText, setRawText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [items, setItems] = useState<ItemRow[]>([]);
+  const [items, setItems] = useState<ItemRow[]>(
+    () =>
+      editing?.items?.map((i) => ({
+        label: i.label,
+        amount: minorToText(Math.abs(i.amount.minor), currency),
+        category: i.category ?? "",
+        hsaEligible: i.hsaEligible,
+      })) ?? []
+  );
   // The honest header over the items: what was read, what wasn't. Fixed at scan
   // time; the rows below stay editable.
   const [readSummary, setReadSummary] = useState<string | null>(null);
@@ -120,10 +155,29 @@ export function AddExpense({
   const [amountShaky, setAmountShaky] = useState(false);
 
   // Whether the current category came from the user or from the categoriser, so
-  // we never overwrite a deliberate choice with a suggestion.
-  const [touchedCategory, setTouchedCategory] = useState(false);
+  // we never overwrite a deliberate choice with a suggestion. An edit opens
+  // with a category already chosen — the merchant-suggestion effect must not
+  // clobber it the moment the form mounts.
+  const [touchedCategory, setTouchedCategory] = useState(Boolean(editing));
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // The receipt already on this transaction, loaded read-only so editing
+  // never re-runs OCR on a photo that's already been through it. `null` once
+  // loaded-and-empty is indistinguishable from not-yet-loaded, which is fine —
+  // both render the same "no receipt" state.
+  const [existingReceipt, setExistingReceipt] = useState<{ dataUrl: string; type: string } | null>(
+    null
+  );
+  const [removedExisting, setRemovedExisting] = useState(false);
+
+  // Runs once, for the transaction this form opened with — App.tsx mounts a
+  // fresh AddExpense per edit session, so there's no later `editing` to react to.
+  useEffect(() => {
+    if (editing?.receiptId && onLoadReceipt) {
+      void onLoadReceipt(editing.receiptId).then((r) => setExistingReceipt(r));
+    }
+  }, []);
 
   // The moment itemisation earns its keep: when the rows plus tax equal the
   // total exactly, say so — that's the user NOT having to recheck the paper.
@@ -158,6 +212,22 @@ export function AddExpense({
 
   async function pickReceipt(file: File) {
     setError(null);
+
+    // A PDF has no OCR path — there's nothing to read, so there's nothing to
+    // do but attach it and let the fields get filled in by hand.
+    if (file.type === "application/pdf") {
+      setReceipt(file);
+      setPreview(null);
+      setPdfName(file.name);
+      setReadNote(null);
+      setRawText(null);
+      setCopied(false);
+      setReadSummary(null);
+      setAmountShaky(false);
+      return;
+    }
+    setPdfName(null);
+
     setReading(true);
     try {
       // Downscale first, then preview — so what you see is what gets stored.
@@ -270,6 +340,9 @@ export function AddExpense({
           // Stored only when it differs — "same as the expense" stays implicit,
           // so recategorising the expense later carries these items with it.
           ...(row.category && row.category !== category ? { category: row.category } : {}),
+          // Passed through untouched — there's no per-item HSA control in this
+          // form yet, so an edit must never turn a set flag back to unset.
+          ...(row.hsaEligible !== undefined ? { hsaEligible: row.hsaEligible } : {}),
         });
       }
       if (built.length > 0) itemContents = built;
@@ -285,10 +358,22 @@ export function AddExpense({
       note: note.trim() || undefined,
       accountId: accountId || undefined,
       items: itemContents,
+      hsaEligible: !income && hsaEligible ? true : undefined,
+      // No control for this in the form — reimbursement is its own action
+      // (see Spending's "Mark reimbursed") — carried through so editing any
+      // other field can never silently un-reimburse something.
+      reimbursedAt: editing?.reimbursedAt,
     };
 
     try {
-      await onAdd(content, instantFor(date), receipt ?? undefined);
+      if (editing && onUpdate) {
+        // Tri-state: a newly picked file replaces, an explicit removal
+        // detaches, anything else leaves the current receipt untouched.
+        const receiptArg: File | null | undefined = receipt ?? (removedExisting ? null : undefined);
+        await onUpdate(editing.id, content, instantFor(date), receiptArg);
+      } else {
+        await onAdd(content, instantFor(date), receipt ?? undefined);
+      }
       onClose();
     } catch {
       // useLedger surfaced the reason; keep the sheet open so nothing typed is lost.
@@ -298,14 +383,20 @@ export function AddExpense({
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <h3>{income ? "Log income" : "Log an expense"}</h3>
+        <h3>{editing ? "Edit expense" : income ? "Log income" : "Log an expense"}</h3>
 
         {/* The receipt is a tier-0 artifact and it says so, because a photo of
             your receipt is more revealing than the number on it. */}
         <div className="receipt-zone">
-          {preview ? (
+          {preview || pdfName ? (
             <div className="receipt-preview">
-              <img src={preview} alt="Receipt" />
+              {pdfName ? (
+                <div className="receipt-pdf-chip">
+                  <Receipt size={20} /> {pdfName}
+                </div>
+              ) : (
+                <img src={preview!} alt="Receipt" />
+              )}
               {readNote ? <span className="hint">{readNote}</span> : null}
               <div className="receipt-preview-actions">
                 {rawText ? (
@@ -326,6 +417,7 @@ export function AddExpense({
                   onClick={() => {
                     setReceipt(null);
                     setPreview(null);
+                    setPdfName(null);
                     setReadNote(null);
                     setRawText(null);
                     setCopied(false);
@@ -333,7 +425,35 @@ export function AddExpense({
                     setAmountShaky(false);
                   }}
                 >
-                  Remove photo
+                  {pdfName ? "Remove file" : "Remove photo"}
+                </button>
+              </div>
+            </div>
+          ) : existingReceipt && !removedExisting ? (
+            <div className="receipt-preview">
+              {existingReceipt.type === "application/pdf" ? (
+                <div className="receipt-pdf-chip">
+                  <Receipt size={20} /> PDF attached
+                </div>
+              ) : (
+                <img src={existingReceipt.dataUrl} alt="Receipt" />
+              )}
+              <div className="receipt-preview-actions">
+                {/* Opens the file picker directly, not the camera — a
+                    replacement is as likely to be a PDF as a rescan. */}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setRemovedExisting(true)}
+                >
+                  Remove
                 </button>
               </div>
             </div>
@@ -361,7 +481,7 @@ export function AddExpense({
                   className="btn btn-ghost btn-sm receipt-alt"
                   onClick={() => fileInput.current?.click()}
                 >
-                  or pick a photo
+                  or pick a file
                 </button>
               ) : null}
             </>
@@ -369,7 +489,7 @@ export function AddExpense({
           <input
             ref={fileInput}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             capture="environment"
             hidden
             onChange={(e) => {
@@ -455,6 +575,19 @@ export function AddExpense({
           ) : null}
 
           {!income ? (
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={hsaEligible}
+                onChange={(e) => setHsaEligible(e.target.checked)}
+              />
+              <span>
+                HSA-eligible — paid out of pocket, banking the receipt to reimburse later
+              </span>
+            </label>
+          ) : null}
+
+          {!income ? (
             <div className="items-block">
               <div className="items-head">
                 <span className="label">
@@ -517,6 +650,45 @@ export function AddExpense({
                       </option>
                     ))}
                   </select>
+                  {/* Tri-state, cycling undefined → true → false → undefined —
+                      "same as the expense" is a real, distinct state, not just
+                      "no". Text stays fixed width; only the color changes. */}
+                  <button
+                    type="button"
+                    className={`btn btn-ghost btn-sm item-hsa${
+                      row.hsaEligible === true
+                        ? " item-hsa-yes"
+                        : row.hsaEligible === false
+                          ? " item-hsa-no"
+                          : ""
+                    }`}
+                    title={
+                      row.hsaEligible === true
+                        ? "HSA-eligible — click to mark this item not eligible"
+                        : row.hsaEligible === false
+                          ? "Marked not HSA-eligible (overrides the expense) — click to clear"
+                          : "Same as the expense — click to flag this item HSA-eligible"
+                    }
+                    onClick={() =>
+                      setItems((rows) =>
+                        rows.map((r, j) =>
+                          j === i
+                            ? {
+                                ...r,
+                                hsaEligible:
+                                  r.hsaEligible === undefined
+                                    ? true
+                                    : r.hsaEligible === true
+                                      ? false
+                                      : undefined,
+                              }
+                            : r
+                        )
+                      )
+                    }
+                  >
+                    HSA
+                  </button>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"

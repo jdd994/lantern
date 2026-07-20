@@ -1,7 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { money } from "./money";
 import { normalizeMerchant, suggestCategory, remember, type MerchantMemory } from "./categorize";
-import { byCategory, spentIn, earnedIn, monthWindow, notable, recurring, itemPatterns, type Transaction } from "./spend";
+import {
+  byCategory,
+  spentIn,
+  earnedIn,
+  monthWindow,
+  notable,
+  recurring,
+  itemPatterns,
+  hsaAmount,
+  hsaBanked,
+  type Transaction,
+} from "./spend";
 
 const USD = "USD";
 let seq = 0;
@@ -255,5 +266,61 @@ describe("itemPatterns: what you're buying, noticed calmly", () => {
   it("says nothing when nothing repeats", () => {
     const txns = [withItems("2026-07-02", "STORE", [["BREAD", 350]])];
     expect(itemPatterns(txns, w.from, w.to, USD)).toEqual([]);
+  });
+});
+
+describe("HSA banking: the shoebox strategy", () => {
+  it("banks an un-itemized transaction flagged eligible, whole amount", () => {
+    const t = { ...tx("2026-07-02", -3000, "PHARMACY", "health"), hsaEligible: true };
+    expect(hsaAmount(t)).toBe(3000);
+  });
+
+  it("banks nothing for an un-itemized transaction that isn't flagged", () => {
+    const t = tx("2026-07-02", -3000, "PHARMACY", "health");
+    expect(hsaAmount(t)).toBe(0);
+  });
+
+  it("on an itemized receipt, only the flagged items count", () => {
+    // A Target run: bandages are HSA-eligible, chips aren't. The transaction-
+    // level flag is irrelevant once any item overrides it.
+    const t: Transaction = {
+      ...tx("2026-07-02", -2000, "TARGET", "shopping"),
+      items: [
+        { label: "Bandages", amount: money(800, USD), hsaEligible: true },
+        { label: "Chips", amount: money(1200, USD), hsaEligible: false },
+      ],
+    };
+    expect(hsaAmount(t)).toBe(800);
+  });
+
+  it("an itemized receipt with no items overriding falls back to the transaction flag", () => {
+    const t: Transaction = {
+      ...tx("2026-07-02", -2000, "TARGET", "shopping"),
+      hsaEligible: true,
+      items: [
+        { label: "Bandages", amount: money(800, USD) },
+        { label: "Chips", amount: money(1200, USD) },
+      ],
+    };
+    expect(hsaAmount(t)).toBe(2000);
+  });
+
+  it("sums banked and unreimbursed totals across the whole ledger, not a window", () => {
+    const eligible = { ...tx("2020-01-15", -3000, "PHARMACY", "health"), hsaEligible: true };
+    const reimbursed = {
+      ...tx("2026-07-02", -5000, "DENTIST", "health"),
+      hsaEligible: true,
+      reimbursedAt: new Date("2026-07-10").getTime(),
+    };
+    const notEligible = tx("2026-07-05", -1200, "COFFEE", "dining");
+    const b = hsaBanked([eligible, reimbursed, notEligible], USD);
+    expect(b.total).toEqual({ minor: 8000, currency: USD });
+    expect(b.unreimbursed).toEqual({ minor: 3000, currency: USD });
+    expect(b.items).toHaveLength(2);
+  });
+
+  it("income and transfers never bank, even if flagged", () => {
+    const income = { ...tx("2026-07-02", 3000, "REFUND", "income"), hsaEligible: true };
+    expect(hsaBanked([income], USD).total).toEqual({ minor: 0, currency: USD });
   });
 });
