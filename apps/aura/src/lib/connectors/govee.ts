@@ -40,6 +40,15 @@ async function call(cred: string, path: string, body?: unknown): Promise<any> {
 export const govee: Connector = {
   id: "govee",
   label: "Govee",
+  descriptor: {
+    id: "govee",
+    label: "Govee",
+    tier: 2,
+    discloses:
+      "Govee's own cloud sees the commands you send from this device — the same visibility their own app already has. Aura has no server of its own, so nobody new is in the loop.",
+    takes: ["Your Govee API key, encrypted at rest on this device"],
+    refuses: ["Never sends your key or your lights' state anywhere but Govee's cloud"],
+  },
   credLabel: "Govee API key",
   credHint:
     "In the Govee Home app: Settings → Apply for API Key. It arrives by email. Paste it here — it stays on this device.",
