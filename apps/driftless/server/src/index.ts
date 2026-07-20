@@ -109,6 +109,9 @@ const app = createServer<Env>({
   // applied to this app's D1 (see packages/server/schema.recovery.sql).
   recovery: true,
   recoveryMinDelayMs: 24 * 3_600_000,
+  // /pair/* — QR device linking. Requires schema.pairing.sql applied to this
+  // app's D1 (see packages/server/schema.pairing.sql).
+  pairing: true,
   deleteAccount: deleteDriftlessAccount,
 });
 

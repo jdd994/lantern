@@ -17,6 +17,7 @@ import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth";
 import { mountIdentity } from "./identity";
 import { mountSharing } from "./sharing";
 import { mountRecovery } from "./recovery";
+import { mountPairing } from "./pairing";
 
 export type BaseEnv = {
   DB: D1Database;
@@ -40,6 +41,10 @@ export type ServerConfig<E extends BaseEnv = BaseEnv> = {
   // App-wide floor on a recovery circle's delay window, in ms. Higher-stakes
   // apps (e.g. Ballast) should set this well above a journaling app's default.
   recoveryMinDelayMs?: number;
+  // Mount the QR device-pairing routes (/pair/*). Off by default. Requires
+  // schema.pairing.sql. Two of its routes are unauthenticated by necessity —
+  // see pairing.ts's file-top note.
+  pairing?: boolean;
   maxUserObjects?: number;
   maxUserContentBytes?: number;
   // Override the account deletion (e.g. to also sweep object storage or shared
@@ -131,6 +136,7 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
   mountIdentity(app);
   if (config.sharing) mountSharing(app);
   if (config.recovery) mountRecovery(app, { minDelayMs: config.recoveryMinDelayMs });
+  if (config.pairing) mountPairing(app);
 
   app.get("/health", (c) => c.json({ ok: true, service: config.service }));
   app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));
