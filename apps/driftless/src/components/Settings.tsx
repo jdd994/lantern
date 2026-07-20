@@ -2,7 +2,7 @@
 // "Set the mood" — a calm sheet to pick a warm theme and toggle night-dimming.
 // Same modal shape as HelpSheet. Preview swatches carry their own colors so you
 // see each mood even while a different one is active.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Mood } from "../hooks/useSettings";
 import type { RecoveryCircleInfo, RecoveryStatus, PendingForMe } from "../lib/api";
 
@@ -26,6 +26,10 @@ type Props = {
   onDisconnect: () => void;
   onDeleteAccount: () => Promise<string | null>;
   onSyncNow: () => void;
+  // QR device linking — see LinkNewDevice in LockScreen.tsx for the other half
+  // (the new device showing the code this scans).
+  onLinkNewDeviceFromScan: (qrText: string) => Promise<string | null>;
+  onCancelDeviceLink: (qrText: string) => Promise<string | null>;
   onChangePassphrase: (current: string, next: string) => Promise<string | null>;
   guardianCircle: RecoveryCircleInfo | null;
   onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
@@ -328,13 +332,153 @@ function ChangePassphraseSection({
   );
 }
 
+// Minimal shape of the standard BarcodeDetector API — not yet in TS's DOM lib.
+// Supported in Chromium-based browsers; elsewhere `unsupported` shows a
+// plain-language fallback (sign in on the new device instead).
+type DetectedBarcode = { rawValue: string };
+type BarcodeDetectorLike = { detect(source: CanvasImageSource): Promise<DetectedBarcode[]> };
+function getBarcodeDetector(): (new (opts: { formats: string[] }) => BarcodeDetectorLike) | null {
+  return (window as unknown as { BarcodeDetector?: new (opts: { formats: string[] }) => BarcodeDetectorLike })
+    .BarcodeDetector ?? null;
+}
+
+// Scan the code shown on a new, unset-up device and hand it a live copy of
+// this account (token + vault + DEK) — see @lantern/core/pairing. The camera
+// only ever opens after this section is explicitly opened, and its stream is
+// torn down the moment a code is found, cancelled, or this unmounts.
+function LinkDeviceScanner({
+  onLinkNewDeviceFromScan,
+  onCancelDeviceLink,
+  onClose,
+}: Pick<Props, "onLinkNewDeviceFromScan" | "onCancelDeviceLink"> & { onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [linkedQr, setLinkedQr] = useState<string | null>(null);
+  const [undone, setUndone] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
+
+  useEffect(() => {
+    const Detector = getBarcodeDetector();
+    if (!Detector) {
+      setUnsupported(true);
+      return;
+    }
+    const detector = new Detector({ formats: ["qr_code"] });
+    let cancelled = false;
+    let raf = 0;
+    let scanning = false;
+
+    async function scanFrame() {
+      if (cancelled || !videoRef.current) return;
+      if (!scanning) {
+        scanning = true;
+        try {
+          const codes = await detector.detect(videoRef.current!);
+          const hit = codes.find((c) => c.rawValue?.startsWith("driftless-pair:"));
+          if (hit) {
+            const err = await onLinkNewDeviceFromScan(hit.rawValue);
+            streamRef.current?.getTracks().forEach((t) => t.stop());
+            if (cancelled) return;
+            if (err) setError(err);
+            else setLinkedQr(hit.rawValue);
+            return; // stop the loop either way — a fresh open re-starts it
+          }
+        } catch {
+          // an undecodable frame isn't an error — just try the next one
+        }
+        scanning = false;
+      }
+      raf = requestAnimationFrame(scanFrame);
+    }
+
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then(async (stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        raf = requestAnimationFrame(scanFrame);
+      })
+      .catch(() => setError("Couldn't access the camera — check this site's camera permission."));
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function undo() {
+    if (!linkedQr) return;
+    await onCancelDeviceLink(linkedQr);
+    setUndone(true);
+  }
+
+  if (unsupported) {
+    return (
+      <div className="account-form">
+        <p className="lock-error">
+          This browser can't scan codes in-app yet. On the new device, use "Joining from another
+          device? Sign in" with your account email and password instead.
+        </p>
+        <button className="ghost-btn" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    );
+  }
+
+  if (linkedQr) {
+    return (
+      <div className="account-form">
+        <p className="account-status">
+          {undone ? "Undone — that device is no longer linked." : "Device linked."}
+        </p>
+        {!undone && (
+          <button className="linklike danger" onClick={undo}>
+            That wasn't me — undo
+          </button>
+        )}
+        <button className="ghost-btn" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="account-form">
+      <p className="account-hint">Point this at the code shown on your other device.</p>
+      {error && <p className="lock-error">{error}</p>}
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video ref={videoRef} className="pairing-scanner" muted playsInline />
+      <button className="ghost-btn" onClick={onClose}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 function AccountSection({
   account,
   onCreateAccount,
   onDisconnect,
   onDeleteAccount,
   onSyncNow,
-}: Pick<Props, "account" | "onCreateAccount" | "onDisconnect" | "onDeleteAccount" | "onSyncNow">) {
+  onLinkNewDeviceFromScan,
+  onCancelDeviceLink,
+}: Pick<
+  Props,
+  "account" | "onCreateAccount" | "onDisconnect" | "onDeleteAccount" | "onSyncNow" | "onLinkNewDeviceFromScan" | "onCancelDeviceLink"
+>) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -342,6 +486,7 @@ function AccountSection({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   async function create() {
     setError(null);
@@ -375,6 +520,18 @@ function AccountSection({
             Disconnect this device
           </button>
         </div>
+
+        {scanning ? (
+          <LinkDeviceScanner
+            onLinkNewDeviceFromScan={onLinkNewDeviceFromScan}
+            onCancelDeviceLink={onCancelDeviceLink}
+            onClose={() => setScanning(false)}
+          />
+        ) : (
+          <button className="ghost-btn" onClick={() => setScanning(true)}>
+            Link a new device
+          </button>
+        )}
 
         {/* Deleting the account is quiet and deliberate — below the everyday
             controls, behind a confirm. It removes only the copy on the server;
@@ -475,6 +632,8 @@ export function Settings({
   onDisconnect,
   onDeleteAccount,
   onSyncNow,
+  onLinkNewDeviceFromScan,
+  onCancelDeviceLink,
   onChangePassphrase,
   guardianCircle,
   onSetupGuardians,
@@ -551,6 +710,8 @@ export function Settings({
             onDisconnect={onDisconnect}
             onDeleteAccount={onDeleteAccount}
             onSyncNow={onSyncNow}
+            onLinkNewDeviceFromScan={onLinkNewDeviceFromScan}
+            onCancelDeviceLink={onCancelDeviceLink}
           />
 
           <ChangePassphraseSection onChangePassphrase={onChangePassphrase} />

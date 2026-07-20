@@ -167,6 +167,8 @@ export default function App() {
         onBiometric={j.biometricUnlock}
         onRestore={j.restoreBackup}
         onSignIn={j.connectSignIn}
+        onStartLink={j.startLinkAsNewDevice}
+        onPollLink={j.pollLinkAsNewDevice}
         account={j.account}
         guardianCircle={j.guardianCircle}
         onRecoverySignIn={j.recoverySignIn}
@@ -469,6 +471,8 @@ export default function App() {
           onDisconnect={j.disconnectAccount}
           onDeleteAccount={j.deleteAccount}
           onSyncNow={j.syncNow}
+          onLinkNewDeviceFromScan={j.linkNewDeviceFromScan}
+          onCancelDeviceLink={j.cancelDeviceLink}
           onChangePassphrase={j.changePassphrase}
           guardianCircle={j.guardianCircle}
           onSetupGuardians={j.setupGuardians}
