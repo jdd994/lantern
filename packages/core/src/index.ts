@@ -11,5 +11,7 @@ export * from "./sharing";
 export * from "./sharing-api";
 export * from "./recovery";
 export * from "./recovery-api";
+export * from "./pairing";
+export * from "./pairing-api";
 export * from "./vibe";
 export * from "./connect";

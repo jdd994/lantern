@@ -5,6 +5,7 @@
 import { createApiClient, ApiError } from "@lantern/core/api";
 import { createSharingClient } from "@lantern/core/sharing-api";
 import { createRecoveryClient } from "@lantern/core/recovery-api";
+import { createPairingClient } from "@lantern/core/pairing-api";
 
 export { ApiError };
 export type { VaultMetaDTO } from "@lantern/core/api";
@@ -43,6 +44,16 @@ export const {
   cancelRequest, completeRequest,
   fetchPendingForMe, approve: approveRecovery,
 } = createRecoveryClient(req);
+
+// QR device linking speaks its own small protocol (@lantern/core/pairing-api),
+// same shared-wrapper pattern as sharing/recovery above.
+export type { PairingStatus } from "@lantern/core/pairing-api";
+export const {
+  start: startPairing,
+  poll: pollPairing,
+  deliver: deliverPairing,
+  cancel: cancelPairing,
+} = createPairingClient(req);
 
 // ---- media (M1: encrypted photo blobs over R2) ----
 // Binary, not JSON. The object is iv(12) || ciphertext — already encrypted on

@@ -16,6 +16,8 @@ export * from "@lantern/core/crypto";
 // Social recovery's crypto needs no app-specific constant either — same
 // reasoning as the sharing exports below.
 export * from "@lantern/core/recovery";
+// Same for QR device linking.
+export * from "@lantern/core/pairing";
 // The sharing crypto that needs no app-specific constant passes straight through.
 export {
   importPublicKeyB64,
