@@ -48,6 +48,28 @@ export type ProviderDescriptor = {
   refuses: string[];
 };
 
+// One line of the capability ledger: a capability the user said yes to, wearing
+// its honest cost, with enough context to undo it. The card asks BEFORE (the
+// ProviderDescriptor above); the ledger answers AFTER — a quiet page the user
+// can visit, never a popup.
+//
+// Entries are DERIVED from what is actually connected — never a separate
+// consent log, which could drift from reality and start lying. If it's in the
+// ledger it's on; revoking it is the same act as disconnecting it. The revoke
+// itself belongs to the app; an entry only describes.
+export type ConsentEntry = {
+  id: string;
+  label: string;
+  tier: Tier;
+  /** The app's own wording for the rung ("Direct to the brand"). */
+  tierLabel?: string;
+  discloses: string;
+  /** A quiet extra ("3 lights", "last looked 2 hours ago"). */
+  detail?: string;
+  /** When the user said yes — epoch ms. */
+  since?: number;
+};
+
 // ---- OAuth2 + PKCE ----------------------------------------------------------
 // The dance Hearth's Fitbit connector proved out, provider-agnostic. Public
 // client only: if a provider demands a client secret, it cannot use this flow —
