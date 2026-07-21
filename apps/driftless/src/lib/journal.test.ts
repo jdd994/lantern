@@ -93,6 +93,25 @@ describe("allTags", () => {
   });
 });
 
+describe("shared-strand gathering", () => {
+  // SharedPiece rides the same helpers structurally (id/text/createdAt/
+  // updatedAt). This pins that compatibility: if Entry grows a required field,
+  // this breaks loudly instead of shared gathering breaking quietly. The
+  // audience rule itself — a gather never mixes rooms — lives in SharedView,
+  // which only ever hands these helpers its own strand's pieces.
+  it("tag helpers accept piece-shaped records", () => {
+    const pieces = [
+      { id: "p1", text: "the lake trip #grandma", createdAt: 1, updatedAt: 1, author: "u1" },
+      { id: "p2", text: "her bread recipe #grandma #kitchen", createdAt: 2, updatedAt: 2, author: "u2" },
+    ];
+    expect(allTags(pieces)).toEqual(["grandma", "kitchen"]);
+    expect(pieces.filter((p) => extractTags(p.text).includes("grandma")).map((p) => p.id)).toEqual([
+      "p1",
+      "p2",
+    ]);
+  });
+});
+
 describe("filterEntries", () => {
   const entries = [
     entry("tea with #mom", 1),

@@ -5,9 +5,10 @@
 // photos together, edit them, arrange them, read them as one. No pings, no
 // badges; it's there when someone visits.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sharedPieces, type SharedStrandView, type SharedPiece } from "../lib/journal";
+import { allTags, extractTags, sharedPieces, type SharedStrandView, type SharedPiece } from "../lib/journal";
 import type { StrandMember } from "../lib/api";
-import { MediaThumb } from "./EntryItem";
+import { MediaThumb, TaggedText } from "./EntryItem";
+import { TagBar } from "./TagBar";
 
 type Props = {
   sharedStrands: SharedStrandView[];
@@ -173,6 +174,21 @@ function SharedDetail({
 
   // view + editing
   const [reading, setReading] = useState(false);
+
+  // Strand-local gathering: an anchor tapped HERE gathers only within this
+  // strand. A gather never mixes audiences — your journal is another room, and
+  // there is deliberately no door from this code path into it. Narrative order
+  // is kept (this is a story, not a stream), and the tag row is recency-of-use
+  // ordered like everywhere else, never counts.
+  const [tag, setTag] = useState<string | null>(null);
+  const strandTags = useMemo(() => allTags(ordered), [ordered]);
+  const shown = useMemo(
+    () => (tag ? ordered.filter((p) => extractTags(p.text).includes(tag)) : ordered),
+    [ordered, tag]
+  );
+  useEffect(() => {
+    if (tag && !strandTags.includes(tag)) setTag(null);
+  }, [strandTags, tag]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
 
@@ -442,14 +458,20 @@ function SharedDetail({
         </div>
       )}
 
+      <TagBar
+        tags={strandTags}
+        active={tag}
+        onToggle={(t) => setTag((cur) => (cur === t ? null : t))}
+      />
+
       {reading ? (
         <div className="strand-read">
-          {ordered.length === 0 ? (
+          {shown.length === 0 ? (
             <p className="strand-read-empty">Nothing here yet.</p>
           ) : (
-            ordered.map((p) => (
+            shown.map((p) => (
               <div key={p.id} className="read-piece">
-                {p.text && <p>{p.text}</p>}
+                {p.text && <p><TaggedText text={p.text} onTag={setTag} /></p>}
                 {photos(p)}
               </div>
             ))
@@ -463,15 +485,15 @@ function SharedDetail({
               start it with you.
             </p>
           )}
-          {ordered.map((p, i) => (
+          {shown.map((p, i) => (
             <div key={p.id} className="strand-piece">
               <div className="strand-piece-ctl">
-                {isOwner && (
+                {isOwner && !tag && (
                   <>
                     <button className="act" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
                       ↑
                     </button>
-                    <button className="act" disabled={i === ordered.length - 1} onClick={() => move(i, 1)} title="Move down">
+                    <button className="act" disabled={i === shown.length - 1} onClick={() => move(i, 1)} title="Move down">
                       ↓
                     </button>
                   </>
@@ -501,10 +523,10 @@ function SharedDetail({
                   p.text &&
                   (canEdit(p) ? (
                     <p className="shared-piece-text" title="Tap to edit" onClick={() => startEdit(p)}>
-                      {p.text}
+                      <TaggedText text={p.text} onTag={setTag} />
                     </p>
                   ) : (
-                    <p>{p.text}</p>
+                    <p><TaggedText text={p.text} onTag={setTag} /></p>
                   ))
                 )}
                 {photos(p)}
@@ -512,6 +534,7 @@ function SharedDetail({
             </div>
           ))}
 
+          {!tag && (
           <div className="strand-compose">
             <textarea
               className="edit"
@@ -555,6 +578,7 @@ function SharedDetail({
               {note && <span className="share-error">{note}</span>}
             </div>
           </div>
+          )}
         </>
       )}
     </main>
