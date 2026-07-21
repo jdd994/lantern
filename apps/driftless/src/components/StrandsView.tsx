@@ -4,7 +4,7 @@
 // ordinary thought too), arrange the order, and read the whole as one draft.
 import { useMemo, useRef, useState } from "react";
 import { strandEntries, readAsOne, type Entry, type Strand, type Anchor, type MediaConfig } from "../lib/journal";
-import { EntryItem, MediaThumb } from "./EntryItem";
+import { EntryItem, MediaThumb, TaggedText } from "./EntryItem";
 
 type Props = {
   strands: Strand[];
@@ -28,6 +28,7 @@ type Props = {
   onRemoveMedia: (entryId: string, mediaId: string) => void;
   onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  onTag?: (tag: string) => void;
 };
 
 export function StrandsView(props: Props) {
@@ -117,6 +118,7 @@ function StrandDetail({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onTag,
 }: Props & { strand: Strand; byId: Map<string, Entry>; onBack: () => void }) {
   const [reading, setReading] = useState(false);
   const [titleDraft, setTitleDraft] = useState(strand.title);
@@ -225,7 +227,7 @@ function StrandDetail({
                   )}
                   {section.body.map((e) => (
                     <div key={e.id} className="read-piece">
-                      {e.text && <p>{e.text}</p>}
+                      {e.text && <p><TaggedText text={e.text} onTag={onTag} /></p>}
                       {e.mediaIds && e.mediaIds.length > 0 && (
                         <div className="media-grid">
                           {e.mediaIds.map((mid) => (
@@ -294,6 +296,7 @@ function StrandDetail({
                   onRemoveMedia={onRemoveMedia}
                   onSetMediaConfig={onSetMediaConfig}
                   getMediaUrl={getMediaUrl}
+                  onTag={onTag}
                 />
                 {e.heading && (
                   <HeadingAdd

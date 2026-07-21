@@ -131,6 +131,16 @@ export default function App() {
     [j.entries, query, tag]
   );
 
+  // A #tag is an anchor to a moment. Tapping one — in any view, even mid-read —
+  // gathers every moment it anchors into the Stream. Fresh query, top of page:
+  // the anchor leads somewhere, it doesn't compound filters.
+  function gather(t: string) {
+    setQuery("");
+    setTag(t);
+    setView("stream");
+    setReading(null);
+    window.scrollTo({ top: 0 });
+  }
 
   // Keep tag filter valid if the underlying tag disappears.
   useEffect(() => {
@@ -369,6 +379,16 @@ export default function App() {
             active={tag}
             onToggle={(t) => setTag((cur) => (cur === t ? null : t))}
           />
+          {tag && visible.length > 0 && (
+            <button
+              className="gather-read"
+              onClick={() =>
+                setReading({ entries: [...visible].reverse(), label: `#${tag}` })
+              }
+            >
+              Read #{tag} as one — oldest first
+            </button>
+          )}
           <Stream
             entries={visible}
             totalCount={j.entries.length}
@@ -386,6 +406,7 @@ export default function App() {
 
             onSetMediaConfig={j.setMediaConfig}
             getMediaUrl={j.getMediaUrl}
+            onTag={gather}
           />
         </>
       )}
@@ -404,6 +425,7 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onTag={gather}
         />
       )}
 
@@ -431,6 +453,7 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onTag={gather}
         />
       )}
 
@@ -463,6 +486,7 @@ export default function App() {
           note={reading.note}
           entries={reading.entries}
           onClose={() => setReading(null)}
+          onTag={gather}
         />
       )}
       {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
