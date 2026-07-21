@@ -82,6 +82,15 @@ async function call(cred: string, path: string, init?: RequestInit): Promise<any
 export const hue: Connector = {
   id: "hue",
   label: "Philips Hue",
+  descriptor: {
+    id: "hue",
+    label: "Philips Hue",
+    tier: 1,
+    discloses:
+      "Nothing leaves your home network. Aura talks straight to your bridge over local WiFi — no cloud, no Philips account, no internet round-trip for a single command.",
+    takes: ["A pairing key your bridge hands over when you press its link button, stored on this device"],
+    refuses: ["Never touches the internet, never goes through Philips' cloud API"],
+  },
   credLabel: "Bridge address + key",
   credHint: '"<bridge-ip>|<application-key>" — from pressing the bridge link button.',
 
