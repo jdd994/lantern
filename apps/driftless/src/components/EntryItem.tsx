@@ -5,6 +5,7 @@ import {
   formatAnchor,
   parseAnchor,
   defaultTilt,
+  splitTagged,
   type Entry,
   type Anchor,
   type Strand,
@@ -27,6 +28,8 @@ type Props = {
   onRemoveMedia?: (entryId: string, mediaId: string) => void;
   onSetMediaConfig?: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl?: (id: string) => Promise<string | null>;
+  // Optional: makes inline #tags tappable — an anchor back to its moments.
+  onTag?: (tag: string) => void;
 };
 
 // One attached photo: decrypts to an in-memory URL on mount. Shows a gentle
@@ -129,19 +132,33 @@ export function MediaThumb({
   );
 }
 
-// Render text with #tags tinted, safely (React escapes by default).
-function Body({ text }: { text: string }) {
-  const parts = text.split(/(\s#[a-z0-9_-]{1,40})/gi);
+// Render text with #tags as tappable anchors, safely (React escapes by
+// default). A tag is an anchor to a moment: tapping it gathers every moment
+// that shares it. Without an onTag handler the tag is simply tinted. Exported
+// so every surface that shows a thought's words (entries, the Reader, a
+// strand's read flow) renders anchors the same way.
+export function TaggedText({ text, onTag }: { text: string; onTag?: (tag: string) => void }) {
   return (
     <>
-      {parts.map((p, i) =>
-        /^\s#[a-z0-9_-]+$/i.test(p) ? (
-          <span key={i}>
-            {p.charAt(0)}
-            <span className="htag">{p.trim()}</span>
-          </span>
+      {splitTagged(text).map((seg, i) =>
+        seg.tag ? (
+          onTag ? (
+            <button
+              key={i}
+              type="button"
+              className="htag"
+              title={`Gather #${seg.tag}`}
+              onClick={() => onTag(seg.tag!)}
+            >
+              {seg.text}
+            </button>
+          ) : (
+            <span key={i} className="htag">
+              {seg.text}
+            </span>
+          )
         ) : (
-          <span key={i}>{p}</span>
+          <span key={i}>{seg.text}</span>
         )
       )}
     </>
@@ -162,6 +179,7 @@ export function EntryItem({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onTag,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.text);
@@ -259,7 +277,7 @@ export function EntryItem({
       ) : (
         <>
           <div className="body">
-            <Body text={entry.text} />
+            <TaggedText text={entry.text} onTag={onTag} />
           </div>
 
           {media.length > 0 && getMediaUrl && (

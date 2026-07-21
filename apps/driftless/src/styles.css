@@ -464,7 +464,41 @@ kbd {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.entry .body .htag { color: var(--tag); }
+/* A #tag is an anchor to a moment — tinted sage wherever a thought's words
+   appear, and tappable (a real button, but dressed as a word) to gather every
+   moment it anchors. Inherits the surrounding type so it sits in the prose. */
+.htag {
+  color: var(--tag);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  white-space: inherit;
+  word-break: inherit;
+}
+button.htag:hover,
+button.htag:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--tag-dim, var(--tag));
+}
+
+/* "Read #tag as one" — the quiet door from a gathered anchor into the Reader. */
+.gather-read {
+  display: block;
+  margin: -4px 0 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+.gather-read:hover { color: var(--amber); }
 .entry .meta {
   margin-top: 6px;
   display: flex;
