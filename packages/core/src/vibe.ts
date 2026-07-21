@@ -94,6 +94,17 @@ export const VIBES: Vibe[] = [
     accent: "#E8C89A",
     light: { brightness: 45, rgb: { r: 255, g: 214, b: 170 }, kelvin: 3000 },
   },
+  {
+    id: "night-yoga",
+    label: "Night yoga",
+    description: "Low amber light to move by outside after dark — enough to see your mat, none of the blue that would wake you up.",
+    accent: "#D2864B",
+    // Between Night and Yoga on purpose: Night's near-monochrome red is too flat
+    // to judge distance/balance by (bad for a standing pose outdoors); Yoga's
+    // daytime brightness is too much for after dark. Some green stays in the mix
+    // (unlike Night) so shapes and edges still read, just low and warm.
+    light: { brightness: 30, rgb: { r: 255, g: 150, b: 70 }, kelvin: 2300 },
+  },
 ];
 
 export function vibeById(id: string): Vibe | undefined {
