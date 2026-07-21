@@ -158,12 +158,35 @@ export function extractTags(text: string): string[] {
   return [...new Set(out)];
 }
 
+// A rendering segment: plain prose, or a #tag anchor. Cut with the SAME regex
+// extractTags speaks, so what's tappable and what's gathered can never disagree.
+export type TextSegment = { text: string; tag?: string };
+
+export function splitTagged(text: string): TextSegment[] {
+  const out: TextSegment[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  TAG_RE.lastIndex = 0;
+  while ((m = TAG_RE.exec(text))) {
+    const start = m.index + m[1].length; // the boundary char stays with the prose
+    if (start > last) out.push({ text: text.slice(last, start) });
+    out.push({ text: `#${m[2]}`, tag: m[2].toLowerCase() });
+    last = start + 1 + m[2].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}
+
+// Ordered by when each anchor was last dropped — deliberately NOT by count. A
+// count ordering is a tiny leaderboard of your own words; recency is what
+// "take me back to that" actually wants.
 export function allTags(entries: Entry[]): string[] {
-  const counts = new Map<string, number>();
+  const last = new Map<string, number>();
   for (const e of entries)
-    for (const t of extractTags(e.text)) counts.set(t, (counts.get(t) ?? 0) + 1);
-  return [...counts.keys()].sort(
-    (a, b) => (counts.get(b)! - counts.get(a)!) || a.localeCompare(b)
+    for (const t of extractTags(e.text))
+      last.set(t, Math.max(last.get(t) ?? 0, e.createdAt));
+  return [...last.keys()].sort(
+    (a, b) => (last.get(b)! - last.get(a)!) || a.localeCompare(b)
   );
 }
 

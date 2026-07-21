@@ -14,6 +14,7 @@
 
 import { useEffect } from "react";
 import { timeLabel, readAsOne, type Entry } from "../lib/journal";
+import { TaggedText } from "./EntryItem";
 
 export function Reader({
   title,
@@ -22,12 +23,14 @@ export function Reader({
   entries,
   headings,
   onClose,
+  onTag,
 }: {
   title: string;
   subtitle?: string;
   note?: string; // an optional day-note or similar reflection line, under the title
   entries: Entry[];
   headings?: boolean; // when true, entries flagged `heading` break the read into sections + a table of contents
+  onTag?: (tag: string) => void; // tapping an inline #tag — the caller decides where the anchor leads
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -88,7 +91,7 @@ export function Reader({
                   <span className="reader-time">{timeLabel(e.createdAt)}</span>
                   {paragraphs(e.text).map((para, i) => (
                     <p className="reader-para" key={i}>
-                      {para}
+                      <TaggedText text={para} onTag={onTag} />
                     </p>
                   ))}
                   {e.mediaIds && e.mediaIds.length > 0 ? (
