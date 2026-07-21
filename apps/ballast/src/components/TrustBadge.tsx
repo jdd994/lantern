@@ -8,6 +8,7 @@
 // badge refuses that. If connecting an account means a third party can read
 // every transaction, the account says so, on the dashboard, forever.
 
+import { TradeOffCard } from "@lantern/ui";
 import { TIERS, type Tier } from "../lib/ledger";
 
 export function TrustBadge({ tier, showLabel = true }: { tier: Tier; showLabel?: boolean }) {
@@ -19,6 +20,9 @@ export function TrustBadge({ tier, showLabel = true }: { tier: Tier; showLabel?:
   );
 }
 
+// The consent card, shown before you connect anything. The card itself is the
+// family-shared TradeOffCard from @lantern/ui — Ballast built this shape first,
+// and now wears the shared one with its own badge and its own words.
 export function Disclosure({
   tier,
   discloses,
@@ -31,28 +35,14 @@ export function Disclosure({
   refuses?: string[];
 }) {
   return (
-    <div className="disclosure">
-      <TrustBadge tier={tier} />
-      <p>{discloses}</p>
-      {takes && takes.length > 0 ? (
-        <ul className="disclosure-list disclosure-takes">
-          {takes.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
-      ) : null}
-      {refuses && refuses.length > 0 ? (
-        <>
-          {/* The refusals are the other half of consent: a promise made in
-              public, not a comment in a file. */}
-          <p className="disclosure-refuses-head">Deliberately not taken:</p>
-          <ul className="disclosure-list disclosure-refuses">
-            {refuses.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </div>
+    <TradeOffCard
+      tier={tier}
+      badge={<TrustBadge tier={tier} />}
+      discloses={discloses}
+      takes={takes}
+      refuses={refuses}
+      takesHead="What this takes"
+      refusesHead="Deliberately not taken:"
+    />
   );
 }
