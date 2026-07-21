@@ -40,9 +40,20 @@ export type SensorReading = { motion: boolean };
 export type Connector = {
   id: string;
   label: string;
+  // The shared family consent contract (tier + who-learns-what), so picking a
+  // brand is an informed choice up front — not a credential field that happens
+  // to have a brand name over it. See @lantern/core/connect.
+  descriptor: ProviderDescriptor;
   // How the credential is obtained, shown in the connect sheet.
   credLabel: string;
   credHint: string;
+  // When a connector needs more than one piece of information (e.g. Home
+  // Assistant's URL + token) and has no pairing handshake to walk through
+  // instead, it lists its fields here; the connect sheet renders one input per
+  // field and joins the values with "|" into the single cred string every
+  // connector's methods receive — so a connector with credFields still only
+  // ever has to parse one delimited string, same as one without.
+  credFields?: { key: string; label: string; hint?: string; placeholder?: string; type?: "text" | "password" }[];
   // When false, the connect sheet skips the key field (e.g. the Demo room).
   needsCred?: boolean;
   // Optional pairing flow (e.g. Hue): find bridges on the network, then exchange a
@@ -71,6 +82,7 @@ import { govee } from "./govee";
 import { demo } from "./demo";
 import { hue } from "./hue";
 import { isTauri } from "../platform";
+import type { ProviderDescriptor, Tier } from "@lantern/core/connect";
 
 // Philips Hue (local CLIP v2) is only offered in the Tauri shell — a browser PWA
 // can't reach a LAN bridge (mixed-content/TLS/CORS), but native HTTP can. In the
@@ -79,4 +91,16 @@ export const connectors: Connector[] = isTauri() ? [govee, demo, hue] : [govee, 
 
 export function connectorFor(sourceId: string): Connector | undefined {
   return connectors.find((c) => c.id === sourceId);
+}
+
+// Aura's own wording for the family trust rungs — rendered wherever a tier
+// badge appears (connect sheet, capability ledger). The words stay with the
+// app; only the rungs are shared.
+export function tierWording(tier: Tier): string {
+  switch (tier) {
+    case 0: return "Nothing leaves this device";
+    case 1: return "Local network only";
+    case 2: return "Direct to the brand";
+    default: return "Via a third party";
+  }
 }

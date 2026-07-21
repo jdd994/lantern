@@ -1,9 +1,11 @@
-// ConnectSheet.tsx — connect a lighting brand. A lightweight precursor to the
-// shared "connect a source" consent flow: it names the brand, takes the key, and
-// says plainly where that key goes (straight to the brand, never Aura's servers).
+// ConnectSheet.tsx — connect a lighting brand. Two steps on purpose: which brand
+// (an informed choice, wearing the same family trust-tier badge as Ballast's
+// accounts and Hearth's wearables — see @lantern/core/connect), then that brand's
+// consent + credential. No brand is pre-selected — the picker is the first thing
+// you see, not a tab strip behind a Govee key field.
 import { useState } from "react";
-import { Sheet } from "@lantern/ui";
-import { connectors } from "../lib/connectors";
+import { Sheet, TierBadge, TradeOffCard } from "@lantern/ui";
+import { connectors, tierWording } from "../lib/connectors";
 
 export function ConnectSheet({
   onConnect,
@@ -12,25 +14,41 @@ export function ConnectSheet({
   onConnect: (sourceId: string, cred: string) => Promise<string | null>;
   onClose: () => void;
 }) {
-  const [sourceId, setSourceId] = useState(connectors[0]?.id ?? "");
+  const [sourceId, setSourceId] = useState<string | null>(null);
   const [cred, setCred] = useState("");
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const conn = connectors.find((c) => c.id === sourceId);
   const canPair = !!conn?.pair;
   const needsCred = conn?.needsCred !== false;
-  const canSubmit = !!conn && (!needsCred || cred.trim().length > 0);
+  const canSubmit =
+    !!conn &&
+    (!needsCred ||
+      (conn.credFields ? conn.credFields.every((f) => (fields[f.key] ?? "").trim().length > 0) : cred.trim().length > 0));
 
   // Pairing (Hue) state.
   const [address, setAddress] = useState("");
   const [bridges, setBridges] = useState<string[]>([]);
   const [finding, setFinding] = useState(false);
 
+  // Switching brands (including "back") clears every field — a leftover Govee
+  // key must never get submitted as a Home Assistant token.
+  function chooseBrand(id: string | null) {
+    setSourceId(id);
+    setCred("");
+    setFields({});
+    setAddress("");
+    setBridges([]);
+    setError(null);
+  }
+
   async function submit() {
-    if (!canSubmit) return;
+    if (!conn || !canSubmit) return;
     setBusy(true);
     setError(null);
-    const err = await onConnect(sourceId, needsCred ? cred : "demo");
+    const value = conn.credFields ? conn.credFields.map((f) => fields[f.key] ?? "").join("|") : cred;
+    const err = await onConnect(conn.id, needsCred ? value : "demo");
     setBusy(false);
     if (err) setError(err);
     else onClose();
@@ -53,7 +71,7 @@ export function ConnectSheet({
     setError(null);
     try {
       const paired = await conn.pair(address.trim());
-      const err = await onConnect(sourceId, paired);
+      const err = await onConnect(conn.id, paired);
       if (err) setError(err);
       else onClose();
     } catch (e) {
@@ -67,21 +85,36 @@ export function ConnectSheet({
     <Sheet onClose={onClose} ariaLabel="Connect your lights">
       <h3>Connect your lights</h3>
 
-      {connectors.length > 1 ? (
-        <div className="seg">
+      {!conn ? (
+        <div className="provider-grid">
           {connectors.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="seg-btn"
-              aria-pressed={sourceId === c.id}
-              onClick={() => setSourceId(c.id)}
-            >
-              {c.label}
+            <button key={c.id} type="button" className="provider-card" onClick={() => chooseBrand(c.id)}>
+              <span className="provider-card-head">
+                <span className="provider-card-label">{c.label}</span>
+                <TierBadge tier={c.descriptor.tier}>{tierWording(c.descriptor.tier)}</TierBadge>
+              </span>
+              <span className="provider-card-desc">{c.descriptor.discloses}</span>
             </button>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <>
+          <button type="button" className="linklike" onClick={() => chooseBrand(null)}>
+            ← Choose a different brand
+          </button>
+
+          <TradeOffCard
+            tier={conn.descriptor.tier}
+            tierLabel={tierWording(conn.descriptor.tier)}
+            label={conn.label}
+            discloses={conn.descriptor.discloses}
+            takes={conn.descriptor.takes}
+            refuses={conn.descriptor.refuses}
+            takesHead="What Aura takes"
+            refusesHead="What Aura won't take"
+          />
+        </>
+      )}
 
       {conn && canPair ? (
         <>
@@ -130,29 +163,40 @@ export function ConnectSheet({
         </>
       ) : conn ? (
         <>
-          {needsCred ? (
+          {needsCred && conn.credFields ? (
             <>
-              <label className="field">
-                <span className="label">{conn.credLabel}</span>
-                <input
-                  type="password"
-                  value={cred}
-                  onChange={(e) => setCred(e.target.value)}
-                  autoFocus
-                  autoComplete="off"
-                />
-                <span className="hint">{conn.credHint}</span>
-              </label>
-
-              <p className="hint">
-                Aura talks straight to {conn.label} from this device. Your key stays here — Aura has
-                no server of its own, so it never sees your key or your lights.
-              </p>
+              {conn.credFields.map((f, i) => (
+                <label className="field" key={f.key}>
+                  <span className="label">{f.label}</span>
+                  <input
+                    type={f.type ?? "text"}
+                    value={fields[f.key] ?? ""}
+                    onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    autoFocus={i === 0}
+                    autoComplete="off"
+                  />
+                  {f.hint ? <span className="hint">{f.hint}</span> : null}
+                </label>
+              ))}
+              <p className="hint">{conn.credHint}</p>
             </>
+          ) : needsCred ? (
+            <label className="field">
+              <span className="label">{conn.credLabel}</span>
+              <input
+                type="password"
+                value={cred}
+                onChange={(e) => setCred(e.target.value)}
+                autoFocus
+                autoComplete="off"
+              />
+              <span className="hint">{conn.credHint}</span>
+            </label>
           ) : (
             <p className="hint">
-              Four make-believe lights to play with — dim them, recolor them, save a scene and recall
-              it. No hardware, no key. A good way to feel Aura before you wire up real bulbs.
+              Dim them, recolor them, save a scene and recall it. A good way to feel Aura before you
+              wire up real bulbs.
             </p>
           )}
 

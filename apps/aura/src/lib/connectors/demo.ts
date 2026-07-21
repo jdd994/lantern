@@ -40,6 +40,14 @@ export function simulateDemoMotion(): void {
 export const demo: Connector = {
   id: "demo",
   label: "Demo room",
+  descriptor: {
+    id: "demo",
+    label: "Demo room",
+    tier: 0,
+    discloses: "Four make-believe lights that live only in this browser tab. Nothing is sent anywhere.",
+    takes: [],
+    refuses: ["Never touches the network — there's no real hardware to talk to"],
+  },
   credLabel: "",
   credHint: "",
   needsCred: false,
