@@ -937,9 +937,9 @@ export function useJournal() {
   );
 
   const createEntry = useCallback(
-    async (text: string): Promise<Entry> => {
+    async (text: string, heading?: boolean): Promise<Entry> => {
       const t = Date.now();
-      const entry: Entry = { id: uid(), text, createdAt: t, updatedAt: t };
+      const entry: Entry = { id: uid(), text, createdAt: t, updatedAt: t, heading: heading || undefined };
       setEntries((prev) => [...prev, entry]);
       await guardedPersist(entry);
       return entry;
@@ -1319,6 +1319,22 @@ export function useJournal() {
     [mutateStrand]
   );
 
+  // Insert right after a specific piece (e.g. the last piece in a chapter),
+  // instead of always appending to the very end of the strand. Falls back to
+  // appending if `afterId` is missing or no longer in the strand.
+  const addToStrandAfter = useCallback(
+    (strandId: string, entryId: string, afterId: string | null) =>
+      mutateStrand(strandId, (s) => {
+        if (s.entryIds.includes(entryId)) return s;
+        const idx = afterId ? s.entryIds.indexOf(afterId) : -1;
+        if (idx === -1) return { ...s, entryIds: [...s.entryIds, entryId] };
+        const ids = [...s.entryIds];
+        ids.splice(idx + 1, 0, entryId);
+        return { ...s, entryIds: ids };
+      }),
+    [mutateStrand]
+  );
+
   const removeFromStrand = useCallback(
     (strandId: string, entryId: string) =>
       mutateStrand(strandId, (s) => ({ ...s, entryIds: s.entryIds.filter((id) => id !== entryId) })),
@@ -1335,6 +1351,27 @@ export function useJournal() {
   const writeInStrand = useCallback(
     async (strandId: string, text: string) => {
       const entry = await createEntry(text);
+      await addToStrand(strandId, entry.id);
+    },
+    [createEntry, addToStrand]
+  );
+
+  // Write a piece into a specific chapter (STRANDS_PLAN.md §2): lands at the
+  // end of that heading's section rather than the end of the whole strand, so
+  // adding several pieces to the same chapter in a row doesn't need reordering.
+  const writeInStrandAfter = useCallback(
+    async (strandId: string, text: string, afterId: string | null) => {
+      const entry = await createEntry(text);
+      await addToStrandAfter(strandId, entry.id, afterId);
+    },
+    [createEntry, addToStrandAfter]
+  );
+
+  // Start a new chapter in one step: write + flag as a heading together,
+  // rather than writing a plain piece and separately flagging it after.
+  const writeChapterInStrand = useCallback(
+    async (strandId: string, title: string) => {
+      const entry = await createEntry(title, true);
       await addToStrand(strandId, entry.id);
     },
     [createEntry, addToStrand]
@@ -1924,6 +1961,8 @@ export function useJournal() {
     removeFromStrand,
     reorderStrand,
     writeInStrand,
+    writeInStrandAfter,
+    writeChapterInStrand,
     addPhotoToStrand,
     exportBackup,
     restoreBackup,
