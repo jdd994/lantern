@@ -14,3 +14,6 @@ dist-ssr
 # Database backups — contain account metadata, password hashes, and feedback.
 # Never commit; keep them somewhere safe locally / offline.
 backups/
+
+# vite-plugin-pwa dev-mode service-worker artifacts
+dev-dist/
