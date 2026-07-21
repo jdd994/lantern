@@ -81,13 +81,14 @@ export type Connector = {
 import { govee } from "./govee";
 import { demo } from "./demo";
 import { hue } from "./hue";
+import { homeAssistant } from "./ha";
 import { isTauri } from "../platform";
 import type { ProviderDescriptor, Tier } from "@lantern/core/connect";
 
-// Philips Hue (local CLIP v2) is only offered in the Tauri shell — a browser PWA
-// can't reach a LAN bridge (mixed-content/TLS/CORS), but native HTTP can. In the
-// web build it's simply absent from the picker.
-export const connectors: Connector[] = isTauri() ? [govee, demo, hue] : [govee, demo];
+// Philips Hue (local CLIP v2) and Home Assistant are only offered in the Tauri
+// shell — a browser PWA can't reach a LAN device (mixed-content/TLS/CORS), but
+// native HTTP can. In the web build they're simply absent from the picker.
+export const connectors: Connector[] = isTauri() ? [govee, demo, hue, homeAssistant] : [govee, demo];
 
 export function connectorFor(sourceId: string): Connector | undefined {
   return connectors.find((c) => c.id === sourceId);
