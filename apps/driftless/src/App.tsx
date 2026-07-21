@@ -131,6 +131,7 @@ export default function App() {
     [j.entries, query, tag]
   );
 
+
   // Keep tag filter valid if the underlying tag disappears.
   useEffect(() => {
     if (tag && !tags.includes(tag)) setTag(null);
@@ -417,6 +418,8 @@ export default function App() {
           onRemoveFrom={j.removeFromStrand}
           onReorder={j.reorderStrand}
           onWriteIn={j.writeInStrand}
+          onWriteInAfter={j.writeInStrandAfter}
+          onWriteChapter={j.writeChapterInStrand}
           onAddPhoto={j.addPhotoToStrand}
           onSaveEntry={j.updateEntry}
           onDeleteEntry={handleDelete}
