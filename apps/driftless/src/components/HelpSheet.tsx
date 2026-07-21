@@ -216,6 +216,11 @@ export function HelpSheet({
               counts, no rankings. Search works alongside: gather a tag, then type to narrow
               within it.
             </p>
+            <p>
+              In a shared strand, anchors stay in the room: tapping a tag there gathers only
+              within that strand, in its own order. Your private journal is never mixed in — a
+              gathered view always belongs to exactly one place.
+            </p>
           </HelpItem>
 
           <HelpItem title="Install it as an app">

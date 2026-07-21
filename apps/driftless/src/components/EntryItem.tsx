@@ -148,7 +148,12 @@ export function TaggedText({ text, onTag }: { text: string; onTag?: (tag: string
               type="button"
               className="htag"
               title={`Gather #${seg.tag}`}
-              onClick={() => onTag(seg.tag!)}
+              // Some hosts put the whole paragraph behind a tap (shared pieces
+              // tap-to-edit); an anchor tap is its own act, never both.
+              onClick={(e) => {
+                e.stopPropagation();
+                onTag(seg.tag!);
+              }}
             >
               {seg.text}
             </button>
