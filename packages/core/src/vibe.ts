@@ -76,6 +76,24 @@ export const VIBES: Vibe[] = [
     accent: "#C98A5A",
     light: { brightness: 20, rgb: { r: 255, g: 150, b: 82 }, kelvin: 2100 },
   },
+  {
+    id: "night",
+    label: "Night",
+    description: "Deep red, barely there — the last light before sleep, with no blue in it.",
+    accent: "#C81900",
+    // The one true stop for zero-blue: b: 0. Only a color-capable bulb actually
+    // gets there — kelvin is the honest fallback for white-only fixtures, but no
+    // "warm white" LED can truly reach zero blue (they're a blue diode under a
+    // phosphor coating, physically) — 2000K is just the warmest most bulbs go.
+    light: { brightness: 8, rgb: { r: 200, g: 25, b: 0 }, kelvin: 2000 },
+  },
+  {
+    id: "yoga",
+    label: "Yoga",
+    description: "Soft, clear, and grounded — enough light to breathe by, calm enough to sink into.",
+    accent: "#E8C89A",
+    light: { brightness: 45, rgb: { r: 255, g: 214, b: 170 }, kelvin: 3000 },
+  },
 ];
 
 export function vibeById(id: string): Vibe | undefined {
