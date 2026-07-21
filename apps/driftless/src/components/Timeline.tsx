@@ -17,6 +17,7 @@ type Props = {
   onRemoveMedia: (entryId: string, mediaId: string) => void;
   onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  onTag?: (tag: string) => void;
 };
 
 export function Timeline({
@@ -31,6 +32,7 @@ export function Timeline({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onTag,
 }: Props) {
   const { dated, undated } = timelineGroups(entries);
 
@@ -71,6 +73,7 @@ export function Timeline({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onTag={onTag}
             />
           ))}
         </section>
@@ -98,6 +101,7 @@ export function Timeline({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onTag={onTag}
             />
           ))}
         </section>

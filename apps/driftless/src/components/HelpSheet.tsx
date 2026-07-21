@@ -204,8 +204,18 @@ export function HelpSheet({
             </p>
           </HelpItem>
 
-          <HelpItem title="Tags">
-            <p>Start a word with # to tag it. Tap a tag to filter your Stream.</p>
+          <HelpItem title="Tags — anchors to a moment">
+            <p>
+              Start a word with # — <em>#mom</em>, <em>#firstword</em>, <em>#thatday</em> — and
+              you've dropped an anchor on that moment. Tap a tag anywhere, even mid-read, and the
+              Stream gathers every moment it anchors. From there, "Read as one" lays them out
+              oldest-first, like a story you didn't know you were writing.
+            </p>
+            <p>
+              The tag row above the Stream lists your anchors by when you last used them — no
+              counts, no rankings. Search works alongside: gather a tag, then type to narrow
+              within it.
+            </p>
           </HelpItem>
 
           <HelpItem title="Install it as an app">

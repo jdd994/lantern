@@ -19,6 +19,7 @@ type Props = {
   getMediaUrl: (id: string) => Promise<string | null>;
   dayNotes: Record<string, DayNote>;
   onSetDayNote: (dayTimestamp: number, text: string) => void;
+  onTag?: (tag: string) => void;
 };
 
 const RECENT_WINDOW = 1000 * 60 * 60 * 6; // glow ticks from the last 6 hours
@@ -39,6 +40,7 @@ export function Stream({
   getMediaUrl,
   dayNotes,
   onSetDayNote,
+  onTag,
 }: Props) {
   if (totalCount === 0) {
     return (
@@ -103,6 +105,7 @@ export function Stream({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onTag={onTag}
             />
           ))}
         </section>
