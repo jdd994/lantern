@@ -1406,6 +1406,25 @@ kbd {
 .heading-badge:hover { border-color: rgba(224, 163, 62, 0.4); }
 .heading-badge-x { opacity: 0.7; }
 
+/* Write straight into a chapter (lands at the end of its section) instead of
+   always the bottom of the whole strand. */
+.heading-add-link {
+  display: block;
+  margin: 4px 0 0 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+.heading-add-link:hover { color: var(--amber); }
+.heading-add { margin: 8px 0 0 6px; }
+.heading-add .edit { min-height: 60px; }
+
 /* A piece flagged as a section heading reads like a chapter title in the
    arrange list too, so it's obvious at a glance. */
 .strand-piece-heading .entry textarea,
@@ -1414,6 +1433,10 @@ kbd {
   font-weight: 500;
   font-size: 20px;
 }
+
+.new-chapter-link { margin: 18px 2px 0; }
+.new-chapter { display: flex; gap: 8px; margin: 18px 2px 0; }
+.new-chapter .anchor-input { flex: 1; }
 
 .strand-compose { margin: 14px 2px 0; }
 .strand-compose .edit { min-height: 70px; }

@@ -16,6 +16,8 @@ type Props = {
   onRemoveFrom: (strandId: string, entryId: string) => void;
   onReorder: (strandId: string, entryIds: string[]) => void;
   onWriteIn: (strandId: string, text: string) => void;
+  onWriteInAfter: (strandId: string, text: string, afterId: string | null) => void;
+  onWriteChapter: (strandId: string, title: string) => void;
   onAddPhoto: (strandId: string, file: File) => void;
   onSaveEntry: (id: string, text: string) => void;
   onDeleteEntry: (id: string) => void;
@@ -103,6 +105,8 @@ function StrandDetail({
   onRemoveFrom,
   onReorder,
   onWriteIn,
+  onWriteInAfter,
+  onWriteChapter,
   onAddPhoto,
   onSaveEntry,
   onDeleteEntry,
@@ -123,6 +127,16 @@ function StrandDetail({
   const ordered = strandEntries(strand.entryIds, byId);
   const { sections } = readAsOne(ordered, { headings: true });
   const toc = sections.filter((s) => s.heading).map((s) => s.heading!);
+
+  // Where a piece added "to this chapter" lands: the end of that heading's
+  // section (its last piece), or the heading itself if the section is empty.
+  const sectionEndByHeading = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sections) {
+      if (s.heading) map.set(s.heading.id, s.body.length ? s.body[s.body.length - 1].id : s.heading.id);
+    }
+    return map;
+  }, [sections]);
 
   function move(index: number, dir: -1 | 1) {
     const ids = [...strand.entryIds];
@@ -281,9 +295,16 @@ function StrandDetail({
                   onSetMediaConfig={onSetMediaConfig}
                   getMediaUrl={getMediaUrl}
                 />
+                {e.heading && (
+                  <HeadingAdd
+                    onAdd={(text) => onWriteInAfter(strand.id, text, sectionEndByHeading.get(e.id) ?? e.id)}
+                  />
+                )}
               </div>
             </div>
           ))}
+
+          <NewChapter onAdd={(title) => onWriteChapter(strand.id, title)} />
 
           <div className="strand-compose">
             <textarea
@@ -327,6 +348,123 @@ function StrandDetail({
         </>
       )}
     </main>
+  );
+}
+
+// A quiet way to write straight into a chapter, so building it out doesn't
+// mean writing at the bottom of the whole strand and dragging each piece up.
+// Lands at the end of that heading's section — see sectionEndByHeading.
+// Start a chapter in one step — write + flag as a heading together — instead
+// of writing a plain piece and separately flagging it after. The placeholder
+// mixes a few different structures (a book's chapters, a song's verses, a
+// play's acts) so it reads as a general tool, not one tuned to any of them —
+// a heading is still just a piece, flagged.
+function NewChapter({ onAdd }: { onAdd: (title: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function submit() {
+    const title = draft.trim();
+    if (!title) return;
+    onAdd(title);
+    setDraft("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button className="ghost-btn new-chapter-link" onClick={() => setOpen(true)}>
+        + New chapter
+      </button>
+    );
+  }
+
+  return (
+    <div className="new-chapter">
+      <input
+        className="anchor-input"
+        autoFocus
+        placeholder="Chapter One, Verse 1, Act II…"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") {
+            setDraft("");
+            setOpen(false);
+          }
+        }}
+      />
+      <button className="save-btn" disabled={!draft.trim()} onClick={submit}>
+        Start
+      </button>
+      <button
+        className="ghost-btn"
+        onClick={() => {
+          setDraft("");
+          setOpen(false);
+        }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function HeadingAdd({ onAdd }: { onAdd: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function submit() {
+    const text = draft.trim();
+    if (!text) return;
+    onAdd(text);
+    setDraft("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button className="heading-add-link" onClick={() => setOpen(true)}>
+        + Add to this chapter
+      </button>
+    );
+  }
+
+  return (
+    <div className="heading-add">
+      <textarea
+        className="edit"
+        autoFocus
+        placeholder="Add a piece to this chapter…"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submit();
+          }
+          if (e.key === "Escape") {
+            setDraft("");
+            setOpen(false);
+          }
+        }}
+      />
+      <div className="edit-foot">
+        <button className="save-btn" disabled={!draft.trim()} onClick={submit}>
+          Add
+        </button>
+        <button
+          className="ghost-btn"
+          onClick={() => {
+            setDraft("");
+            setOpen(false);
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
