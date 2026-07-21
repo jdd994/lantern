@@ -191,11 +191,16 @@ export function HelpSheet({
 
           <HelpItem title="Chapters in a strand">
             <p>
-              Inside a strand's <b>Arrange</b> view, tap <b>+ Make this a heading</b> under any
-              piece to turn it into a chapter title — it grows into a heading, and everything until
-              the next one becomes its section. Switch to <b>Read</b> and headings become chapter
-              breaks, with a table of contents at the top once you have more than one. Nothing to
-              nest or configure — a heading is just a piece, flagged.
+              A strand can hold sections, not just a flat list — chapters in a book, verses and a
+              chorus in a song, acts in a play, whatever fits what you're writing. Tap <b>+ New
+              chapter</b> to start one, or <b>+ Make this a heading</b> under any existing piece to
+              turn it into one. Everything until the next heading becomes its section.
+            </p>
+            <p>
+              Switch to <b>Read</b> and headings become section breaks, with a table of contents at
+              the top once you have more than one. A heading also gets its own <b>+ Add to this
+              chapter</b>, so a new piece lands at the end of that section instead of the bottom of
+              the whole strand. Nothing to nest or configure — a heading is just a piece, flagged.
             </p>
           </HelpItem>
 
