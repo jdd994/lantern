@@ -1,0 +1,19 @@
+{
+  "name": "grove",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "A private family tree the family writes together. Local-first, end-to-end encrypted.",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@lantern/core": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "vitest": "^2.1.9"
+  }
+}
