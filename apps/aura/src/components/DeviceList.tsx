@@ -1,6 +1,7 @@
 // DeviceList.tsx — your lights, with quick controls. On/off is always there;
 // brightness and color show only for devices that support them. Controls act
 // optimistically (the hook updates state first, then reaches the bulb).
+import { useState } from "react";
 import type { Device, LightState } from "../lib/connectors";
 import { hexToRgb, rgbToHex } from "../lib/color";
 
@@ -30,27 +31,88 @@ export function DeviceList({
   devices,
   states,
   onSet,
+  onIdentify,
+  identifying,
+  onRename,
 }: {
   devices: Device[];
   states: Record<string, LightState>;
   onSet: (id: string, patch: Partial<LightState>) => void;
+  // Optional — a room-scoped list may not want it, or a caller with no need
+  // for it can simply not pass it. When present: a quick blink so you can see
+  // which physical light this row actually is.
+  onIdentify?: (id: string) => void;
+  identifying?: string | null;
+  // Optional — your own name for this light, shown everywhere from here on.
+  // Never touches the brand's own name; an empty rename resets back to it.
+  onRename?: (id: string, name: string) => void;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function commitRename(id: string, value: string) {
+    onRename?.(id, value);
+    setEditingId(null);
+  }
+
   return (
     <div className="devices">
       {devices.map((d) => {
         const st = states[d.id] ?? { on: false };
+        const editing = editingId === d.id;
         return (
           <div className={"device" + (st.on ? " is-on" : "")} key={d.id}>
             <div className="device-head">
-              <span className="device-name">{d.name}</span>
-              <button
-                className="toggle"
-                role="switch"
-                aria-checked={st.on}
-                onClick={() => onSet(d.id, { on: !st.on })}
-              >
-                <span className="toggle-knob" />
-              </button>
+              {editing ? (
+                <input
+                  className="device-name-input"
+                  defaultValue={d.name}
+                  autoFocus
+                  aria-label={`Rename ${d.name}`}
+                  onBlur={(e) => commitRename(d.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditingId(null);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="device-name">{d.name}</span>
+              )}
+              <div className="device-head-actions">
+                {onRename && !editing && (
+                  <button
+                    type="button"
+                    className="identify-btn"
+                    aria-label={`Rename ${d.name}`}
+                    title="Rename this light"
+                    onClick={() => setEditingId(d.id)}
+                  >
+                    ✎
+                  </button>
+                )}
+                {onIdentify && (
+                  <button
+                    type="button"
+                    className="identify-btn"
+                    aria-label={`Identify ${d.name}`}
+                    title="Blink to see which light this is"
+                    disabled={identifying === d.id}
+                    onClick={() => onIdentify(d.id)}
+                  >
+                    ◎
+                  </button>
+                )}
+                <button
+                  className="toggle"
+                  role="switch"
+                  aria-checked={st.on}
+                  onClick={() => onSet(d.id, { on: !st.on })}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
             </div>
 
             {(d.canBrightness || d.canColor || d.canColorTemp) && (

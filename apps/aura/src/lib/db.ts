@@ -21,7 +21,7 @@ import type { Room } from "./rooms";
 import type { Automation } from "./automations";
 import type { Color } from "./connectors";
 
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 // A user-made vibe: a named color mood you can apply like the built-in ones.
 export type CustomVibe = { id: string; label: string; rgb: Color; brightness: number; createdAt: number };
@@ -54,6 +54,11 @@ interface AuraDB extends DBSchema {
   automations: { key: string; value: Automation };
   customVibes: { key: string; value: CustomVibe };
   keyring: { key: string; value: { id: string; key: CryptoKey } };
+  // Your own name for a light, keyed by device id — separate from the `devices`
+  // cache on purpose: that store is fully replaced on every connect/refresh (the
+  // brand's own name each time), so a name kept there would vanish on the next
+  // refresh. This one only ever changes when you rename something.
+  deviceNames: { key: string; value: { id: string; name: string } };
 }
 
 let dbPromise: Promise<IDBPDatabase<AuraDB>> | null = null;
@@ -77,6 +82,9 @@ function db() {
         }
         if (oldVersion < 5) {
           d.createObjectStore("customVibes", { keyPath: "id" });
+        }
+        if (oldVersion < 6) {
+          d.createObjectStore("deviceNames", { keyPath: "id" });
         }
       },
     });
@@ -212,4 +220,16 @@ export async function putCustomVibe(v: CustomVibe): Promise<void> {
 }
 export async function deleteCustomVibe(id: string): Promise<void> {
   await (await db()).delete("customVibes", id);
+}
+
+// ---- device names (your own name for a light) -----------------------------
+export async function allDeviceNames(): Promise<Record<string, string>> {
+  const recs = await (await db()).getAll("deviceNames");
+  return Object.fromEntries(recs.map((r) => [r.id, r.name]));
+}
+export async function putDeviceName(id: string, name: string): Promise<void> {
+  await (await db()).put("deviceNames", { id, name });
+}
+export async function deleteDeviceName(id: string): Promise<void> {
+  await (await db()).delete("deviceNames", id);
 }
