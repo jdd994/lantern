@@ -11,6 +11,7 @@ import { connectorFor, type Device, type LightState, type Sensor } from "../lib/
 import { simulateDemoMotion } from "../lib/connectors/demo";
 import { assign, type Room } from "../lib/rooms";
 import { adaptiveKelvin } from "../lib/adaptive";
+import { paletteVariant } from "../lib/palette";
 import {
   actionsOf,
   dueAutomations,
@@ -84,6 +85,7 @@ export function useAura() {
   // Fetch live state for a set of devices, best-effort (one dead device or a
   // non-retrievable model never blocks the rest).
   const loadStates = useCallback(async (devs: Device[], srcs: StoredSource[]) => {
+    const startedAt = Date.now();
     const results = await Promise.allSettled(
       devs.map(async (d) => {
         const cred = srcs.find((s) => s.id === d.sourceId)?.cred;
@@ -94,7 +96,14 @@ export function useAura() {
     );
     setStates((prev) => {
       const next = { ...prev };
-      for (const r of results) if (r.status === "fulfilled" && r.value) next[r.value[0]] = r.value[1];
+      for (const r of results) {
+        if (r.status !== "fulfilled" || !r.value) continue;
+        const [id, fetched] = r.value;
+        // A local edit (a slider drag, a vibe) that landed after this fetch
+        // started wins — this fetch's answer is already stale for that device.
+        if ((lastLocalEdit.current[id] ?? 0) >= startedAt) continue;
+        next[id] = fetched;
+      }
       return next;
     });
   }, []);
@@ -203,6 +212,10 @@ export function useAura() {
   // (and scene apply) push immediately — those are single, deliberate taps.
   const pushTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pushPending = useRef<Record<string, { patch: Partial<LightState>; transitionMs?: number }>>({});
+  // When a device was last changed locally (setDevice). A fetch (loadStates) can
+  // resolve after a local edit it raced against — without this, the stale fetched
+  // value would silently overwrite what the user just set (or a vibe just applied).
+  const lastLocalEdit = useRef<Record<string, number>>({});
 
   const flushPush = useCallback(
     async (deviceId: string) => {
@@ -232,6 +245,7 @@ export function useAura() {
   // patch) pushes now; continuous changes (brightness/color) debounce.
   const setDevice = useCallback(
     (deviceId: string, patch: Partial<LightState>, immediate = false, transitionMs?: number) => {
+      lastLocalEdit.current[deviceId] = Date.now();
       setStates((prev) => {
         const merged: LightState = { ...(prev[deviceId] ?? { on: true }), ...patch };
         // color and kelvin are mutually exclusive on a bulb — the last one set wins.
@@ -370,14 +384,20 @@ export function useAura() {
       const targetIds = roomId
         ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
         : devices.map((d) => d.id);
+      // More than one light gets its own small, deterministic pull within the
+      // vibe's palette (see palette.ts) — a room full of lamps at one identical
+      // hue reads flat; the same warm family, slightly varied per fixture, reads
+      // like a real room. A single light has nothing to vary against.
+      const only = targetIds.length <= 1;
       for (const id of targetIds) {
         const device = devices.find((d) => d.id === id);
         if (!device) continue;
+        const own = paletteVariant(target, device.id, only);
         const patch: Partial<LightState> = { on: true };
-        if (device.canBrightness) patch.brightness = target.brightness;
+        if (device.canBrightness) patch.brightness = own.brightness;
         // Color bulbs take the vibe's hue; white-only bulbs take its temperature.
-        if (device.canColor) patch.color = target.rgb;
-        else if (device.canColorTemp && target.kelvin) patch.kelvin = target.kelvin;
+        if (device.canColor) patch.color = own.rgb;
+        else if (device.canColorTemp && own.kelvin) patch.kelvin = own.kelvin;
         setDevice(id, patch, true, SCENE_TRANSITION_MS);
       }
     },

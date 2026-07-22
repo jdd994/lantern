@@ -25,6 +25,15 @@ export function createMicSource(): AmbientSource {
     id: "mic",
     label: "Microphone (experimental)",
     async start(onReading) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        // Most often a non-secure context (plain http, not localhost) — the API
+        // simply doesn't exist there, so this would otherwise surface as a
+        // confusing TypeError instead of a real, nameable reason.
+        throw new DOMException(
+          "The microphone needs a secure connection (https) to work here.",
+          "SecurityError"
+        );
+      }
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       ctx = new AudioContext();
       // Browsers often hand back a suspended context; without this the analyser
