@@ -229,6 +229,17 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .room-name { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .01em; color: var(--ink); }
 .room-master { display: flex; gap: 4px; }
 
+/* room collapse toggle — plain-text button, the chevron does the talking */
+.room-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.room-toggle .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-chevron { flex: none; display: inline-block; font-size: 11px; color: var(--ink-faint); transition: transform .18s ease, color .18s ease; }
+.room-chevron.is-open { transform: rotate(90deg); color: var(--ink-soft); }
+.room-toggle:hover .room-chevron { color: var(--ink); }
+
+/* collapsed room summary — one dot per light, its actual color, nothing else */
+.room-dots { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 4px; }
+.room-dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line-soft) inset; }
+
 /* per-room scenes (compact, embedded in a room block) */
 .room-scenes { margin-top: 14px; }
 .room-scenes-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 26px; }
