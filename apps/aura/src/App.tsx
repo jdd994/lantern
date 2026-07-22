@@ -37,9 +37,28 @@ export default function App() {
   const [creatingVibe, setCreatingVibe] = useState(false);
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
-  // Which rooms are collapsed to a compact dot-row — expanded by default (today's
-  // look, unchanged), so this only kicks in once someone actually wants it tidier.
-  const [collapsedRooms, setCollapsedRooms] = useState<Record<string, boolean>>({});
+  // Which rooms are collapsed to a compact dot-row. Collapsed by default — with
+  // several rooms, showing every light's full controls at once reads as clutter,
+  // not information. Remembered per room so reopening the app doesn't uncollapse
+  // everything you'd already tidied away.
+  const [collapsedRooms, setCollapsedRooms] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("aura-collapsed-rooms") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  function toggleRoomCollapsed(key: string, collapsed: boolean) {
+    setCollapsedRooms((prev) => {
+      const next = { ...prev, [key]: collapsed };
+      try {
+        localStorage.setItem("aura-collapsed-rooms", JSON.stringify(next));
+      } catch {
+        /* private mode — the preference just won't persist */
+      }
+      return next;
+    });
+  }
   const [helping, setHelping] = useState(false);
   const [welcomed, setWelcomed] = useState(() => {
     try {
@@ -167,12 +186,12 @@ export default function App() {
             {aura.devices.length === 0 ? (
               <p className="hint">No lights found on this account yet. Try Refresh.</p>
             ) : aura.rooms.length === 0 ? (
-              <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} />
+              <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} />
             ) : (
               <div className="rooms">
                 {sections.map((sec) => {
                   const key = sec.room?.id ?? "unassigned";
-                  const collapsed = collapsedRooms[key] ?? false;
+                  const collapsed = collapsedRooms[key] ?? true;
                   return (
                     <div className="room" key={key}>
                       <div className="room-head">
@@ -180,7 +199,7 @@ export default function App() {
                           type="button"
                           className="room-toggle"
                           aria-expanded={!collapsed}
-                          onClick={() => setCollapsedRooms((prev) => ({ ...prev, [key]: !collapsed }))}
+                          onClick={() => toggleRoomCollapsed(key, !collapsed)}
                         >
                           <span className={"room-chevron" + (collapsed ? "" : " is-open")} aria-hidden="true">
                             ▸
@@ -215,7 +234,7 @@ export default function App() {
                         <RoomDots devices={sec.devices} states={aura.states} />
                       ) : (
                         <>
-                          <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} />
+                          <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} />
                           {sec.room && (
                             <Scenes
                               compact

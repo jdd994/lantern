@@ -170,7 +170,15 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .device { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; transition: border-color .2s, box-shadow .2s; }
 .device.is-on { border-color: var(--glow); box-shadow: 0 0 0 1px var(--glow-dim), 0 6px 24px -12px var(--glow); }
 .device-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.device-name { font-size: 15px; color: var(--ink); }
+.device-name { font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-name-input { flex: 1; min-width: 0; padding: 5px 8px; background: var(--bg-raised); border: 1px solid var(--glow); border-radius: 8px; color: var(--ink); font: inherit; font-size: 15px; }
+.device-head-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* identify — a quick blink so you can see which physical light this row is */
+.identify-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft); font-size: 12px; line-height: 1; display: grid; place-items: center; flex: none; }
+.identify-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--glow); }
+.identify-btn:disabled { color: var(--glow); border-color: var(--glow); animation: identify-pulse 0.6s ease-in-out infinite; }
+@keyframes identify-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* toggle */
 .toggle { width: 46px; height: 27px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); position: relative; flex: none; transition: background .2s, border-color .2s; }

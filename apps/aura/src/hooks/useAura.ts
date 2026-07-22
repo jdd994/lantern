@@ -56,6 +56,10 @@ export function useAura() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [customVibes, setCustomVibes] = useState<CustomVibe[]>([]);
+  // Your own name for a light, keyed by device id — a display override only; it
+  // never touches the brand's own name and survives a refresh/reconnect since it
+  // lives apart from the (fully-replaced-on-refresh) device cache.
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
   const [coords, setCoords] = useState<Coords | null>(readGeo);
   const [adaptive, setAdaptiveState] = useState<boolean>(() => {
     try {
@@ -126,13 +130,14 @@ export function useAura() {
 
   useEffect(() => {
     (async () => {
-      const [srcs, devs, scns, rms, autos, cvibes] = await Promise.all([
+      const [srcs, devs, scns, rms, autos, cvibes, dnames] = await Promise.all([
         db.allSources(),
         db.allDevices(),
         db.allScenes(),
         db.allRooms(),
         db.allAutomations(),
         db.allCustomVibes(),
+        db.allDeviceNames(),
       ]);
       setSources(srcs);
       setDevices(devs);
@@ -140,6 +145,7 @@ export function useAura() {
       setRooms(rms);
       setAutomations(autos.sort((a, b) => a.name.localeCompare(b.name)));
       setCustomVibes(cvibes.sort((a, b) => a.createdAt - b.createdAt));
+      setDeviceNames(dnames);
       if (devs.length) void loadStates(devs, srcs);
       if (srcs.length) void loadSensors(srcs);
     })();
@@ -530,6 +536,61 @@ export function useAura() {
   );
   useEffect(() => () => activeFades.current.forEach(clearInterval), []);
 
+  // "Which one is this?" — a few quick bright/dim pulses (or on/off, for a
+  // fixture with no brightness control), then back to exactly whatever it was
+  // showing before. Works identically for every brand: it's just setDevice
+  // calls any connector already understands, no brand-specific "identify" API
+  // required. One at a time — a device id already mid-pulse is left alone.
+  const [identifying, setIdentifying] = useState<string | null>(null);
+  const identifyDevice = useCallback(
+    async (deviceId: string) => {
+      if (identifying) return;
+      const device = devices.find((d) => d.id === deviceId);
+      if (!device) return;
+      setIdentifying(deviceId);
+      const original = statesRef.current[deviceId] ?? { on: false };
+      const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      try {
+        for (let i = 0; i < 3; i++) {
+          if (device.canBrightness) {
+            setDevice(deviceId, { on: true, brightness: 100 }, true);
+            await wait(450);
+            setDevice(deviceId, { on: true, brightness: 8 }, true);
+            await wait(450);
+          } else {
+            setDevice(deviceId, { on: true }, true);
+            await wait(400);
+            setDevice(deviceId, { on: false }, true);
+            await wait(400);
+          }
+        }
+      } finally {
+        setDevice(deviceId, original, true);
+        setIdentifying(null);
+      }
+    },
+    [devices, setDevice, identifying]
+  );
+
+  // Your own name for a light — a display-only override, never pushed to the
+  // brand (Govee/HA don't reliably support renaming anyway, and Aura isn't the
+  // source of truth for your devices). An empty name resets back to the brand's
+  // own name rather than storing an empty string.
+  const renameDevice = useCallback(async (deviceId: string, name: string) => {
+    const trimmed = name.trim();
+    if (trimmed) {
+      await db.putDeviceName(deviceId, trimmed);
+      setDeviceNames((prev) => ({ ...prev, [deviceId]: trimmed }));
+    } else {
+      await db.deleteDeviceName(deviceId);
+      setDeviceNames((prev) => {
+        const next = { ...prev };
+        delete next[deviceId];
+        return next;
+      });
+    }
+  }, []);
+
   const runAction = useCallback(
     (action: Action) => {
       if (action.kind === "scene") applyScene(action.sceneId);
@@ -721,13 +782,24 @@ export function useAura() {
 
   const connected = useMemo(() => sources.length > 0, [sources]);
 
+  // Everything downstream (DeviceList, Rooms, automations, the vibe engine) reads
+  // devices through here, so a rename shows up everywhere at once without having
+  // to thread deviceNames through every consumer individually. Internal logic
+  // above (applyVibe, identify, palette variation, …) intentionally still closes
+  // over the raw `devices` state — names are a display concern only, never part
+  // of any control decision.
+  const displayDevices = useMemo(
+    () => (Object.keys(deviceNames).length ? devices.map((d) => (deviceNames[d.id] ? { ...d, name: deviceNames[d.id] } : d)) : devices),
+    [devices, deviceNames]
+  );
+
   return {
-    sources, devices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
+    sources, devices: displayDevices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
-    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
+    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower, renameDevice,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
     exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
-    mirrorVibes, setMirrorVibes,
+    mirrorVibes, setMirrorVibes, identifyDevice, identifying,
   };
 }
