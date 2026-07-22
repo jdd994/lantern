@@ -4,6 +4,28 @@
 import type { Device, LightState } from "../lib/connectors";
 import { hexToRgb, rgbToHex } from "../lib/color";
 
+// RoomDots — a collapsed room's whole state at a glance: one small dot per
+// light, lit with its actual color when it has one, a warm glow for a
+// kelvin-only bulb that's on, and dim when it's off. No numbers, no sliders —
+// just enough to see the room's mood without expanding it.
+export function RoomDots({
+  devices,
+  states,
+}: {
+  devices: Device[];
+  states: Record<string, LightState>;
+}) {
+  return (
+    <div className="room-dots">
+      {devices.map((d) => {
+        const st = states[d.id];
+        const color = !st?.on ? "var(--off)" : st.color ? `rgb(${st.color.r}, ${st.color.g}, ${st.color.b})` : "var(--glow)";
+        return <span className="room-dot" key={d.id} style={{ background: color }} title={d.name} />;
+      })}
+    </div>
+  );
+}
+
 export function DeviceList({
   devices,
   states,
