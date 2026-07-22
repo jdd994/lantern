@@ -153,14 +153,7 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .provider-card-label { font-size: 15px; color: var(--ink); }
 .provider-card-desc { display: block; margin-top: 4px; font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
 
-.tier-badge { font-size: 10.5px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
-
-.trade { padding: 13px 15px; border-radius: var(--radius); border: 1px solid var(--line); border-left: 2px solid var(--glow); background: var(--bg-raised); font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); margin-bottom: 16px; }
-.trade strong { color: var(--ink); font-weight: 600; }
-
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.chip { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-raised); font-size: 12.5px; color: var(--ink-soft); }
-
+/* badge + consent card come from @lantern/ui (TierBadge / TradeOffCard) */
 .linklike { border: none; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--ink-faint); cursor: pointer; margin-bottom: 14px; }
 .linklike:hover { color: var(--ink); }
 

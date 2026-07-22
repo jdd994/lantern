@@ -83,7 +83,7 @@ import { demo } from "./demo";
 import { hue } from "./hue";
 import { homeAssistant } from "./ha";
 import { isTauri } from "../platform";
-import type { ProviderDescriptor } from "@lantern/core/connect";
+import type { ProviderDescriptor, Tier } from "@lantern/core/connect";
 
 // Philips Hue (local CLIP v2) and Home Assistant are only offered in the Tauri
 // shell — a browser PWA can't reach a LAN device (mixed-content/TLS/CORS), but
@@ -92,4 +92,16 @@ export const connectors: Connector[] = isTauri() ? [govee, demo, hue, homeAssist
 
 export function connectorFor(sourceId: string): Connector | undefined {
   return connectors.find((c) => c.id === sourceId);
+}
+
+// Aura's own wording for the family trust rungs — rendered wherever a tier
+// badge appears (connect sheet, capability ledger). The words stay with the
+// app; only the rungs are shared.
+export function tierWording(tier: Tier): string {
+  switch (tier) {
+    case 0: return "Nothing leaves this device";
+    case 1: return "Local network only";
+    case 2: return "Direct to the brand";
+    default: return "Via a third party";
+  }
 }

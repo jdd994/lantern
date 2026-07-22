@@ -1,8 +1,8 @@
 // SettingsSheet.tsx — the app's own vibe, your connected brands, and a plain word
 // on how Aura works. No account, no vault: Aura is a controller for your lights.
 import { useRef, useState } from "react";
-import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
-import { connectorFor, type Device } from "../lib/connectors";
+import { CapabilityLedger, Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
+import { connectorFor, tierWording, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
 
 const DEFAULT_ACCENT = "#E7B75A";
@@ -128,28 +128,29 @@ export function SettingsSheet({
         </div>
       </div>
 
+      {/* The capability ledger: everything you said yes to, what it costs, and
+          the undo — right here, stated once, never a nag. Entries derive from
+          what's actually connected, so this page can't drift from the truth. */}
       <div className="set-section">
         <span className="label">Connected</span>
-        {sources.length === 0 ? (
-          <p className="hint">No lights connected yet.</p>
-        ) : (
-          <ul className="source-list">
-            {sources.map((s) => {
-              const count = devices.filter((d) => d.sourceId === s.id).length;
-              return (
-                <li className="source-row" key={s.id}>
-                  <span>
-                    {connectorFor(s.id)?.label ?? s.id}
-                    <span className="hint"> · {count} {count === 1 ? "light" : "lights"}</span>
-                  </span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => onDisconnect(s.id)}>
-                    Disconnect
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <CapabilityLedger
+          entries={sources.map((s) => {
+            const conn = connectorFor(s.id);
+            const count = devices.filter((d) => d.sourceId === s.id).length;
+            return {
+              id: s.id,
+              label: conn?.label ?? s.id,
+              tier: conn?.descriptor.tier ?? 0,
+              tierLabel: conn ? tierWording(conn.descriptor.tier) : undefined,
+              discloses: conn?.descriptor.discloses ?? "",
+              detail: `${count} ${count === 1 ? "light" : "lights"}`,
+              since: s.connectedAt,
+            };
+          })}
+          onRevoke={onDisconnect}
+          revokeLabel="Disconnect"
+          emptyText="No lights connected yet."
+        />
       </div>
 
       <div className="set-section">
