@@ -5,8 +5,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Sheet } from "@lantern/ui";
 import { VIBES } from "@lantern/core";
-import { decideVibe, type AmbientKind, type AmbientReading, type AmbientTone } from "../lib/ambient";
+import { decideVibe, type AmbientKind, type AmbientReading, type AmbientTone, type VibeDecision } from "../lib/ambient";
 import { createMicSource } from "../lib/ambient-source";
+import { describeScene } from "../lib/scene";
 
 const PRESETS: { label: string; reading: AmbientReading }[] = [
   { label: "Quiet night", reading: { kind: "quiet", level: 0.04, energy: 0.05, tone: "warm" } },
@@ -18,6 +19,26 @@ const PRESETS: { label: string; reading: AmbientReading }[] = [
 
 const hourLabel = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "am" : "pm"}`;
 
+// getUserMedia rejects with a *named* DOMException — the name says exactly what
+// went wrong, so there's no reason to show everyone the same unhelpful sentence.
+function micErrorMessage(e: unknown): string {
+  const name = e instanceof Error ? e.name : "";
+  switch (name) {
+    case "NotAllowedError":
+      return "Microphone access was denied. Check this site's microphone permission in your browser (often a camera/lock icon in the address bar), and your OS's own microphone privacy setting for the browser — then try again.";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+      return "No microphone was found on this device.";
+    case "NotReadableError":
+    case "TrackStartError":
+      return "Couldn't reach the microphone — it may be in use by another app right now.";
+    case "SecurityError":
+      return e instanceof Error && e.message ? e.message : "The microphone isn't available in this context.";
+    default:
+      return "Couldn't access the microphone" + (name ? ` (${name}).` : ".");
+  }
+}
+
 export function AmbientSheet({
   onApplyVibe,
   onClose,
@@ -25,18 +46,19 @@ export function AmbientSheet({
   onApplyVibe: (vibeId: string) => void;
   onClose: () => void;
 }) {
-  const [mode, setMode] = useState<"simulate" | "mic">("simulate");
+  const [mode, setMode] = useState<"simulate" | "mic" | "describe">("simulate");
   const [sim, setSim] = useState<AmbientReading>(PRESETS[1].reading);
   const [micReading, setMicReading] = useState<AmbientReading>({ level: 0, energy: 0, tone: "neutral" });
   const [micError, setMicError] = useState<string | null>(null);
+  const [describeText, setDescribeText] = useState("");
   const [useNow, setUseNow] = useState(true);
   const [overrideHour, setOverrideHour] = useState(new Date().getHours());
   const [auto, setAuto] = useState(false);
 
   const reading = mode === "mic" ? micReading : sim;
   const hour = useNow ? new Date().getHours() : overrideHour;
-  const decision = decideVibe(reading, { hour });
-  const vibe = VIBES.find((v) => v.id === decision.vibeId);
+  const decision: VibeDecision | null = mode === "describe" ? describeScene(describeText) : decideVibe(reading, { hour });
+  const vibe = decision ? VIBES.find((v) => v.id === decision.vibeId) : undefined;
 
   // Microphone lifecycle — start when the mic tab is active, always stop on leave.
   useEffect(() => {
@@ -44,7 +66,7 @@ export function AmbientSheet({
     const source = createMicSource();
     let live = true;
     setMicError(null);
-    source.start((r) => live && setMicReading(r)).catch(() => setMicError("Couldn't access the microphone."));
+    source.start((r) => live && setMicReading(r)).catch((e) => setMicError(micErrorMessage(e)));
     return () => {
       live = false;
       source.stop();
@@ -54,7 +76,7 @@ export function AmbientSheet({
   // Apply automatically: push the chosen vibe whenever it changes (not every reading).
   const lastApplied = useRef<string | null>(null);
   useEffect(() => {
-    if (!auto) {
+    if (!auto || !decision) {
       lastApplied.current = null;
       return;
     }
@@ -62,7 +84,7 @@ export function AmbientSheet({
       lastApplied.current = decision.vibeId;
       onApplyVibe(decision.vibeId);
     }
-  }, [auto, decision.vibeId, onApplyVibe]);
+  }, [auto, decision?.vibeId, onApplyVibe]);
 
   const setSimField = <K extends keyof AmbientReading>(k: K, v: AmbientReading[K]) =>
     setSim((s) => ({ ...s, [k]: v }));
@@ -72,7 +94,7 @@ export function AmbientSheet({
       <h3>Read the room</h3>
       <p className="hint">
         Aura can sense the room and set the vibe — dialed in by the time of day. Simulate what it hears
-        (or try your mic) and watch it decide.
+        (or try your mic), or just describe the moment, and watch it decide.
       </p>
 
       <div className="seg">
@@ -81,6 +103,9 @@ export function AmbientSheet({
         </button>
         <button type="button" className="seg-btn" aria-pressed={mode === "mic"} onClick={() => setMode("mic")}>
           Microphone
+        </button>
+        <button type="button" className="seg-btn" aria-pressed={mode === "describe"} onClick={() => setMode("describe")}>
+          Describe
         </button>
       </div>
 
@@ -140,7 +165,7 @@ export function AmbientSheet({
             </label>
           </div>
         </div>
-      ) : (
+      ) : mode === "mic" ? (
         <div className="set-section">
           {micError ? (
             <div className="error">{micError}</div>
@@ -162,8 +187,23 @@ export function AmbientSheet({
             </>
           )}
         </div>
+      ) : (
+        <div className="set-section">
+          <label className="field">
+            <span className="label">What's the moment?</span>
+            <input
+              type="text"
+              value={describeText}
+              onChange={(e) => setDescribeText(e.target.value)}
+              placeholder="cozy movie night, getting ready for bed, yoga outside…"
+              autoFocus
+            />
+          </label>
+          <p className="hint">Matched right here on this device — nothing you type is sent anywhere.</p>
+        </div>
       )}
 
+      {mode !== "describe" && (
       <div className="set-section">
         <span className="label">Time of day</span>
         <div className="seg">
@@ -188,27 +228,40 @@ export function AmbientSheet({
           </label>
         )}
       </div>
+      )}
 
-      <div className="decision" style={{ borderColor: vibe?.accent }}>
-        <span className="decision-dot" style={{ background: vibe?.accent }} />
-        <div className="decision-body">
-          <span className="decision-vibe">{vibe?.label ?? decision.vibeId}</span>
-          <span className="decision-reason">{decision.reason}</span>
-          <div className="conf">
-            <span style={{ width: `${Math.round(decision.confidence * 100)}%` }} />
+      {decision ? (
+        <div className="decision" style={{ borderColor: vibe?.accent }}>
+          <span className="decision-dot" style={{ background: vibe?.accent }} />
+          <div className="decision-body">
+            <span className="decision-vibe">{vibe?.label ?? decision.vibeId}</span>
+            <span className="decision-reason">{decision.reason}</span>
+            <div className="conf">
+              <span style={{ width: `${Math.round(decision.confidence * 100)}%` }} />
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        mode === "describe" && (
+          <p className="hint">
+            {describeText.trim()
+              ? "Couldn't tell from that — try different words, or pick a vibe below."
+              : "Describe the moment, and Aura will suggest a vibe."}
+          </p>
+        )
+      )}
 
-      <div className="sheet-actions">
-        <label className="auto-toggle">
-          <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-          Apply automatically
-        </label>
-        <button className="btn btn-primary" onClick={() => onApplyVibe(decision.vibeId)}>
-          Apply now
-        </button>
-      </div>
+      {decision && (
+        <div className="sheet-actions">
+          <label className="auto-toggle">
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+            Apply automatically
+          </label>
+          <button className="btn btn-primary" onClick={() => onApplyVibe(decision.vibeId)}>
+            Apply now
+          </button>
+        </div>
+      )}
 
       <p className="hint auto-foot">
         On-device only. Hands-free listening and telling music from nature come with the desktop app;
