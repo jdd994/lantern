@@ -53,3 +53,112 @@
 .l-theme-dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; }
 .l-theme-name { font-weight: 650; font-size: 0.92rem; }
 .l-theme-desc { font-size: 0.73rem; opacity: 0.75; line-height: 1.35; }
+
+/* ---- trust tier badge ------------------------------------------------------
+   A quiet pill: colored dot for the rung, the app's own wording beside it.
+   Dot colors read app tokens (--above / --brass / --below) with calm fallbacks. */
+.l-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  border: 1px solid var(--line, #333);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.l-tier-dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--l-tier-color, currentColor); }
+.l-tier-0 { --l-tier-color: var(--above, #8fbf9f); }
+.l-tier-1 { --l-tier-color: var(--brass, var(--accent, #c9a961)); }
+.l-tier-2 { --l-tier-color: var(--ink-soft, #9a9a9a); }
+.l-tier-3 { --l-tier-color: var(--below, #cd8670); }
+
+/* ---- trade-off card --------------------------------------------------------
+   The trade, stated inline at the moment of choosing — never a popup, never
+   fine print. Left border carries the emphasis, like Aura's trade box and
+   Ballast's disclosure both did on their own. */
+.l-trade {
+  padding: 13px 15px;
+  border-radius: var(--radius, 12px);
+  border: 1px solid var(--line, #333);
+  border-left: 2px solid var(--glow, var(--accent, #c9a961));
+  background: var(--bg-raised, var(--surface, rgba(128, 128, 128, 0.07)));
+  margin: 0 0 16px;
+}
+.l-trade-head { margin-bottom: 9px; }
+.l-trade-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft, #bbb);
+}
+.l-trade-body strong { color: var(--ink, #eaeaea); font-weight: 600; }
+.l-trade-sec { margin-top: 11px; }
+.l-trade-sechead {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  margin-bottom: 5px;
+}
+.l-trade-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.l-trade-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #333);
+  background: var(--surface, transparent);
+  font-size: 12.5px;
+  color: var(--ink-soft, #bbb);
+}
+.l-trade-refusal {
+  margin: 0 0 3px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+}
+/* The deliberate tick for heavy choices: one honest sentence, roomy enough to
+   be a real act, small enough to stay calm. */
+.l-trade-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink, #eaeaea);
+  cursor: pointer;
+}
+.l-trade-confirm input { margin-top: 3px; accent-color: var(--accent, #c9a961); }
+
+/* ---- capability ledger -----------------------------------------------------
+   The standing record: everything you said yes to, its cost, and the undo —
+   right there. States each fact once, quietly; never a nag. */
+.l-ledger { list-style: none; margin: 0; padding: 0; }
+.l-ledger-row { padding: 10px 0; border-top: 1px solid var(--line, #333); }
+.l-ledger-row:first-child { border-top: none; padding-top: 2px; }
+.l-ledger-main { display: flex; align-items: center; gap: 8px; }
+.l-ledger-label { font-weight: 600; color: var(--ink, #eaeaea); font-size: 14px; }
+.l-ledger-undo {
+  margin-left: auto;
+  flex: none;
+  font-size: 12.5px;
+  color: var(--ink-soft, #bbb);
+  background: transparent;
+  border: 1px solid var(--line, #333);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.l-ledger-undo:hover { color: var(--ink, #eaeaea); border-color: var(--ink-faint, #777); }
+.l-ledger-discloses {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+}
+.l-ledger-meta { margin: 3px 0 0; font-size: 12px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }
+.l-ledger-empty { font-size: 13px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }

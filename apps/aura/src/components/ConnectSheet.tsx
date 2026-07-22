@@ -4,18 +4,8 @@
 // consent + credential. No brand is pre-selected — the picker is the first thing
 // you see, not a tab strip behind a Govee key field.
 import { useState } from "react";
-import { Sheet } from "@lantern/ui";
-import type { Tier } from "@lantern/core/connect";
-import { connectors } from "../lib/connectors";
-
-function tierBadge(tier: Tier): string {
-  switch (tier) {
-    case 0: return "Nothing leaves this device";
-    case 1: return "Local network only";
-    case 2: return "Direct to the brand";
-    default: return "Via a third party";
-  }
-}
+import { Sheet, TierBadge, TradeOffCard } from "@lantern/ui";
+import { connectors, tierWording } from "../lib/connectors";
 
 export function ConnectSheet({
   onConnect,
@@ -101,7 +91,7 @@ export function ConnectSheet({
             <button key={c.id} type="button" className="provider-card" onClick={() => chooseBrand(c.id)}>
               <span className="provider-card-head">
                 <span className="provider-card-label">{c.label}</span>
-                <span className="tier-badge">{tierBadge(c.descriptor.tier)}</span>
+                <TierBadge tier={c.descriptor.tier}>{tierWording(c.descriptor.tier)}</TierBadge>
               </span>
               <span className="provider-card-desc">{c.descriptor.discloses}</span>
             </button>
@@ -113,27 +103,16 @@ export function ConnectSheet({
             ← Choose a different brand
           </button>
 
-          <div className="trade">
-            <strong>{conn.label}.</strong> {conn.descriptor.discloses}
-          </div>
-
-          {conn.descriptor.takes.length > 0 && (
-            <div className="set-section">
-              <div className="set-head">What Aura takes</div>
-              <div className="chips">
-                {conn.descriptor.takes.map((t) => (
-                  <span className="chip" key={t}>{t}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {conn.descriptor.refuses.length > 0 && (
-            <div className="set-section">
-              <div className="set-head">What Aura won't take</div>
-              {conn.descriptor.refuses.map((r) => <p key={r}>{r}</p>)}
-            </div>
-          )}
+          <TradeOffCard
+            tier={conn.descriptor.tier}
+            tierLabel={tierWording(conn.descriptor.tier)}
+            label={conn.label}
+            discloses={conn.descriptor.discloses}
+            takes={conn.descriptor.takes}
+            refuses={conn.descriptor.refuses}
+            takesHead="What Aura takes"
+            refusesHead="What Aura won't take"
+          />
         </>
       )}
 
