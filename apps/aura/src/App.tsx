@@ -5,7 +5,7 @@ import { useAura } from "./hooks/useAura";
 import { groupByRoom, type Room } from "./lib/rooms";
 import type { CustomVibe } from "./lib/db";
 import { ConnectSheet } from "./components/ConnectSheet";
-import { DeviceList } from "./components/DeviceList";
+import { DeviceList, RoomDots } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
@@ -37,6 +37,9 @@ export default function App() {
   const [creatingVibe, setCreatingVibe] = useState(false);
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
+  // Which rooms are collapsed to a compact dot-row — expanded by default (today's
+  // look, unchanged), so this only kicks in once someone actually wants it tidier.
+  const [collapsedRooms, setCollapsedRooms] = useState<Record<string, boolean>>({});
   const [helping, setHelping] = useState(false);
   const [welcomed, setWelcomed] = useState(() => {
     try {
@@ -167,51 +170,69 @@ export default function App() {
               <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} />
             ) : (
               <div className="rooms">
-                {sections.map((sec) => (
-                  <div className="room" key={sec.room?.id ?? "unassigned"}>
-                    <div className="room-head">
-                      <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
-                      {sec.devices.length > 0 && (
-                        <div className="room-master">
-                          {sec.room && (
-                            <button className="btn btn-ghost btn-sm" onClick={() => setVibeRoom(sec.room)}>
-                              Vibe
+                {sections.map((sec) => {
+                  const key = sec.room?.id ?? "unassigned";
+                  const collapsed = collapsedRooms[key] ?? false;
+                  return (
+                    <div className="room" key={key}>
+                      <div className="room-head">
+                        <button
+                          type="button"
+                          className="room-toggle"
+                          aria-expanded={!collapsed}
+                          onClick={() => setCollapsedRooms((prev) => ({ ...prev, [key]: !collapsed }))}
+                        >
+                          <span className={"room-chevron" + (collapsed ? "" : " is-open")} aria-hidden="true">
+                            ▸
+                          </span>
+                          <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
+                        </button>
+                        {sec.devices.length > 0 && (
+                          <div className="room-master">
+                            {sec.room && (
+                              <button className="btn btn-ghost btn-sm" onClick={() => setVibeRoom(sec.room)}>
+                                Vibe
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), false)}
+                            >
+                              All off
                             </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), true)}
+                            >
+                              All on
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {sec.devices.length === 0 ? (
+                        <p className="hint">No lights here yet — add some from Rooms.</p>
+                      ) : collapsed ? (
+                        <RoomDots devices={sec.devices} states={aura.states} />
+                      ) : (
+                        <>
+                          <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} />
+                          {sec.room && (
+                            <Scenes
+                              compact
+                              scenes={aura.scenes.filter((s) => s.roomId === sec.room!.id)}
+                              busy={aura.busy}
+                              canSave={sec.devices.length > 0}
+                              onApply={aura.applyScene}
+                              onSave={(n) => aura.saveScene(n, sec.room!.id)}
+                              onRemove={aura.removeScene}
+                              onRename={aura.renameScene}
+                            />
                           )}
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), false)}
-                          >
-                            All off
-                          </button>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => aura.setRoomPower(sec.devices.map((d) => d.id), true)}
-                          >
-                            All on
-                          </button>
-                        </div>
+                        </>
                       )}
                     </div>
-                    {sec.devices.length === 0 ? (
-                      <p className="hint">No lights here yet — add some from Rooms.</p>
-                    ) : (
-                      <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} />
-                    )}
-                    {sec.room && (
-                      <Scenes
-                        compact
-                        scenes={aura.scenes.filter((s) => s.roomId === sec.room!.id)}
-                        busy={aura.busy}
-                        canSave={sec.devices.length > 0}
-                        onApply={aura.applyScene}
-                        onSave={(n) => aura.saveScene(n, sec.room!.id)}
-                        onRemove={aura.removeScene}
-                        onRename={aura.renameScene}
-                      />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
