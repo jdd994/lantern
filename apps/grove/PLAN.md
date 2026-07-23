@@ -110,8 +110,15 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
 ## Build order
 
 1. **Pure domain lib** (`src/lib/model.ts`) — types, encrypted-payload codecs,
-   kin-walking helpers, lifespan formatting. Unit-tested, IO-free. ← *started*
-2. Local vault + IndexedDB stores, mirroring Driftless `db.ts`/hook shape.
+   kin-walking helpers, lifespan formatting. Unit-tested, IO-free. — **done**
+2. **Local vault + IndexedDB stores** — **done.** `crypto.ts` (thin adapter,
+   verifier token `grove-ok` — frozen forever, test-pinned), `db.ts` (stores:
+   vault, people, unions, keepsakes, media, sync, device, recoverySession;
+   generic by-kind sync accessors ready for the engine). Deliberate divergence
+   from Hearth: **no plaintext lived-time fields** — birth/death dates are
+   exactly the metadata a genealogy leaks, so nothing is windowed and
+   everything decrypts on unlock, like Driftless. Vault lifecycle rides
+   `@lantern/core/vault`; identity keypair baked in from day one.
 3. The humble UI: person page, add-relative flow, keepsake attach.
 4. Sync + sharing (compose the existing engine + invite flow).
 5. GEDCOM import/export.
