@@ -371,6 +371,28 @@ export function useAura() {
     [setDevice]
   );
 
+  // Master brightness for a room: a mixing-desk fader, not a flattener. Scales
+  // every currently-on, dimmable light in the room by the same ratio, so a lamp
+  // that was already dimmer than the others stays relatively dimmer — it moves
+  // the room's existing character up or down rather than erasing it. Lights
+  // that are off are left off; a brightness slider isn't "All on" in disguise.
+  const setRoomBrightness = useCallback(
+    (deviceIds: string[], target: number) => {
+      const clamped = Math.max(1, Math.min(100, Math.round(target)));
+      const on = deviceIds
+        .map((id) => devices.find((d) => d.id === id))
+        .filter((d): d is Device => !!d && d.canBrightness && !!states[d.id]?.on);
+      if (!on.length) return;
+      const avg = on.reduce((sum, d) => sum + (states[d.id]?.brightness ?? 100), 0) / on.length;
+      for (const d of on) {
+        const cur = states[d.id]?.brightness ?? 100;
+        const next = avg > 0 ? Math.max(1, Math.min(100, Math.round(cur * (clamped / avg)))) : clamped;
+        setDevice(d.id, { brightness: next });
+      }
+    },
+    [devices, states, setDevice]
+  );
+
   // Apply a shared vibe (from @lantern/core) to the lights. Each device takes what
   // it can of the vibe's target (brightness / color); the vibe stays medium-agnostic,
   // Aura renders it in light. Internal: no relay publish, so the relay subscription
@@ -796,7 +818,7 @@ export function useAura() {
   return {
     sources, devices: displayDevices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
-    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower, renameDevice,
+    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower, setRoomBrightness, renameDevice,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
     exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
