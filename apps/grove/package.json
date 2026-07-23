@@ -10,7 +10,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@lantern/core": "*"
+    "@lantern/core": "*",
+    "idb": "^8.0.0"
   },
   "devDependencies": {
     "typescript": "^5.5.3",
