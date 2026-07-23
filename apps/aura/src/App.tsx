@@ -9,7 +9,6 @@ import { DeviceList, RoomDots } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
-import { Vibes } from "./components/Vibes";
 import { CustomVibeSheet } from "./components/CustomVibeSheet";
 import { VibePicker } from "./components/VibePicker";
 import { AmbientSheet } from "./components/AmbientSheet";
@@ -37,6 +36,7 @@ export default function App() {
   const [creatingVibe, setCreatingVibe] = useState(false);
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
+  const [pickingWholeHomeVibe, setPickingWholeHomeVibe] = useState(false);
   // Which rooms are collapsed to a compact dot-row. Collapsed by default — with
   // several rooms, showing every light's full controls at once reads as clutter,
   // not information. Remembered per room so reopening the app doesn't uncollapse
@@ -149,15 +149,19 @@ export default function App() {
       ) : (
         <>
           {aura.devices.length > 0 && (
-            <Vibes
-              busy={aura.busy}
-              customVibes={aura.customVibes}
-              onApply={(id) => aura.applyVibe(id)}
-              onAuto={() => setAmbient(true)}
-              onAddVibe={() => setCreatingVibe(true)}
-              onEditVibe={(v) => setEditingVibe(v)}
-              onRemoveVibe={aura.removeCustomVibe}
-            />
+            <section className="section">
+              <div className="section-head">
+                <h2>Vibe</h2>
+                <div className="head-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => setAmbient(true)}>
+                    Auto…
+                  </button>
+                  <button className="btn btn-primary btn-sm" onClick={() => setPickingWholeHomeVibe(true)}>
+                    Set the whole home
+                  </button>
+                </div>
+              </div>
+            </section>
           )}
 
           <section className="section">
@@ -315,9 +319,25 @@ export default function App() {
       {vibeRoom && (
         <VibePicker
           title={vibeRoom.name}
+          busy={aura.busy}
           customVibes={aura.customVibes}
           onPick={(id) => aura.applyVibe(id, vibeRoom.id)}
+          onAddVibe={() => setCreatingVibe(true)}
+          onEditVibe={(v) => setEditingVibe(v)}
+          onRemoveVibe={aura.removeCustomVibe}
           onClose={() => setVibeRoom(null)}
+        />
+      )}
+      {pickingWholeHomeVibe && (
+        <VibePicker
+          title="Home"
+          busy={aura.busy}
+          customVibes={aura.customVibes}
+          onPick={(id) => aura.applyVibe(id)}
+          onAddVibe={() => setCreatingVibe(true)}
+          onEditVibe={(v) => setEditingVibe(v)}
+          onRemoveVibe={aura.removeCustomVibe}
+          onClose={() => setPickingWholeHomeVibe(false)}
         />
       )}
       {ambient && (
