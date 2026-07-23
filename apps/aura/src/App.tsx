@@ -186,7 +186,7 @@ export default function App() {
             {aura.devices.length === 0 ? (
               <p className="hint">No lights found on this account yet. Try Refresh.</p>
             ) : aura.rooms.length === 0 ? (
-              <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} />
+              <DeviceList devices={aura.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} onSetBrightness={aura.setRoomBrightness} />
             ) : (
               <div className="rooms">
                 {sections.map((sec) => {
@@ -234,7 +234,7 @@ export default function App() {
                         <RoomDots devices={sec.devices} states={aura.states} />
                       ) : (
                         <>
-                          <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} />
+                          <DeviceList devices={sec.devices} states={aura.states} onSet={aura.setDevice} onIdentify={aura.identifyDevice} identifying={aura.identifying} onRename={aura.renameDevice} onSetBrightness={aura.setRoomBrightness} />
                           {sec.room && (
                             <Scenes
                               compact

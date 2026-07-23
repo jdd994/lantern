@@ -34,6 +34,7 @@ export function DeviceList({
   onIdentify,
   identifying,
   onRename,
+  onSetBrightness,
 }: {
   devices: Device[];
   states: Record<string, LightState>;
@@ -46,6 +47,9 @@ export function DeviceList({
   // Optional — your own name for this light, shown everywhere from here on.
   // Never touches the brand's own name; an empty rename resets back to it.
   onRename?: (id: string, name: string) => void;
+  // Optional — a master fader for this exact list of lights. Shown only when
+  // at least one is on and dimmable; scales them together, doesn't flatten them.
+  onSetBrightness?: (ids: string[], target: number) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -54,8 +58,27 @@ export function DeviceList({
     setEditingId(null);
   }
 
+  const dimmable = devices.filter((d) => d.canBrightness && states[d.id]?.on);
+  const avgBrightness = dimmable.length
+    ? Math.round(dimmable.reduce((sum, d) => sum + (states[d.id]?.brightness ?? 100), 0) / dimmable.length)
+    : 0;
+
   return (
     <div className="devices">
+      {onSetBrightness && dimmable.length > 1 && (
+        <div className="room-brightness">
+          <span className="label">Brightness</span>
+          <input
+            className="dim wide"
+            type="range"
+            min={1}
+            max={100}
+            value={avgBrightness}
+            aria-label="Overall brightness"
+            onChange={(e) => onSetBrightness(devices.map((d) => d.id), Number(e.target.value))}
+          />
+        </div>
+      )}
       {devices.map((d) => {
         const st = states[d.id] ?? { on: false };
         const editing = editingId === d.id;
