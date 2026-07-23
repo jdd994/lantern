@@ -189,6 +189,11 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .device-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; margin-top: 14px; }
 .device-controls .dim, .device-controls .temp { min-width: 110px; }
 
+/* master fader — scales the room's dimmable-and-on lights together, doesn't
+   flatten them. A little more presence than an individual light's slider. */
+.room-brightness { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); }
+.room-brightness .label { flex: none; margin: 0; }
+
 /* white temperature slider — warm to cool */
 .temp { -webkit-appearance: none; appearance: none; flex: 1; height: 6px; padding: 0; border: none; border-radius: 999px; background: linear-gradient(90deg, #FFB146, #FFEFD6 52%, #CFE0FF); }
 .temp:focus { box-shadow: 0 0 0 3px var(--glow-dim); }
