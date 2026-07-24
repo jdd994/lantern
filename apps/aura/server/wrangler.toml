@@ -6,7 +6,7 @@ compatibility_date = "2024-12-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "aura-feedback"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "1575258f-c7eb-4a7c-893a-7a98cb7b2645"
 
 [vars]
 # CORS allowlist for the one open route (/feedback). No TOKEN_SECRET here —
