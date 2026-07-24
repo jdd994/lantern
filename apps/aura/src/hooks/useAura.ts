@@ -686,47 +686,82 @@ export function useAura() {
   }, []);
 
   // ---- portability: move your setup between devices (no account) ----------
-  // Exports rooms/scenes/vibes/automations — but NOT credentials. Device ids are
-  // stable per physical light/bridge, so on a new device you re-pair your lights and
-  // your rooms and scenes line right back up.
+  // Exports rooms/scenes/vibes/automations/your renamed lights. Credentials are
+  // included only when `includeAccounts` is explicitly true (the QR "set up from
+  // phone" flow asks first, in plain words, before doing that) — the default,
+  // file-based export still holds no keys: device ids are stable per physical
+  // light/bridge, so on a new device you re-pair your lights and everything else
+  // lines back up. `compact` drops the pretty-printing so a QR code has the best
+  // chance of fitting the whole payload.
   const exportSetup = useCallback(
-    () =>
+    (includeAccounts = false, compact = false) =>
       JSON.stringify(
-        { app: "aura", version: 1, exportedAt: new Date().toISOString(), rooms, scenes, customVibes, automations },
+        {
+          app: "aura",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          rooms,
+          scenes,
+          customVibes,
+          automations,
+          deviceNames,
+          ...(includeAccounts ? { sources } : {}),
+        },
         null,
-        2
+        compact ? undefined : 2
       ),
-    [rooms, scenes, customVibes, automations]
+    [rooms, scenes, customVibes, automations, deviceNames, sources]
   );
 
-  const importSetup = useCallback(async (text: string): Promise<{ ok: boolean; error?: string }> => {
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return { ok: false, error: "That file isn't valid JSON." };
-    }
-    if (data?.app !== "aura" || !data.version) {
-      return { ok: false, error: "That doesn't look like an Aura setup file." };
-    }
-    try {
-      const rms: Room[] = Array.isArray(data.rooms) ? data.rooms : [];
-      const scns: StoredScene[] = Array.isArray(data.scenes) ? data.scenes : [];
-      const cvs: CustomVibe[] = Array.isArray(data.customVibes) ? data.customVibes : [];
-      const autos: Automation[] = Array.isArray(data.automations) ? data.automations : [];
-      await db.putRooms(rms);
-      for (const s of scns) await db.putScene(s);
-      for (const v of cvs) await db.putCustomVibe(v);
-      for (const a of autos) await db.putAutomation(a);
-      setRooms((prev) => mergeById(prev, rms));
-      setScenes((prev) => mergeById(prev, scns).sort((a, b) => a.createdAt - b.createdAt));
-      setCustomVibes((prev) => mergeById(prev, cvs).sort((a, b) => a.createdAt - b.createdAt));
-      setAutomations((prev) => mergeById(prev, autos).sort((a, b) => a.name.localeCompare(b.name)));
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
-    }
-  }, []);
+  const importSetup = useCallback(
+    async (text: string): Promise<{ ok: boolean; error?: string }> => {
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        return { ok: false, error: "That doesn't look like a setup file or code." };
+      }
+      if (data?.app !== "aura" || !data.version) {
+        return { ok: false, error: "That doesn't look like an Aura setup file or code." };
+      }
+      try {
+        const rms: Room[] = Array.isArray(data.rooms) ? data.rooms : [];
+        const scns: StoredScene[] = Array.isArray(data.scenes) ? data.scenes : [];
+        const cvs: CustomVibe[] = Array.isArray(data.customVibes) ? data.customVibes : [];
+        const autos: Automation[] = Array.isArray(data.automations) ? data.automations : [];
+        const names: Record<string, string> =
+          data.deviceNames && typeof data.deviceNames === "object" ? data.deviceNames : {};
+        await db.putRooms(rms);
+        for (const s of scns) await db.putScene(s);
+        for (const v of cvs) await db.putCustomVibe(v);
+        for (const a of autos) await db.putAutomation(a);
+        for (const [id, name] of Object.entries(names)) await db.putDeviceName(id, name);
+        setRooms((prev) => mergeById(prev, rms));
+        setScenes((prev) => mergeById(prev, scns).sort((a, b) => a.createdAt - b.createdAt));
+        setCustomVibes((prev) => mergeById(prev, cvs).sort((a, b) => a.createdAt - b.createdAt));
+        setAutomations((prev) => mergeById(prev, autos).sort((a, b) => a.name.localeCompare(b.name)));
+        if (Object.keys(names).length) setDeviceNames((prev) => ({ ...prev, ...names }));
+
+        // A transferred account (only present when the sender chose to include
+        // it) is re-validated the same way a fresh connect is — never trusted
+        // blindly — which also repopulates that source's devices and states.
+        const sourceErrors: string[] = [];
+        if (Array.isArray(data.sources)) {
+          for (const s of data.sources) {
+            if (!s?.id || typeof s.cred !== "string") continue;
+            const err = await connect(s.id, s.cred);
+            if (err) sourceErrors.push(`${s.id}: ${err}`);
+          }
+        }
+        return sourceErrors.length
+          ? { ok: true, error: `Imported, but couldn't reconnect: ${sourceErrors.join("; ")}` }
+          : { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
+      }
+    },
+    [connect]
+  );
 
   // Sensor poller: watch each motion sensor and fire on the *edge* — the moment
   // motion starts — not for as long as it keeps seeing you. Sensor automations use a
