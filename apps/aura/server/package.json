@@ -1,0 +1,21 @@
+{
+  "name": "aura-server",
+  "private": true,
+  "type": "module",
+  "description": "Aura's only server — one anonymous feedback box. No accounts, no light data, nothing else.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "npm run typecheck && wrangler deploy",
+    "db:init": "wrangler d1 execute aura-feedback --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute aura-feedback --local --file=schema.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "typescript": "^5.5.3",
+    "wrangler": "^3.95.0"
+  }
+}
