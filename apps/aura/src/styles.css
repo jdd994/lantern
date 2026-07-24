@@ -245,10 +245,20 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 
 /* room collapse toggle — plain-text button, the chevron does the talking */
 .room-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.room-toggle .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-title { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.room-toggle .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.room-combo-tag { font-size: 11px; font-weight: 400; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .room-chevron { flex: none; display: inline-block; font-size: 11px; color: var(--ink-faint); transition: transform .18s ease, color .18s ease; }
 .room-chevron.is-open { transform: rotate(90deg); color: var(--ink-soft); }
 .room-toggle:hover .room-chevron { color: var(--ink); }
+
+/* combining rooms (RoomsSheet) */
+.room-combo-row { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-right: 10px; }
+.room-combo-row .room-rename { margin-right: 0; }
+.room-combo-note { padding-left: 2px; }
+.combo-picker { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0 12px; }
+.combo-check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-soft); cursor: pointer; }
+.combo-check input { width: auto; }
 
 /* collapsed room summary — one dot per light, its actual color, nothing else */
 .room-dots { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 4px; }
