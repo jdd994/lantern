@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { CapabilityLedger, Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 import { connectorFor, tierWording, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
+import { TransferPanel } from "./TransferPanel";
 
 const DEFAULT_ACCENT = "#E7B75A";
 
@@ -38,12 +39,15 @@ export function SettingsSheet({
   onAdaptive: (on: boolean) => void;
   mirrorVibes: boolean;
   onMirrorVibes: (on: boolean) => void;
-  onExport: () => string;
+  onExport: (includeAccounts?: boolean, compact?: boolean) => string;
   onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [ioNote, setIoNote] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  const [pasting, setPasting] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   function exportSetup() {
     const blob = new Blob([onExport()], { type: "application/json" });
@@ -56,10 +60,28 @@ export function SettingsSheet({
     setIoNote("Setup exported.");
   }
 
+  async function copyAsText() {
+    try {
+      await navigator.clipboard.writeText(onExport());
+      setIoNote("Setup copied — paste it anywhere you'd move text.");
+    } catch {
+      setIoNote("Couldn't copy — try Export setup instead.");
+    }
+  }
+
   async function importSetup(file: File) {
     const text = await file.text();
     const res = await onImport(text);
     setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+  }
+
+  async function importPastedText() {
+    const res = await onImport(pasteText);
+    setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+    if (res.ok) {
+      setPasting(false);
+      setPasteText("");
+    }
   }
   return (
     <Sheet onClose={onClose} ariaLabel="Settings">
@@ -154,17 +176,43 @@ export function SettingsSheet({
       </div>
 
       <div className="set-section">
-        <span className="label">Your setup</span>
+        <span className="label">Move to another device</span>
         <p className="hint">
-          Move your rooms, scenes, and vibes to another device. The file holds no keys — you re-pair
-          your lights there, and everything lines back up.
+          {transferring
+            ? null
+            : "Scan a code between two devices — no server, no account, nothing but the two of you."}
+        </p>
+        {transferring ? (
+          <TransferPanel
+            onExport={onExport}
+            onImport={onImport}
+            onClose={() => setTransferring(false)}
+          />
+        ) : (
+          <button className="btn btn-sm" onClick={() => setTransferring(true)}>
+            Move with a code
+          </button>
+        )}
+      </div>
+
+      <div className="set-section">
+        <span className="label">Export / Import</span>
+        <p className="hint">
+          Move your rooms, scenes, and vibes another way. The file (and the copied text) hold no keys —
+          you re-pair your lights there, and everything lines back up.
         </p>
         <div className="io-row">
           <button className="btn btn-sm" onClick={exportSetup}>
             Export setup
           </button>
+          <button className="btn btn-sm" onClick={copyAsText}>
+            Copy as text
+          </button>
           <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
             Import setup
+          </button>
+          <button className="btn btn-sm" onClick={() => setPasting((v) => !v)}>
+            Paste text
           </button>
           <input
             ref={fileRef}
@@ -178,6 +226,20 @@ export function SettingsSheet({
             }}
           />
         </div>
+        {pasting && (
+          <div className="paste-row">
+            <textarea
+              className="note-input"
+              rows={3}
+              placeholder="Paste a copied setup here"
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+            <button className="btn btn-sm" disabled={!pasteText.trim()} onClick={importPastedText}>
+              Import pasted text
+            </button>
+          </div>
+        )}
         {ioNote && <p className="hint io-note">{ioNote}</p>}
       </div>
 
@@ -185,7 +247,8 @@ export function SettingsSheet({
         <span className="label">How Aura works</span>
         <p className="hint">
           Aura runs entirely on this device and talks straight to each brand's own service. It has no
-          account and no server of its own — your keys, devices, and scenes never leave here.
+          account, and your keys, devices, and scenes never leave here. The only exception is a note you
+          choose to send from Help — that's the one thing that ever reaches a server of ours.
         </p>
       </div>
     </Sheet>
