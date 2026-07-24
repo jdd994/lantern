@@ -37,10 +37,10 @@ export default function App() {
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
   const [pickingWholeHomeVibe, setPickingWholeHomeVibe] = useState(false);
-  // Which rooms are collapsed to a compact dot-row. Expanded by default — with
-  // several rooms, an all-collapsed screen reads as "the app shrank," not
-  // tidy. Remembered per room so a room you've deliberately collapsed stays
-  // that way.
+  // Which rooms are collapsed to a compact dot-row. Collapsed by default — with
+  // several rooms, showing every light's full controls at once reads as clutter,
+  // not information. Remembered per room so reopening the app doesn't uncollapse
+  // everything you'd already tidied away.
   const [collapsedRooms, setCollapsedRooms] = useState<Record<string, boolean>>(() => {
     try {
       return JSON.parse(localStorage.getItem("aura-collapsed-rooms") ?? "{}");
@@ -195,7 +195,7 @@ export default function App() {
               <div className="rooms">
                 {sections.map((sec) => {
                   const key = sec.room?.id ?? "unassigned";
-                  const collapsed = collapsedRooms[key] ?? false;
+                  const collapsed = collapsedRooms[key] ?? true;
                   return (
                     <div className="room" key={key}>
                       <div className="room-head">
