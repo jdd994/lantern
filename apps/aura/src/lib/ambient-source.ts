@@ -4,10 +4,12 @@
 // createMicSource is a real, on-device microphone source built on the Web Audio API.
 // PRIVACY: audio is never recorded, uploaded, or persisted — we read the live
 // analyser (loudness, liveliness, spectral tone) and discard every buffer. It stays
-// on this device, always. Music-vs-nature classification needs a real model (a
-// Tauri-era add-on), so `kind` is left undefined; the engine still works from
-// level/energy/tone. Marked experimental — verify with a real mic.
+// on this device, always. `kind: "music"` is a lightweight on-device heuristic
+// (see music-detect.ts) — not a real classifier, so it's conservative and often
+// leaves kind unset rather than guess wrong; nature/speech detection would need
+// an actual model and isn't attempted. Marked experimental — verify with a real mic.
 import type { AmbientReading, AmbientTone } from "./ambient";
+import { guessMusic, spectralFlatness } from "./music-detect";
 
 export type AmbientSource = {
   id: string;
@@ -46,6 +48,10 @@ export function createMicSource(): AmbientSource {
       const time = new Uint8Array(analyser.fftSize);
       const freq = new Uint8Array(analyser.frequencyBinCount);
       let prev = new Uint8Array(analyser.frequencyBinCount);
+      // Rolling loudness history for the music heuristic's "stays on" check —
+      // ~6s at the 250ms sample rate below. See music-detect.ts.
+      const levelHistory: number[] = [];
+      const LEVEL_HISTORY_MAX = 24;
 
       const sample = () => {
         analyser.getByteTimeDomainData(time);
@@ -78,10 +84,17 @@ export function createMicSource(): AmbientSource {
         const centroid = den ? num / den / freq.length : 0;
         const tone: AmbientTone = centroid > 0.35 ? "bright" : centroid < 0.18 ? "warm" : "neutral";
 
+        const level = Math.min(1, rms * 3); // scale up typically quiet mic input
+        levelHistory.push(level);
+        if (levelHistory.length > LEVEL_HISTORY_MAX) levelHistory.shift();
+        const flatness = spectralFlatness(freq);
+        const kind = guessMusic(flatness, levelHistory) ? "music" : undefined;
+
         onReading({
-          level: Math.min(1, rms * 3), // scale up typically quiet mic input
+          level,
           energy: Math.min(1, flux * 6),
           tone,
+          kind,
         });
       };
 
