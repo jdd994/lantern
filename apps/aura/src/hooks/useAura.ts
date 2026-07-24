@@ -9,7 +9,7 @@ import { vibeById } from "@lantern/core";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
 import { simulateDemoMotion } from "../lib/connectors/demo";
-import { assign, type Room } from "../lib/rooms";
+import { assign, effectiveDeviceIds, type Room } from "../lib/rooms";
 import { adaptiveKelvin } from "../lib/adaptive";
 import { paletteVariant } from "../lib/palette";
 import {
@@ -285,8 +285,11 @@ export function useAura() {
   // only that room's lights; otherwise it captures the whole home.
   const saveScene = useCallback(
     async (name: string, roomId?: string) => {
+      const targetRoom = roomId ? rooms.find((r) => r.id === roomId) : undefined;
       const targetIds = roomId
-        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
+        ? targetRoom
+          ? effectiveDeviceIds(targetRoom, rooms)
+          : []
         : devices.map((d) => d.id);
       const snapshot: Record<string, LightState> = {};
       for (const id of targetIds) if (states[id]) snapshot[id] = states[id];
@@ -347,8 +350,24 @@ export function useAura() {
   }, []);
 
   const removeRoom = useCallback(async (id: string) => {
-    await db.deleteRoom(id); // devices in it simply become unassigned
+    await db.deleteRoom(id); // a literal room's devices simply become unassigned;
+    // a combo room holds no devices of its own, so its member rooms are untouched.
     setRooms((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  // A combo room shares other rooms' lights instead of holding its own — see
+  // lib/rooms.ts. Its deviceIds stay empty; effectiveDeviceIds resolves the
+  // live union wherever this room is actually used.
+  const createComboRoom = useCallback(async (name: string, memberRoomIds: string[]) => {
+    const room: Room = {
+      id: uid(),
+      name: name.trim() || "Combo",
+      deviceIds: [],
+      createdAt: Date.now(),
+      memberRoomIds,
+    };
+    await db.putRoom(room);
+    setRooms((prev) => [...prev, room]);
   }, []);
 
   // Move a device into a room (or out, roomId null). Persists every room the move
@@ -409,8 +428,11 @@ export function useAura() {
           ? { brightness: custom.brightness, rgb: custom.rgb }
           : null;
       if (!target) return;
+      const targetRoom = roomId ? rooms.find((r) => r.id === roomId) : undefined;
       const targetIds = roomId
-        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
+        ? targetRoom
+          ? effectiveDeviceIds(targetRoom, rooms)
+          : []
         : devices.map((d) => d.id);
       // More than one light gets its own small, deterministic pull within the
       // vibe's palette (see palette.ts) — a room full of lamps at one identical
@@ -525,9 +547,10 @@ export function useAura() {
   const activeFades = useRef<ReturnType<typeof setInterval>[]>([]);
   const startFade = useCallback(
     (action: Extract<Action, { kind: "fade" }>) => {
-      const ids = (action.roomId ? (rooms.find((r) => r.id === action.roomId)?.deviceIds ?? []) : devices.map((d) => d.id)).filter(
-        (id) => devices.find((d) => d.id === id)?.canBrightness
-      );
+      const fadeRoom = action.roomId ? rooms.find((r) => r.id === action.roomId) : undefined;
+      const ids = (
+        action.roomId ? (fadeRoom ? effectiveDeviceIds(fadeRoom, rooms) : []) : devices.map((d) => d.id)
+      ).filter((id) => devices.find((d) => d.id === id)?.canBrightness);
       if (!ids.length) return;
       const to = Math.max(0, Math.min(100, action.toBrightness));
       const cur = statesRef.current;
@@ -620,7 +643,7 @@ export function useAura() {
       else if (action.kind === "fade") startFade(action);
       else if (action.kind === "roomPower") {
         const room = rooms.find((r) => r.id === action.roomId);
-        if (room) setRoomPower(room.deviceIds, action.on);
+        if (room) setRoomPower(effectiveDeviceIds(room, rooms), action.on);
       }
     },
     [applyScene, setRoomPower, startFade, devices, rooms]
@@ -853,7 +876,7 @@ export function useAura() {
   return {
     sources, devices: displayDevices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
-    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower, setRoomBrightness, renameDevice,
+    createRoom, renameRoom, removeRoom, createComboRoom, assignDevice, setRoomPower, setRoomBrightness, renameDevice,
     requestLocation, addAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
     exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
