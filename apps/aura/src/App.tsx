@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTheme, useAccent, type ThemeOption } from "@lantern/ui";
 import { isTauri } from "./lib/platform";
 import { useAura } from "./hooks/useAura";
-import { groupByRoom, type Room } from "./lib/rooms";
+import { comboLabel, groupByRoom, isCombo, type Room } from "./lib/rooms";
 import type { CustomVibe } from "./lib/db";
 import { ConnectSheet } from "./components/ConnectSheet";
 import { DeviceList, RoomDots } from "./components/DeviceList";
@@ -208,7 +208,12 @@ export default function App() {
                           <span className={"room-chevron" + (collapsed ? "" : " is-open")} aria-hidden="true">
                             ▸
                           </span>
-                          <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
+                          <span className="room-title">
+                            <h3 className="room-name">{sec.room?.name ?? "Other lights"}</h3>
+                            {sec.room && isCombo(sec.room) && (
+                              <span className="room-combo-tag">{comboLabel(sec.room, aura.rooms)}</span>
+                            )}
+                          </span>
                         </button>
                         {sec.devices.length > 0 && (
                           <div className="room-master">
@@ -284,6 +289,7 @@ export default function App() {
           onRename={aura.renameRoom}
           onDelete={aura.removeRoom}
           onAssign={aura.assignDevice}
+          onCreateCombo={aura.createComboRoom}
           onClose={() => setManagingRooms(false)}
         />
       )}
