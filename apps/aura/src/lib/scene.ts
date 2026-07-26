@@ -20,8 +20,8 @@ import type { VibeDecision } from "./ambient";
 // a bare "yoga" or "bed" that could belong to more than one vibe.
 const ASSOCIATIONS: Record<string, string[]> = {
   candlelight: [
-    "candlelight", "candle", "candles", "flame", "flicker", "romantic",
-    "date night", "intimate dinner", "fireplace", "by the fire", "moody light",
+    "candlelight", "candle", "candles", "flame", "flicker",
+    "fireplace", "by the fire", "moody light",
   ],
   calm: [
     "calm", "relax", "relaxing", "unwind", "peaceful", "soft light", "gentle",
@@ -36,12 +36,28 @@ const ASSOCIATIONS: Record<string, string[]> = {
     "deep work", "at my desk", "homework", "getting things done",
   ],
   daylight: [
-    "daylight", "bright", "morning", "waking up", "wake up", "energize",
-    "energizing", "fresh start", "sunny morning", "clear and bright",
+    "daylight", "bright", "energize", "energizing", "fresh start",
+    "clear and bright", "sunny day", "midday",
+  ],
+  morning: [
+    "morning", "waking up", "wake up", "sunny morning", "early morning",
+    "start the day", "crisp morning",
+  ],
+  reading: [
+    "reading", "read a book", "book club", "curled up with a book", "quiet reading",
   ],
   "wind-down": [
     "wind down", "winding down", "evening routine", "getting sleepy",
     "settling down for the night", "relaxing before bed", "easing into the evening",
+  ],
+  romantic: [
+    "romantic", "date night", "intimate dinner", "anniversary", "candlelit dinner",
+  ],
+  dinner: [
+    "dinner", "dinner party", "having people for dinner", "dinner table", "family dinner",
+  ],
+  gathering: [
+    "gathering", "having people over", "hosting", "party", "friends over", "get-together",
   ],
   night: [
     "sleep", "sleeping", "bedtime", "lights out", "going to sleep",
@@ -54,6 +70,15 @@ const ASSOCIATIONS: Record<string, string[]> = {
   "night-yoga": [
     "night yoga", "evening yoga", "yoga after dark", "yoga at night",
     "moonlight yoga", "yoga under the stars", "late night yoga",
+  ],
+  "movie-night": [
+    "movie night", "watching a movie", "movie", "film night", "screen time", "tv night",
+  ],
+  storm: [
+    "storm", "stormy", "thunderstorm", "rolling in", "bad weather",
+  ],
+  "rainy-day": [
+    "rainy day", "raining", "rain", "overcast", "grey day", "gray day", "cloudy",
   ],
 };
 
