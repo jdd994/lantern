@@ -48,6 +48,13 @@ describe("describeScene", () => {
   });
 
   it("names the matched vibe by its real label in the reason", () => {
-    expect(describeScene("morning energy")?.reason).toContain("Daylight");
+    expect(describeScene("morning energy")?.reason).toContain("Morning");
+  });
+
+  it("keeps candlelight and the newer, more specific vibes from colliding", () => {
+    expect(describeScene("candlelight dinner for two")?.vibeId).toBe("candlelight");
+    expect(describeScene("family dinner tonight")?.vibeId).toBe("dinner");
+    expect(describeScene("watching a movie tonight")?.vibeId).toBe("movie-night");
+    expect(describeScene("it's a rainy day out")?.vibeId).toBe("rainy-day");
   });
 });
