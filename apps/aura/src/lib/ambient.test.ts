@@ -42,6 +42,34 @@ describe("decideVibe", () => {
     expect(evening.vibeId).toBe("sunset");
   });
 
+  it("mellow music reads calmer than the same loudness/energy with no style read", () => {
+    const plain = decideVibe(reading({ kind: "music", level: 0.5, energy: 0.5 }), { hour: 19 });
+    const mellow = decideVibe(reading({ kind: "music", level: 0.5, energy: 0.5, musicStyle: "mellow" }), {
+      hour: 19,
+    });
+    expect(plain.vibeId).toBe("sunset");
+    expect(mellow.vibeId).toBe("calm");
+    expect(mellow.reason).toContain("Mellow music");
+  });
+
+  it("energetic music reads livelier than the same loudness/energy with no style read", () => {
+    const plain = decideVibe(reading({ kind: "music", level: 0.3, energy: 0.3 }), { hour: 19 });
+    const energetic = decideVibe(reading({ kind: "music", level: 0.3, energy: 0.3, musicStyle: "energetic" }), {
+      hour: 19,
+    });
+    expect(plain.vibeId).toBe("calm");
+    expect(energetic.vibeId).toBe("sunset");
+    expect(energetic.reason).toContain("Energetic music");
+  });
+
+  it("a null musicStyle (can't tell yet) behaves exactly like no style at all", () => {
+    const noStyle = decideVibe(reading({ kind: "music", level: 0.5, energy: 0.5 }), { hour: 13 });
+    const nullStyle = decideVibe(reading({ kind: "music", level: 0.5, energy: 0.5, musicStyle: null }), {
+      hour: 13,
+    });
+    expect(nullStyle).toEqual(noStyle);
+  });
+
   it("always returns a real vibe id and a bounded confidence, with a reason", () => {
     for (const hour of [2, 7, 13, 19, 22]) {
       for (const kind of ["music", "nature", "speech", "quiet", undefined] as const) {

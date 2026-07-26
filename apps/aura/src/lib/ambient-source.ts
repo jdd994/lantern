@@ -7,9 +7,12 @@
 // on this device, always. `kind: "music"` is a lightweight on-device heuristic
 // (see music-detect.ts) — not a real classifier, so it's conservative and often
 // leaves kind unset rather than guess wrong; nature/speech detection would need
-// an actual model and isn't attempted. Marked experimental — verify with a real mic.
+// an actual model and isn't attempted. `musicStyle` (see music-style.ts), once
+// kind is music, is a similarly honest heuristic — energetic-vs-mellow, not a
+// genre. Marked experimental — verify with a real mic.
 import type { AmbientReading, AmbientTone } from "./ambient";
 import { guessMusic, spectralFlatness } from "./music-detect";
+import { guessStyle } from "./music-style";
 
 export type AmbientSource = {
   id: string;
@@ -52,6 +55,9 @@ export function createMicSource(): AmbientSource {
       // ~6s at the 250ms sample rate below. See music-detect.ts.
       const levelHistory: number[] = [];
       const LEVEL_HISTORY_MAX = 24;
+      // Rolling energy history for the energetic/mellow style read. See music-style.ts.
+      const energyHistory: number[] = [];
+      const ENERGY_HISTORY_MAX = 24;
 
       const sample = () => {
         analyser.getByteTimeDomainData(time);
@@ -85,16 +91,22 @@ export function createMicSource(): AmbientSource {
         const tone: AmbientTone = centroid > 0.35 ? "bright" : centroid < 0.18 ? "warm" : "neutral";
 
         const level = Math.min(1, rms * 3); // scale up typically quiet mic input
+        const energy = Math.min(1, flux * 6);
         levelHistory.push(level);
         if (levelHistory.length > LEVEL_HISTORY_MAX) levelHistory.shift();
+        energyHistory.push(energy);
+        if (energyHistory.length > ENERGY_HISTORY_MAX) energyHistory.shift();
+
         const flatness = spectralFlatness(freq);
         const kind = guessMusic(flatness, levelHistory) ? "music" : undefined;
+        const musicStyle = kind === "music" ? guessStyle(energyHistory) : undefined;
 
         onReading({
           level,
-          energy: Math.min(1, flux * 6),
+          energy,
           tone,
           kind,
+          musicStyle,
         });
       };
 
