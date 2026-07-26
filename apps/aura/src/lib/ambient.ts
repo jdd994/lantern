@@ -9,6 +9,7 @@
 //  • The family's calm soul caps the result: a lively room late at night nudges
 //    warmer, it doesn't blast daylight.
 import { vibeById } from "@lantern/core";
+import type { MusicStyle } from "./music-style";
 
 export type AmbientKind = "music" | "nature" | "speech" | "quiet";
 export type AmbientTone = "warm" | "neutral" | "bright"; // spectral character
@@ -18,6 +19,9 @@ export type AmbientReading = {
   energy: number; // 0..1 liveliness / how dynamic
   tone: AmbientTone;
   kind?: AmbientKind; // optional classification (the sim provides it; a mic may not)
+  // Only meaningful alongside kind: "music" — see music-style.ts for what this
+  // can and can't tell. null/undefined means "no confident read," not "none."
+  musicStyle?: MusicStyle;
 };
 
 export type AmbientContext = { hour: number }; // 0..23 local hour
@@ -56,20 +60,30 @@ export function decideVibe(r: AmbientReading, ctx: AmbientContext): VibeDecision
   let idx = b.idx;
 
   const quiet = r.level < 0.12;
-  const lively = r.energy >= 0.6 || (r.kind === "music" && r.level >= 0.45);
+  // A confident style read only means anything for music — see music-style.ts.
+  // Energetic music reinforces "lively"; mellow music overrides it, since a
+  // steady wall of sound isn't lively the way a punchy track is, whatever its
+  // raw loudness.
+  const musicEnergetic = r.kind === "music" && r.musicStyle === "energetic";
+  const musicMellow = r.kind === "music" && r.musicStyle === "mellow";
+  const lively =
+    !musicMellow && (r.energy >= 0.6 || (r.kind === "music" && r.level >= 0.45) || musicEnergetic);
 
   // Describe what we heard (drives the reason string).
   let heard = "a calm room";
   if (quiet) heard = "a quiet room";
   else if (r.kind === "nature") heard = "nature sounds";
-  else if (r.kind === "music") heard = lively ? "lively music" : "soft music";
-  else if (r.kind === "speech") heard = "voices";
+  else if (r.kind === "music") {
+    heard = musicEnergetic ? "energetic music" : musicMellow ? "mellow music" : lively ? "lively music" : "soft music";
+  } else if (r.kind === "speech") heard = "voices";
   else if (lively) heard = "a lively room";
 
   // Fuse: nudge along the ladder.
   if (quiet) idx -= 1;
   else if (lively) idx += 2;
   else if (r.energy >= 0.4) idx += 1;
+  // Steady, textural music pulls toward calmer even when it isn't quiet.
+  if (musicMellow && !quiet) idx -= 1;
   if (r.tone === "bright") idx += 1;
   // Birdsong by day/morning wants real daylight, whatever the loudness.
   if (r.kind === "nature" && (dp === "morning" || dp === "day")) idx = 5;
@@ -81,6 +95,7 @@ export function decideVibe(r: AmbientReading, ctx: AmbientContext): VibeDecision
   let confidence = 0.55;
   if (r.kind) confidence += 0.15;
   if (quiet || lively) confidence += 0.15;
+  if (musicEnergetic || musicMellow) confidence += 0.05;
   confidence = Math.min(0.95, confidence);
 
   return { vibeId, reason: `${cap(heard)} ${b.time} → ${label}`, confidence };

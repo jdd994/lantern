@@ -11,9 +11,13 @@ import { describeScene } from "../lib/scene";
 
 const PRESETS: { label: string; reading: AmbientReading }[] = [
   { label: "Quiet night", reading: { kind: "quiet", level: 0.04, energy: 0.05, tone: "warm" } },
-  { label: "Mellow music", reading: { kind: "music", level: 0.5, energy: 0.35, tone: "warm" } },
+  { label: "Mellow music", reading: { kind: "music", level: 0.5, energy: 0.35, tone: "warm", musicStyle: "mellow" } },
   { label: "Birdsong", reading: { kind: "nature", level: 0.35, energy: 0.3, tone: "bright" } },
   { label: "Lively music", reading: { kind: "music", level: 0.82, energy: 0.85, tone: "bright" } },
+  {
+    label: "Energetic music",
+    reading: { kind: "music", level: 0.55, energy: 0.5, tone: "bright", musicStyle: "energetic" },
+  },
   { label: "Conversation", reading: { kind: "speech", level: 0.4, energy: 0.4, tone: "neutral" } },
 ];
 
@@ -164,6 +168,21 @@ export function AmbientSheet({
               </select>
             </label>
           </div>
+          {sim.kind === "music" && (
+            <label className="field">
+              <span className="label">Style</span>
+              <select
+                value={sim.musicStyle ?? ""}
+                onChange={(e) =>
+                  setSimField("musicStyle", (e.target.value || null) as AmbientReading["musicStyle"])
+                }
+              >
+                <option value="">Can't tell</option>
+                <option value="energetic">Energetic</option>
+                <option value="mellow">Mellow</option>
+              </select>
+            </label>
+          )}
         </div>
       ) : mode === "mic" ? (
         <div className="set-section">
@@ -183,6 +202,16 @@ export function AmbientSheet({
                   <span style={{ width: `${Math.round(reading.energy * 100)}%` }} />
                 </div>
               </div>
+              {reading.kind === "music" && (
+                <p className="hint">
+                  Sounds like music —{" "}
+                  {reading.musicStyle === "energetic"
+                    ? "energetic."
+                    : reading.musicStyle === "mellow"
+                      ? "mellow."
+                      : "still listening for its energy…"}
+                </p>
+              )}
               <p className="hint">Listening on this device only — nothing is recorded or sent anywhere.</p>
             </>
           )}
