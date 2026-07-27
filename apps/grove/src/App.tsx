@@ -188,7 +188,15 @@ export default function App() {
           onClose={() => setAdding(null)}
         />
       ) : null}
-      {settings ? <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} /> : null}
+      {settings ? (
+        <SettingsSheet
+          mood={mood}
+          onMood={handleMood}
+          onExport={g.exportGedcom}
+          onImport={g.importGedcom}
+          onClose={() => setSettings(false)}
+        />
+      ) : null}
       {family ? (
         <Family
           account={g.account}

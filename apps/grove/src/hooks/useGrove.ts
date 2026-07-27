@@ -26,6 +26,7 @@ import * as db from "../lib/db";
 import * as api from "../lib/api";
 import { syncNow as engineSyncNow } from "../lib/sync";
 import { bytesToBase64, prepareKeepsakeFile } from "../lib/media";
+import { fromGedcom, toGedcom, type GedcomTree } from "../lib/gedcom";
 import {
   decodeKeepsake,
   decodePerson,
@@ -991,6 +992,62 @@ export function useGrove() {
     [persistKeepsake]
   );
 
+  // ---- portability: GEDCOM in and out -----------------------------------------
+
+  // Export is pure and instant: the tree as it stands, living people
+  // privatized unless the caller deliberately opted out.
+  const exportGedcom = useCallback(
+    (privatizeLiving: boolean): string =>
+      toGedcom({ people, unions, keepsakes }, { privatizeLiving }),
+    [people, unions, keepsakes]
+  );
+
+  // Import adds — it never overwrites and never merges. Everything lands
+  // encrypted under this vault's key with fresh ids, marked dirty for the
+  // personal channel; if a shared tree is planted, the whole tree re-mirrors
+  // in chunks (idempotent under LWW) rather than spamming one push per record.
+  const importGedcom = useCallback(
+    async (text: string): Promise<{ people: number; unions: number; keepsakes: number } | string> => {
+      const key = keyRef.current;
+      if (!key) return "Unlock the tree first.";
+      let parsed: GedcomTree;
+      try {
+        parsed = fromGedcom(text);
+      } catch {
+        return "That file didn't read as GEDCOM.";
+      }
+      if (!parsed.people.length && !parsed.unions.length && !parsed.keepsakes.length) {
+        return "No people found in that file — is it a .ged export?";
+      }
+      const me = myUserIdRef.current ?? undefined;
+      try {
+        for (const p of parsed.people) {
+          if (me) p.author = me;
+          await db.putPerson({ id: p.id, createdAt: p.createdAt, updatedAt: p.updatedAt, deleted: false, dirty: true, content: await encryptString(key, encodePerson(p)) });
+        }
+        for (const u of parsed.unions) {
+          if (me) u.author = me;
+          await db.putUnion({ id: u.id, createdAt: u.createdAt, updatedAt: u.updatedAt, deleted: false, dirty: true, content: await encryptString(key, encodeUnion(u)) });
+        }
+        for (const k of parsed.keepsakes) {
+          if (me) k.author = me;
+          await db.putKeepsake({ id: k.id, createdAt: k.createdAt, updatedAt: k.updatedAt, deleted: false, dirty: true, content: await encryptString(key, encodeKeepsake(k)) });
+        }
+      } catch {
+        return "Couldn't save the imported records to this device.";
+      }
+      setPeople((prev) => [...prev, ...parsed.people]);
+      setUnions((prev) => [...prev, ...parsed.unions]);
+      setKeepsakes((prev) => [...prev, ...parsed.keepsakes]);
+      scheduleSync();
+      const t = treeRef.current;
+      const entry = t ? treeKeys.current.get(t.strandId) : undefined;
+      if (t && entry) void pushAllToTree(t.strandId, entry.dek, entry.dekEpoch).catch(() => {});
+      return { people: parsed.people.length, unions: parsed.unions.length, keepsakes: parsed.keepsakes.length };
+    },
+    [scheduleSync, pushAllToTree]
+  );
+
   // Decrypt a stored scan to an in-memory data: URL (cached; a data: URL, not
   // blob:, so it displays under a strict CSP). If the blob isn't on this
   // device (added on another), pull the ciphertext from storage and keep it.
@@ -1041,6 +1098,8 @@ export function useGrove() {
     addKeepsake,
     removeKeepsake,
     getMediaUrl,
+    exportGedcom,
+    importGedcom,
     // account & sync
     account,
     syncing,
