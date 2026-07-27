@@ -1,0 +1,3 @@
+# Vendored speech-to-text model + WASM runtime — rebuilt from Hugging Face
+# Hub and node_modules by scripts/voice-assets.mjs. See that file.
+public/voice/

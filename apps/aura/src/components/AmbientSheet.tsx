@@ -8,6 +8,7 @@ import { VIBES } from "@lantern/core";
 import { decideVibe, type AmbientKind, type AmbientReading, type AmbientTone, type VibeDecision } from "../lib/ambient";
 import { createMicSource } from "../lib/ambient-source";
 import { describeScene } from "../lib/scene";
+import { preloadVoiceModel, startRecording, type VoiceRecorder } from "../lib/voice-source";
 
 const PRESETS: { label: string; reading: AmbientReading }[] = [
   { label: "Quiet night", reading: { kind: "quiet", level: 0.04, energy: 0.05, tone: "warm" } },
@@ -41,6 +42,140 @@ function micErrorMessage(e: unknown): string {
     default:
       return "Couldn't access the microphone" + (name ? ` (${name}).` : ".");
   }
+}
+
+const VOICE_CONSENTED_KEY = "aura-voice-model-ready";
+
+type VoiceState = "idle" | "confirm" | "downloading" | "recording" | "transcribing" | "error";
+
+// Speak the moment instead of typing it — same describeScene() matcher either
+// way, this is just a different way to get text into it. Tap to record, tap
+// again to stop and transcribe; the model behind it downloads once (~100MB —
+// speech model + the WASM engine that runs it), with plain consent first,
+// then runs fully on-device from then on.
+function VoiceInput({ onTranscript }: { onTranscript: (text: string) => void }) {
+  const [state, setState] = useState<VoiceState>("idle");
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const recorderRef = useRef<VoiceRecorder | null>(null);
+  const modelReadyRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      recorderRef.current?.cancel();
+    },
+    []
+  );
+
+  function alreadyConsented() {
+    try {
+      return localStorage.getItem(VOICE_CONSENTED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  async function startRecordingNow() {
+    setState("recording");
+    setError(null);
+    try {
+      recorderRef.current = await startRecording();
+    } catch (e) {
+      setState("error");
+      setError(micErrorMessage(e));
+    }
+  }
+
+  async function downloadThenRecord() {
+    setState("downloading");
+    setError(null);
+    setProgress(0);
+    const loaded = new Map<string, number>();
+    const total = new Map<string, number>();
+    try {
+      await preloadVoiceModel((p) => {
+        loaded.set(p.file, p.loaded);
+        total.set(p.file, p.total);
+        const loadedSum = [...loaded.values()].reduce((a, b) => a + b, 0);
+        const totalSum = [...total.values()].reduce((a, b) => a + b, 0);
+        if (totalSum > 0) setProgress(Math.round((loadedSum / totalSum) * 100));
+      });
+      modelReadyRef.current = true;
+      try {
+        localStorage.setItem(VOICE_CONSENTED_KEY, "1");
+      } catch {
+        /* private mode — it'll just ask again next time */
+      }
+      await startRecordingNow();
+    } catch (e) {
+      setState("error");
+      setError(e instanceof Error ? e.message : "Couldn't load the speech model — try again in a bit.");
+    }
+  }
+
+  async function stopAndTranscribe() {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    recorderRef.current = null;
+    setState("transcribing");
+    try {
+      const text = await recorder.stop();
+      if (text) {
+        onTranscript(text);
+        setState("idle");
+      } else {
+        setState("error");
+        setError("Didn't catch that — try again, a little closer to the mic.");
+      }
+    } catch (e) {
+      setState("error");
+      setError(e instanceof Error ? e.message : "Couldn't transcribe that.");
+    }
+  }
+
+  function tap() {
+    if (state === "recording") {
+      void stopAndTranscribe();
+    } else if (state === "idle" || state === "error") {
+      if (modelReadyRef.current || alreadyConsented()) void startRecordingNow();
+      else setState("confirm");
+    }
+  }
+
+  if (state === "confirm") {
+    return (
+      <div className="voice-confirm">
+        <p className="hint">
+          This downloads a small on-device speech model (about 100MB), once — after that it works fully
+          offline, and nothing about your voice ever leaves this device.
+        </p>
+        <div className="io-row">
+          <button className="btn btn-sm" onClick={downloadThenRecord}>
+            Download &amp; start
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setState("idle")}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="voice-input">
+      <button
+        type="button"
+        className={"voice-btn" + (state === "recording" ? " is-recording" : "")}
+        onClick={tap}
+        disabled={state === "downloading" || state === "transcribing"}
+        aria-label={state === "recording" ? "Stop recording" : "Speak the moment"}
+        title={state === "recording" ? "Stop recording" : "Tap to speak the moment"}
+      >
+        {state === "downloading" ? `${progress}%` : state === "transcribing" ? "…" : state === "recording" ? "■" : "●"}
+      </button>
+      {error && <p className="hint io-note">{error}</p>}
+    </div>
+  );
 }
 
 export function AmbientSheet({
@@ -233,15 +368,18 @@ export function AmbientSheet({
         <div className="set-section">
           <label className="field">
             <span className="label">What's the moment?</span>
-            <input
-              type="text"
-              value={describeText}
-              onChange={(e) => setDescribeText(e.target.value)}
-              placeholder="cozy movie night, getting ready for bed, yoga outside…"
-              autoFocus
-            />
+            <div className="describe-row">
+              <input
+                type="text"
+                value={describeText}
+                onChange={(e) => setDescribeText(e.target.value)}
+                placeholder="cozy movie night, getting ready for bed, yoga outside…"
+                autoFocus
+              />
+              <VoiceInput onTranscript={setDescribeText} />
+            </div>
           </label>
-          <p className="hint">Matched right here on this device — nothing you type is sent anywhere.</p>
+          <p className="hint">Matched right here on this device — nothing you type or say is sent anywhere.</p>
         </div>
       )}
 
