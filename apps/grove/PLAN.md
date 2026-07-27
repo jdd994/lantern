@@ -141,4 +141,14 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
    (multi-device pull, invite, cross-account merge, co-authoring both ways).
    Follow-ups: shared-tree media blobs (scans currently travel per-account),
    invite links (needs frozen GROVE_INVITE_LABELS), biometric unlock.
-5. GEDCOM import/export.
+5. GEDCOM import/export — **done.** `lib/gedcom.ts`, pure + unit-tested:
+   INDI ↔ person (multi-NAME with types, SEX as pass-through only, BIRT/DEAT
+   with fuzzy dates both ways, NOTE ↔ remembrance incl. CONT/CONC, DEAT Y for
+   "passed, details unknown"), FAM ↔ union (typed child links via PEDI +
+   custom _PEDI for step/guardian; HUSB/WIFE slots filled by pass-through sex
+   or position — partners are partners), SOUR ↔ keepsake (title +
+   transcription travel; scans stay). Export privatizes living people BY
+   DEFAULT (structure only); import adds, never overwrites, re-mirrors to a
+   planted shared tree in chunks. Portability drawer in Settings.
+   Browser-verified: export privatized → import into a fresh vault → the
+   family comes back with the living protected.

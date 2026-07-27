@@ -42,6 +42,11 @@ export type Person = {
   // joining, and privatizes them on export. Undefined means unknown — treated
   // as living so the cautious path is the default.
   living?: boolean;
+  // GEDCOM pass-through only ("M"/"F"/"X" or whatever arrived): kept so a
+  // family's twenty years of Ancestry research survives a round trip. Grove
+  // never displays it, never asks for it, never infers anything from it —
+  // partners are partners.
+  sex?: string;
   events: LifeEvent[]; // birth/death here; marriage lives on the Union
   // Freeform: who they were, as the family remembers them. The point of the
   // whole app; the dates above are scaffolding for this.
@@ -120,6 +125,7 @@ export function decodePerson(decrypted: string, shell: Shell): Person {
     ...shell,
     names: Array.isArray(o.names) ? (o.names as Name[]) : [],
     living: typeof o.living === "boolean" ? o.living : undefined,
+    sex: typeof o.sex === "string" ? o.sex : undefined,
     events: Array.isArray(o.events) ? (o.events as LifeEvent[]) : [],
     remembrance: typeof o.remembrance === "string" ? o.remembrance : undefined,
     portraitId: typeof o.portraitId === "string" ? o.portraitId : undefined,
