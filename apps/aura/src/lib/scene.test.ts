@@ -57,4 +57,20 @@ describe("describeScene", () => {
     expect(describeScene("watching a movie tonight")?.vibeId).toBe("movie-night");
     expect(describeScene("it's a rainy day out")?.vibeId).toBe("rainy-day");
   });
+
+  it("matches word-boundary phrases only — a phrase inside a longer unrelated word doesn't count", () => {
+    // "rain" is a real cue (rainy-day), but "restraint" merely contains it —
+    // a raw substring match would have wrongly fired here.
+    expect(describeScene("showing some restraint today")).toBeNull();
+  });
+
+  it("recognizes a broader set of real-world phrasings, not just the exact listed words", () => {
+    expect(describeScene("I'm on a deadline, need to buckle down and code")?.vibeId).toBe("focus");
+    expect(describeScene("watching the sunset from the porch")?.vibeId).toBe("sunset");
+    expect(describeScene("a storm is rolling in, lots of thunder")?.vibeId).toBe("storm");
+    expect(describeScene("curled up with a good novel")?.vibeId).toBe("reading");
+    expect(describeScene("guests coming over for a small gathering")?.vibeId).toBe("gathering");
+    expect(describeScene("first thing in the morning, need my coffee")?.vibeId).toBe("morning");
+    expect(describeScene("just the two of us, feels like romance")?.vibeId).toBe("romantic");
+  });
 });
