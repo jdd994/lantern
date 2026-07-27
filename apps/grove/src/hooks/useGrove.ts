@@ -5,12 +5,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createVault as makeVault, openVault } from "@lantern/core/vault";
-import { VERIFIER_TEXT, encryptString, decryptString } from "../lib/crypto";
+import { VERIFIER_TEXT, encryptString, decryptString, encryptBytes, decryptBytes } from "../lib/crypto";
 import * as db from "../lib/db";
+import { bytesToBase64, prepareKeepsakeFile } from "../lib/media";
 import {
   decodeKeepsake,
   decodePerson,
   decodeUnion,
+  encodeKeepsake,
   encodePerson,
   encodeUnion,
   linkRelative,
@@ -27,6 +29,8 @@ export type SaveError = { message: string; retry: () => void };
 
 // A new person as the add flows describe one — the hook fills in id/timestamps.
 export type PersonDraft = Omit<Person, "id" | "createdAt" | "updatedAt">;
+// A new keepsake, likewise — the media file travels separately.
+export type KeepsakeDraft = Omit<Keepsake, "id" | "createdAt" | "updatedAt" | "mediaId">;
 
 export function useGrove() {
   const [status, setStatus] = useState<Status>("loading");
@@ -38,6 +42,7 @@ export function useGrove() {
   const [saveError, setSaveError] = useState<SaveError | null>(null);
 
   const keyRef = useRef<CryptoKey | null>(null);
+  const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → data: URL (decrypted, in-memory only)
 
   useEffect(() => {
     void db.getVault().then((v) => setStatus(v ? "locked" : "setup"));
@@ -108,6 +113,7 @@ export function useGrove() {
 
   const lock = useCallback(() => {
     keyRef.current = null;
+    mediaUrls.current.clear(); // free decrypted scans from memory with the key
     setPeople([]);
     setUnions([]);
     setKeepsakes([]);
@@ -177,6 +183,90 @@ export function useGrove() {
     [persistPerson]
   );
 
+  const persistKeepsake = useCallback(
+    (k: Keepsake, deleted = false) => {
+      const key = keyRef.current;
+      if (!key) return;
+      guardedPersist(async () => {
+        const content = await encryptString(key, encodeKeepsake(k));
+        await db.putKeepsake({ id: k.id, createdAt: k.createdAt, updatedAt: k.updatedAt, deleted, dirty: true, content });
+      });
+    },
+    [guardedPersist]
+  );
+
+  // Attach a keepsake: encrypt the scan (if any) and the record together, so a
+  // treasure never lands half-here. The file is prepared first — a preparation
+  // failure (unreadable HEIC, oversized PDF) surfaces with a retry and nothing
+  // is stored.
+  const addKeepsake = useCallback(
+    async (draft: KeepsakeDraft, file?: File): Promise<void> => {
+      const key = keyRef.current;
+      if (!key) return;
+      let mediaId: string | undefined;
+      if (file) {
+        let prepared: { bytes: ArrayBuffer; type: string };
+        try {
+          prepared = await prepareKeepsakeFile(file);
+        } catch (e) {
+          setSaveError({
+            message: e instanceof Error ? e.message : "Couldn't read that file.",
+            retry: () => void addKeepsake(draft, file),
+          });
+          return;
+        }
+        const cb = await encryptBytes(key, prepared.bytes);
+        mediaId = uid();
+        try {
+          await db.putMedia({ id: mediaId, type: prepared.type, createdAt: Date.now(), iv: cb.iv, data: cb.data, deleted: false, dirty: true });
+        } catch {
+          setSaveError({ message: "Couldn't save that scan to this device.", retry: () => void addKeepsake(draft, file) });
+          return;
+        }
+      }
+      const now = Date.now();
+      const k: Keepsake = { ...draft, mediaId, id: uid(), createdAt: now, updatedAt: now };
+      setKeepsakes((prev) => [...prev, k]);
+      persistKeepsake(k);
+    },
+    [persistKeepsake]
+  );
+
+  // Removing a treasure is deliberate but honest: tombstones for the record
+  // and its scan (so the removal syncs later), decrypted bytes dropped now.
+  const removeKeepsake = useCallback(
+    (k: Keepsake) => {
+      setKeepsakes((prev) => prev.filter((x) => x.id !== k.id));
+      persistKeepsake({ ...k, updatedAt: Date.now() }, true);
+      if (k.mediaId) {
+        const mediaId = k.mediaId;
+        mediaUrls.current.delete(mediaId);
+        void db.deleteMedia(mediaId);
+      }
+    },
+    [persistKeepsake]
+  );
+
+  // Decrypt a stored scan to an in-memory data: URL (cached; a data: URL, not
+  // blob:, so it displays under a strict CSP). Null if the media isn't on this
+  // device — e.g. added on another device, before media sync lands.
+  const getMediaUrl = useCallback(async (id: string): Promise<string | null> => {
+    const cached = mediaUrls.current.get(id);
+    if (cached) return cached;
+    const key = keyRef.current;
+    if (!key) return null;
+    const m = await db.getMedia(id);
+    if (!m || m.deleted) return null;
+    try {
+      const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
+      const url = `data:${m.type};base64,${bytesToBase64(bytes)}`;
+      mediaUrls.current.set(id, url);
+      return url;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Add a relative and place them in one gesture — the person and their
   // union link land together, so nobody is ever added invisibly.
   const addRelative = useCallback(
@@ -210,6 +300,9 @@ export function useGrove() {
     addPerson,
     updatePerson,
     addRelative,
+    addKeepsake,
+    removeKeepsake,
+    getMediaUrl,
   };
 }
 
