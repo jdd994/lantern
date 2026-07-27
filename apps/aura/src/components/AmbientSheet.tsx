@@ -194,6 +194,11 @@ export function AmbientSheet({
         </div>
       ) : mode === "mic" ? (
         <div className="set-section">
+          <p className="hint">
+            Connected to a Bluetooth speaker? Opening the mic can briefly switch it to your phone's own
+            speaker — your phone's Bluetooth profile change, not something Aura controls. It should switch
+            back once you leave this tab.
+          </p>
           {micError ? (
             <div className="error">{micError}</div>
           ) : (
