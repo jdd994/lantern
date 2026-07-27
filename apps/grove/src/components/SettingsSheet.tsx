@@ -15,12 +15,14 @@ export function SettingsSheet({
   onMood,
   onExport,
   onImport,
+  onInstallHelp,
   onClose,
 }: {
   mood: string;
   onMood: (id: string) => void;
   onExport: (privatizeLiving: boolean) => string;
   onImport: (text: string) => Promise<{ people: number; unions: number; keepsakes: number } | string>;
+  onInstallHelp: () => void;
   onClose: () => void;
 }) {
   const [privatize, setPrivatize] = useState(true);
@@ -102,6 +104,14 @@ export function SettingsSheet({
         {importNote ? <p className="hint">{importNote}</p> : null}
         {importError ? <div className="error">{importError}</div> : null}
         <p className="hint">Import adds to the grove — it never overwrites, and it won't try to merge duplicates.</p>
+      </section>
+
+      <section className="set-section">
+        <h4 className="set-head">Keep Grove close</h4>
+        <p className="hint">
+          Grove can live on your home screen like any app — helpful to know when you're getting a
+          relative set up. <button type="button" className="linklike" onClick={onInstallHelp}>How to install, step by step</button>
+        </p>
       </section>
 
       <section className="set-section">
