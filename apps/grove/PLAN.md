@@ -128,5 +128,17 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
    from cached data: URLs, tombstoned on remove so deletion syncs later.
    Browser-verified end to end. Small follow-ups alongside step 4: person
    delete/tombstone, biometric enrollment.
-4. Sync + sharing (compose the existing engine + invite flow).
+4. Sync + sharing — **done.** `server/` (@lantern/server factory: sharing +
+   recovery + R2 keepsake media; deploy steps in wrangler.toml TODOs),
+   `lib/api.ts` + `lib/sync.ts` (no metaFor — nothing about a family rides
+   outside the ciphertext), accounts + vault adoption + passphrase change +
+   K-of-N guardians + RecoveryFlow on the lock screen, and **the shared
+   tree**: one co-authored tree on the shared-strand machinery (email
+   invites, DEK wrapped per member), whose records merge into each member's
+   local vault (LWW) so everyone's account keeps their own encrypted copy of
+   what the family wrote. Author stamped on every revision — a byline, never
+   a score. Two-user browser-verified end to end against a local Worker
+   (multi-device pull, invite, cross-account merge, co-authoring both ways).
+   Follow-ups: shared-tree media blobs (scans currently travel per-account),
+   invite links (needs frozen GROVE_INVITE_LABELS), biometric unlock.
 5. GEDCOM import/export.

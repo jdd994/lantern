@@ -164,6 +164,16 @@ export async function deleteMedia(id: string): Promise<void> {
   const m = await d.get("media", id);
   if (m && !m.deleted) await d.put("media", { ...m, deleted: true, dirty: true });
 }
+// Blobs awaiting upload (tombstones excluded — a deleted scan is removed
+// remotely by deleteMediaRemote, never uploaded).
+export async function dirtyMedia(): Promise<StoredMedia[]> {
+  return (await allMedia()).filter((m) => m.dirty && !m.deleted);
+}
+export async function clearMediaDirty(id: string): Promise<void> {
+  const d = await db();
+  const m = await d.get("media", id);
+  if (m && m.dirty) await d.put("media", { ...m, dirty: false });
+}
 
 // ---- sync + device -------------------------------------------------------
 export async function getSyncState(): Promise<SyncState | undefined> {
@@ -234,12 +244,14 @@ export async function dirtyRecords(): Promise<Array<{ kind: SyncKind; rec: AnySt
 }
 // Mark every syncable record dirty — used when connecting a NEW account, so
 // the whole local tree uploads even if it was previously synced elsewhere.
+// Media rides along: a keepsake without its scan is only half backed up.
 export async function markAllDirty(): Promise<void> {
   const d = await db();
   for (const kind of SYNC_KINDS) {
     const store = KIND_STORE[kind];
     for (const r of await d.getAll(store)) if (!r.dirty) await d.put(store, { ...r, dirty: true });
   }
+  for (const m of await d.getAll("media")) if (!m.dirty && !m.deleted) await d.put("media", { ...m, dirty: true });
 }
 
 const ALL_STORES = [

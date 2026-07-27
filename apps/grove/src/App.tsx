@@ -8,6 +8,8 @@ import { Home } from "./components/Home";
 import { PersonPage } from "./components/PersonPage";
 import { AddRelative } from "./components/AddRelative";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
+import { Sync } from "./components/Sync";
+import { Family } from "./components/Family";
 import { Gear } from "./components/icons";
 import type { Relation } from "./lib/model";
 
@@ -29,6 +31,8 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState<Adding | null>(null);
+  const [sync, setSync] = useState(false);
+  const [family, setFamily] = useState(false);
   const { mood, setMood } = useTheme("grove-mood", MOODS.map((m) => m.id), "canopy");
 
   const relayRef = useRef<VibeRelayHandle | null>(null);
@@ -42,9 +46,58 @@ export default function App() {
     if (vibeId) relayRef.current?.publish({ vibeId });
   };
 
+  // The Sync sheet is shared by every status: at setup it's "sign in from
+  // another device" (no local vault yet, so no create), unlocked it's the
+  // full account surface.
+  const syncSheet = sync ? (
+    <Sync
+      account={g.account}
+      syncing={g.syncing}
+      syncError={g.syncError}
+      canCreate={g.status === "unlocked"}
+      onCreate={g.connectCreate}
+      onSignIn={g.connectSignIn}
+      onDisconnect={g.disconnect}
+      onDelete={g.deleteAccount}
+      onSyncNow={g.syncNow}
+      onChangePassphrase={g.changePassphrase}
+      onClose={() => setSync(false)}
+      guardianCircle={g.guardianCircle}
+      onSetupGuardians={g.setupGuardians}
+      recoveryStatus={g.recoveryStatus}
+      onCancelPendingRecovery={g.cancelPendingRecovery}
+      pendingGuardianRequests={g.pendingGuardianRequests}
+      onApproveGuardianRequest={g.approveGuardianRequest}
+    />
+  ) : null;
+
   if (g.status === "loading") return null;
-  if (g.status === "setup") return <Welcome onSetup={g.setup} busy={g.busy} />;
-  if (g.status === "locked") return <LockScreen onUnlock={g.unlock} error={g.error} busy={g.busy} />;
+  if (g.status === "setup") {
+    return (
+      <>
+        <Welcome onSetup={g.setup} busy={g.busy} onSignIn={() => setSync(true)} />
+        {syncSheet}
+      </>
+    );
+  }
+  if (g.status === "locked") {
+    return (
+      <LockScreen
+        onUnlock={g.unlock}
+        error={g.error}
+        busy={g.busy}
+        account={g.account}
+        syncError={g.syncError}
+        guardianCircle={g.guardianCircle}
+        onRecoverySignIn={g.connectSignIn}
+        onLoadGuardianCircle={g.loadGuardianCircle}
+        onStartRecovery={g.startRecoveryRequest}
+        onPollRecovery={g.pollRecoveryRequest}
+        onCancelRecovery={g.cancelRecoveryRequest}
+        onFinishRecovery={g.finishRecoveryRequest}
+      />
+    );
+  }
 
   const person = selected ? g.people.find((p) => p.id === selected) : undefined;
   const anchor = adding?.anchorId ? g.people.find((p) => p.id === adding.anchorId) : undefined;
@@ -54,6 +107,23 @@ export default function App() {
       <header className="top">
         <h1 className="brand">Grove<span>.</span></h1>
         <div className="top-actions">
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setFamily(true);
+              void g.syncTree();
+            }}
+            title={g.tree ? `Shared: ${g.tree.title}` : "Share the tree with family"}
+          >
+            {g.tree ? "Family" : "Share"}
+          </button>
+          <button
+            className="btn btn-sm"
+            onClick={() => setSync(true)}
+            title={g.account ? `Syncing as ${g.account}` : "Sync across devices"}
+          >
+            {g.syncing ? "Syncing…" : g.account ? "Synced" : "Sync"}
+          </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => setSettings(true)}
@@ -91,6 +161,10 @@ export default function App() {
           onOpen={setSelected}
           onBack={() => setSelected(null)}
           onUpdate={(patch) => g.updatePerson(person.id, patch)}
+          onRemove={() => {
+            setSelected(null);
+            g.removePerson(person);
+          }}
           onAddRelative={(relation) => setAdding({ anchorId: person.id, relation })}
           onAddKeepsake={(draft, file) => void g.addKeepsake(draft, file)}
           onRemoveKeepsake={g.removeKeepsake}
@@ -115,6 +189,21 @@ export default function App() {
         />
       ) : null}
       {settings ? <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} /> : null}
+      {family ? (
+        <Family
+          account={g.account}
+          tree={g.tree}
+          treeBusy={g.treeBusy}
+          treeError={g.treeError}
+          onCreate={g.createTree}
+          onInvite={g.inviteToTree}
+          onLeave={g.leaveTree}
+          onRefresh={g.syncTree}
+          onOpenSync={() => setSync(true)}
+          onClose={() => setFamily(false)}
+        />
+      ) : null}
+      {syncSheet}
     </div>
   );
 }

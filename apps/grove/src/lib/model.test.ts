@@ -16,6 +16,7 @@ import {
   parentsOf,
   partnersOf,
   siblingsOf,
+  unlinkPerson,
   unplaced,
   whenLabel,
   whenYear,
@@ -200,6 +201,42 @@ describe("placing a relative", () => {
     const [orphaned] = linkRelative("mary", "tom", "sibling", [], undefined, NOW);
     expect(orphaned.partnerIds).toEqual([]);
     expect(orphaned.children.map((c) => c.personId)).toEqual(["mary", "tom"]);
+  });
+});
+
+describe("removing a person", () => {
+  const NOW = 9000;
+
+  it("strips their links but leaves everyone else's places untouched", () => {
+    const { upserts, emptied } = unlinkPerson("june", unions, NOW);
+    expect(emptied).toEqual([]);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].id).toBe("u1");
+    expect(upserts[0].partnerIds).toEqual(["arthur"]);
+    expect(upserts[0].children).toEqual(grandUnion.children);
+    expect(upserts[0].updatedAt).toBe(NOW);
+    expect(grandUnion.partnerIds).toContain("june"); // input untouched
+  });
+
+  it("reports a union left saying nothing so the caller can tombstone it", () => {
+    const solo = union("s", ["dora"], []);
+    const { upserts, emptied } = unlinkPerson("dora", [solo], NOW);
+    expect(upserts).toEqual([]);
+    expect(emptied).toEqual(["s"]);
+  });
+
+  it("removes them as child and partner across unions in one pass", () => {
+    const { upserts } = unlinkPerson("mary", unions, NOW);
+    expect(upserts.map((u) => u.id).sort()).toEqual(["u1", "u2"]);
+    const u1 = upserts.find((u) => u.id === "u1")!;
+    expect(u1.children.map((c) => c.personId)).toEqual(["tom"]);
+    const u2 = upserts.find((u) => u.id === "u2")!;
+    expect(u2.partnerIds).toEqual(["sam"]);
+    expect(u2.children.map((c) => c.personId)).toEqual(["ada"]);
+  });
+
+  it("touches nothing when the person was never linked", () => {
+    expect(unlinkPerson("stranger", unions, NOW)).toEqual({ upserts: [], emptied: [] });
   });
 });
 

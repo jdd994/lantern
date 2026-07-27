@@ -1,0 +1,23 @@
+name = "grove-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# TODO before first deploy: `wrangler d1 create grove` and paste the real id
+# here (same step Aura/Hearth went through). Local dev (`wrangler dev`) works
+# with the placeholder. Then `npm run db:init` (base + sharing + recovery
+# schemas) and `npx wrangler secret put TOKEN_SECRET`.
+[[d1_databases]]
+binding = "DB"
+database_name = "grove"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# Keepsake scans and photos: opaque iv||ciphertext blobs, encrypted on-device.
+# TODO before first deploy: `wrangler r2 bucket create grove-media`.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "grove-media"
+
+[vars]
+# Empty means "*" — dev only. Set the real origins at deploy time, e.g.
+# "https://grove.pages.dev" plus the custom domain once one is chosen.
+ALLOWED_ORIGIN = ""
