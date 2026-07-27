@@ -119,6 +119,12 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
    exactly the metadata a genealogy leaks, so nothing is windowed and
    everything decrypts on unlock, like Driftless. Vault lifecycle rides
    `@lantern/core/vault`; identity keypair baked in from day one.
-3. The humble UI: person page, add-relative flow, keepsake attach.
+3. The humble UI — **mostly done** (branch `feature/grove-ui`): PWA shell
+   (Welcome/LockScreen on the vault, @lantern/ui vibes: Canopy/Understory/
+   Meadow, vibe-relay publish-only), Home with the unplaced shelf, the person
+   page (remembrance-first, kin walks, edit names/years with qualifiers),
+   add-relative placing via `linkRelative` in one gesture. Browser-verified:
+   create → add → link → reload → unlock. Remaining: keepsake attach (media
+   encrypt path), person delete/tombstone, biometric enrollment.
 4. Sync + sharing (compose the existing engine + invite flow).
 5. GEDCOM import/export.
