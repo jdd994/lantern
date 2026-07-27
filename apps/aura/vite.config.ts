@@ -27,20 +27,20 @@ export default defineConfig({
         // Cache the shell so it opens offline. Device states are never cached —
         // a stale "on" shown as current would be worse than an honest reload.
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        // The voice model + its WASM runtime (~100MB) must not ride the
-        // precache — installing Aura should never force that download on
-        // someone who never taps to speak. voice-assets.mjs's output lives
-        // under voice/ (globPatterns already omits .wasm/.onnx, but ignore
-        // the whole tree to be explicit); the lazy transformers.js chunk
-        // Vite discovers on its own is a normal .js file that would
-        // otherwise match globPatterns despite only ever being reached from
-        // the dynamic import in voice-source.ts, so it's excluded by name
-        // too. Cached on first use instead, below.
-        globIgnores: ["voice/**", "assets/transformers.web-*.js"],
+        // The lazy transformers.js chunk (~560KB) must not ride the precache
+        // — installing Aura should never pull that in for someone who never
+        // taps to speak. It's a normal .js file that would otherwise match
+        // globPatterns despite only ever being reached from the dynamic
+        // import in voice-source.ts, so it's excluded by name. The voice
+        // model itself (~65MB) lives on R2, not this origin, so it was never
+        // a precache candidate in the first place. Both get cached on first
+        // use instead, below.
+        globIgnores: ["assets/transformers.web-*.js"],
         runtimeCaching: [
           {
             urlPattern: ({ url, sameOrigin }) =>
-              sameOrigin && (url.pathname.startsWith("/voice/") || /transformers\.web-.*\.js$/.test(url.pathname)),
+              (sameOrigin && /transformers\.web-.*\.js$/.test(url.pathname)) ||
+              url.origin === "https://pub-265b50abb06d41f9afcab96b2dee95ae.r2.dev",
             handler: "CacheFirst",
             options: {
               cacheName: "voice-engine",

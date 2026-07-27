@@ -13,8 +13,7 @@
     "tauri": "tauri",
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name aura --branch=production",
     "voice-assets": "node scripts/voice-assets.mjs",
-    "predev": "npm run voice-assets",
-    "prebuild": "npm run voice-assets"
+    "voice-assets:upload": "node scripts/voice-assets.mjs --upload"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
