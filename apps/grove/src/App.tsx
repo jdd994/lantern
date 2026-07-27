@@ -86,6 +86,8 @@ export default function App() {
     return (
       <LockScreen
         onUnlock={g.unlock}
+        onBiometric={g.unlockWithBiometric}
+        hasBiometric={g.hasBiometric}
         error={g.error}
         busy={g.busy}
         account={g.account}
@@ -110,6 +112,9 @@ export default function App() {
       <header className="top">
         <h1 className="brand">Grove<span>.</span></h1>
         <div className="top-actions">
+          {g.canBiometric && !g.hasBiometric ? (
+            <button className="btn btn-sm" onClick={() => void g.enableBiometric()}>Quick unlock</button>
+          ) : null}
           <button
             className="btn btn-sm"
             onClick={() => {

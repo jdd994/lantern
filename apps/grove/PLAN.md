@@ -145,7 +145,12 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
    a score. Two-user browser-verified end to end against a local Worker
    (multi-device pull, invite, cross-account merge, co-authoring both ways).
    Follow-ups: shared-tree media blobs (scans currently travel per-account),
-   invite links (needs frozen GROVE_INVITE_LABELS), biometric unlock.
+   invite links (needs frozen GROVE_INVITE_LABELS). Biometric quick unlock —
+   **done (2026-07-27):** the sibling pattern via @lantern/core/biometric
+   (platform passkey + PRF wraps this device's copy of the DEK; opt-in
+   per device, never synced, self-clears if stale; ⚠️ frozen PRF salt in
+   lib/biometric.ts — "grove-prf-v1", Grove's own, unlike Hearth's
+   ballast-inherited bytes).
 5. GEDCOM import/export — **done.** `lib/gedcom.ts`, pure + unit-tested:
    INDI ↔ person (multi-NAME with types, SEX as pass-through only, BIRT/DEAT
    with fuzzy dates both ways, NOTE ↔ remembrance incl. CONT/CONC, DEAT Y for
