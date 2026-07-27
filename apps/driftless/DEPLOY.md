@@ -32,12 +32,15 @@ To redeploy after changes, just run `npm run deploy` again.
 
 ## Notes
 
-- **Each person's journal is independent and device-local.** Visiting the same
-  URL gives each browser its own encrypted vault. There is no shared data and no
-  sync yet (see the roadmap in `CLAUDE.md`).
-- **Back up occasionally.** The only backup today is the in-app Export button
-  (downloads a Markdown copy). Do this now and then until sync exists.
-- **When sync is added,** add the API origin to `connect-src` in
-  `public/_headers` — and nothing else.
-- A custom domain can be attached later in the Cloudflare Pages dashboard; the
-  security headers apply there automatically.
+- **Each browser starts as its own encrypted vault.** Sync across devices is
+  opt-in: connect an account and the server moves opaque ciphertext only (see
+  the roadmap in `CLAUDE.md`).
+- **Back up occasionally.** In-app: Export (readable Markdown) or Back up
+  (encrypted, restorable snapshot) — sync is replication, not a backup.
+- The sync API origin (`driftless-server.jdd994.workers.dev`) is allowed in
+  `connect-src` in `public/_headers` — keep that list to exactly our own
+  origins, nothing else.
+- The custom domain **driftless.page** is attached in the Cloudflare Pages
+  dashboard; the security headers apply there automatically. The client is
+  deployed with `npm run deploy`, the sync server separately from `server/`
+  (`npm run deploy` there).
