@@ -11,7 +11,8 @@
     "deploy": "npm run build && npx wrangler pages deploy dist --project-name driftless --branch=production",
     "backup": "bash scripts/backup.sh",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "node e2e/smoke.mjs"
   },
   "dependencies": {
     "@lantern/core": "*",
