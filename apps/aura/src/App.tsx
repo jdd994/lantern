@@ -33,6 +33,7 @@ export default function App() {
   const [managingRooms, setManagingRooms] = useState(false);
   const [automating, setAutomating] = useState(false);
   const [ambient, setAmbient] = useState(false);
+  const [ambientRoom, setAmbientRoom] = useState<Room | null>(null);
   const [creatingVibe, setCreatingVibe] = useState(false);
   const [editingVibe, setEditingVibe] = useState<CustomVibe | null>(null);
   const [vibeRoom, setVibeRoom] = useState<Room | null>(null);
@@ -218,9 +219,14 @@ export default function App() {
                         {sec.devices.length > 0 && (
                           <div className="room-master">
                             {sec.room && (
-                              <button className="btn btn-ghost btn-sm" onClick={() => setVibeRoom(sec.room)}>
-                                Vibe
-                              </button>
+                              <>
+                                <button className="btn btn-ghost btn-sm" onClick={() => setVibeRoom(sec.room)}>
+                                  Vibe
+                                </button>
+                                <button className="btn btn-ghost btn-sm" onClick={() => setAmbientRoom(sec.room)}>
+                                  Auto…
+                                </button>
+                              </>
                             )}
                             <button
                               className="btn btn-ghost btn-sm"
@@ -346,8 +352,15 @@ export default function App() {
           onClose={() => setPickingWholeHomeVibe(false)}
         />
       )}
-      {ambient && (
-        <AmbientSheet onApplyVibe={(id) => aura.applyVibe(id)} onClose={() => setAmbient(false)} />
+      {(ambient || ambientRoom) && (
+        <AmbientSheet
+          title={ambientRoom?.name}
+          onApplyVibe={(id) => aura.applyVibe(id, ambientRoom?.id)}
+          onClose={() => {
+            setAmbient(false);
+            setAmbientRoom(null);
+          }}
+        />
       )}
       {helping && <HelpSheet onClose={() => setHelping(false)} />}
       {settings && (
