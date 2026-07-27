@@ -15,7 +15,7 @@ import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { InstallHint } from "./components/InstallHint";
 import { Heart, Gear } from "./components/icons";
-import { useTheme } from "@lantern/ui";
+import { InstallSheet, useTheme } from "@lantern/ui";
 import type { SnapshotContent } from "./lib/ledger";
 import type { Transaction } from "./lib/spend";
 
@@ -44,6 +44,7 @@ export default function App() {
   const [support, setSupport] = useState(false);
   const [sync, setSync] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [installHelp, setInstallHelp] = useState(false);
   const { mood, setMood } = useTheme("ballast-mood", MOODS.map((m) => m.id), "deep");
   const relayRef = useRef<VibeRelayHandle | null>(null);
   useEffect(() => {
@@ -287,8 +288,17 @@ export default function App() {
       {support ? <Support onClose={() => setSupport(false)} /> : null}
 
       {settings ? (
-        <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} />
+        <SettingsSheet
+          mood={mood}
+          onMood={handleMood}
+          onInstallHelp={() => {
+            setSettings(false);
+            setInstallHelp(true);
+          }}
+          onClose={() => setSettings(false)}
+        />
       ) : null}
+      {installHelp ? <InstallSheet appName="Ballast" onClose={() => setInstallHelp(false)} /> : null}
 
       {sync ? (
         <Sync
