@@ -92,6 +92,9 @@ export default function App() {
           onBack={() => setSelected(null)}
           onUpdate={(patch) => g.updatePerson(person.id, patch)}
           onAddRelative={(relation) => setAdding({ anchorId: person.id, relation })}
+          onAddKeepsake={(draft, file) => void g.addKeepsake(draft, file)}
+          onRemoveKeepsake={g.removeKeepsake}
+          getMediaUrl={g.getMediaUrl}
         />
       ) : (
         <Home people={g.people} unions={g.unions} onOpen={setSelected} onAddFirst={() => setAdding({})} />

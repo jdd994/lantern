@@ -17,7 +17,29 @@ import {
   type Relation,
   type Union,
 } from "../lib/model";
+import type { KeepsakeDraft } from "../hooks/useGrove";
+import { AddKeepsake } from "./AddKeepsake";
 import { EditPerson } from "./EditPerson";
+
+// A keepsake's scan, decrypted on view. An image shows as itself; a PDF (a
+// data: URL can't open in a tab) offers itself as a download.
+function KeepsakeMedia({ mediaId, getMediaUrl }: { mediaId: string; getMediaUrl: (id: string) => Promise<string | null> }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let on = true;
+    void getMediaUrl(mediaId).then((u) => on && setUrl(u));
+    return () => {
+      on = false;
+    };
+  }, [mediaId, getMediaUrl]);
+  if (!url) return null;
+  if (url.startsWith("data:image")) return <img className="keepsake-img" src={url} alt="" />;
+  return (
+    <a className="linklike" href={url} download="keepsake.pdf">
+      Save the document to read it
+    </a>
+  );
+}
 
 function KinSection({
   title,
@@ -67,6 +89,9 @@ export function PersonPage({
   onBack,
   onUpdate,
   onAddRelative,
+  onAddKeepsake,
+  onRemoveKeepsake,
+  getMediaUrl,
 }: {
   person: Person;
   people: Person[];
@@ -76,8 +101,12 @@ export function PersonPage({
   onBack: () => void;
   onUpdate: (patch: Partial<Omit<Person, "id" | "createdAt" | "updatedAt">>) => void;
   onAddRelative: (relation: Relation) => void;
+  onAddKeepsake: (draft: KeepsakeDraft, file?: File) => void;
+  onRemoveKeepsake: (k: Keepsake) => void;
+  getMediaUrl: (id: string) => Promise<string | null>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [addingKeepsake, setAddingKeepsake] = useState(false);
   const [remembrance, setRemembrance] = useState(person.remembrance ?? "");
   useEffect(() => setRemembrance(person.remembrance ?? ""), [person.id, person.remembrance]);
 
@@ -118,22 +147,40 @@ export function PersonPage({
       <KinSection title="Children" ids={childrenOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("child")} addLabel="Add a child" />
       <KinSection title="Siblings" ids={siblingsOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("sibling")} addLabel="Add a sibling" />
 
-      {treasures.length ? (
-        <section className="section">
-          <div className="section-head">
-            <h2 className="section-title">Keepsakes</h2>
-          </div>
-          {treasures.map((k) => (
+      <section className="section">
+        <div className="section-head">
+          <h2 className="section-title">Keepsakes</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setAddingKeepsake(true)}>Add a keepsake</button>
+        </div>
+        {treasures.length === 0 ? (
+          <p className="kin-none">Nothing kept here yet — a photo, a letter, a story worth saving.</p>
+        ) : (
+          treasures.map((k) => (
             <div key={k.id} className="keepsake">
-              <div className="keepsake-caption">{k.caption || "A keepsake"}</div>
-              {k.when ? <div className="keepsake-when">{whenLabel(k.when)}</div> : null}
+              <div className="keepsake-head">
+                <div>
+                  <div className="keepsake-caption">{k.caption || "A keepsake"}</div>
+                  {k.when ? <div className="keepsake-when">{whenLabel(k.when)}</div> : null}
+                </div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title="Remove this keepsake"
+                  onClick={() => {
+                    if (window.confirm("Remove this keepsake? It will be gone from the tree.")) onRemoveKeepsake(k);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              {k.mediaId ? <KeepsakeMedia mediaId={k.mediaId} getMediaUrl={getMediaUrl} /> : null}
               {k.transcription ? <p className="keepsake-text">{k.transcription}</p> : null}
             </div>
-          ))}
-        </section>
-      ) : null}
+          ))
+        )}
+      </section>
 
       {editing ? <EditPerson person={person} onSave={onUpdate} onClose={() => setEditing(false)} /> : null}
+      {addingKeepsake ? <AddKeepsake person={person} onAdd={onAddKeepsake} onClose={() => setAddingKeepsake(false)} /> : null}
     </>
   );
 }

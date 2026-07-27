@@ -157,6 +157,13 @@ export async function putMedia(m: StoredMedia): Promise<void> {
 export async function allMedia(): Promise<StoredMedia[]> {
   return (await db()).getAll("media");
 }
+// Soft delete, like every syncable record: the tombstone stays (deleted +
+// dirty) so the removal can sync and win last-write-wins when sync lands.
+export async function deleteMedia(id: string): Promise<void> {
+  const d = await db();
+  const m = await d.get("media", id);
+  if (m && !m.deleted) await d.put("media", { ...m, deleted: true, dirty: true });
+}
 
 // ---- sync + device -------------------------------------------------------
 export async function getSyncState(): Promise<SyncState | undefined> {
