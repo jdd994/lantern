@@ -6,6 +6,7 @@ import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
 import { Home } from "./components/Home";
 import { PersonPage } from "./components/PersonPage";
+import { TreeView } from "./components/TreeView";
 import { AddRelative } from "./components/AddRelative";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Sync } from "./components/Sync";
@@ -29,6 +30,7 @@ type Adding = { anchorId?: string; relation?: Relation };
 export default function App() {
   const g = useGrove();
   const [selected, setSelected] = useState<string | null>(null);
+  const [treeFocus, setTreeFocus] = useState<string | null>(null);
   const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState<Adding | null>(null);
   const [sync, setSync] = useState(false);
@@ -100,6 +102,7 @@ export default function App() {
   }
 
   const person = selected ? g.people.find((p) => p.id === selected) : undefined;
+  const focusPerson = treeFocus ? g.people.find((p) => p.id === treeFocus) : undefined;
   const anchor = adding?.anchorId ? g.people.find((p) => p.id === adding.anchorId) : undefined;
 
   return (
@@ -152,7 +155,19 @@ export default function App() {
         </div>
       ) : null}
 
-      {person ? (
+      {focusPerson ? (
+        <TreeView
+          focus={focusPerson}
+          people={g.people}
+          unions={g.unions}
+          onFocus={setTreeFocus}
+          onOpen={(id) => {
+            setSelected(id);
+            setTreeFocus(null);
+          }}
+          onBack={() => setTreeFocus(null)}
+        />
+      ) : person ? (
         <PersonPage
           person={person}
           people={g.people}
@@ -165,13 +180,14 @@ export default function App() {
             setSelected(null);
             g.removePerson(person);
           }}
+          onTree={() => setTreeFocus(person.id)}
           onAddRelative={(relation) => setAdding({ anchorId: person.id, relation })}
           onAddKeepsake={(draft, file) => void g.addKeepsake(draft, file)}
           onRemoveKeepsake={g.removeKeepsake}
           getMediaUrl={g.getMediaUrl}
         />
       ) : (
-        <Home people={g.people} unions={g.unions} onOpen={setSelected} onAddFirst={() => setAdding({})} />
+        <Home people={g.people} unions={g.unions} onOpen={setSelected} onAddFirst={() => setAdding({})} onTree={setTreeFocus} />
       )}
 
       {adding ? (

@@ -20,11 +20,13 @@ export function Home({
   unions,
   onOpen,
   onAddFirst,
+  onTree,
 }: {
   people: Person[];
   unions: Union[];
   onOpen: (id: string) => void;
   onAddFirst: () => void;
+  onTree: (id: string) => void;
 }) {
   if (people.length === 0) {
     return (
@@ -49,6 +51,7 @@ export function Home({
         <section className="section">
           <div className="section-head">
             <h2 className="section-title">Family</h2>
+            <button className="btn btn-ghost btn-sm" onClick={() => onTree(placed[0].id)}>See the tree</button>
           </div>
           {placed.map((p) => <PersonRow key={p.id} person={p} onOpen={onOpen} />)}
         </section>

@@ -104,8 +104,13 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
   vault when its keeper dies." The tree is where that passing-down naturally
   lives. Design with love, not as a feature checkbox.
 - **Driftless person-anchors** (the bridge above).
-- Tree layout/visualization — start with the humblest thing that works
-  (a person page + parent/partner/child links), not a zoomable canvas.
+- Tree layout/visualization — **built (2026-07-27):** the hourglass chart
+  (`lib/layout.ts` pure + tested, `TreeView.tsx`): one person in focus,
+  ancestors above, descendants below, partners alongside on a dashed line;
+  tap anyone to re-center, tap the focus to open their page. Wayfinding, not
+  a zoomable canvas — it scrolls when a family outgrows the screen. Siblings
+  deliberately stay on the person page. Future: "taproot" direct-line view,
+  "heartwood" ancestor rings (the runner-up names live on as vocabulary).
 
 ## Build order
 

@@ -140,6 +140,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 /* person page */
 .back { margin-bottom: 14px; margin-left: -10px; }
 .person-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.person-actions { display: flex; gap: 7px; align-items: center; }
 .person-title { font-size: 26px; font-weight: 500; letter-spacing: -.01em; margin: 0 0 4px; }
 .person-life { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--ink-faint); margin: 0 0 26px; }
 .kin-none { font-size: 13px; color: var(--ink-faint); margin: 0; padding: 4px 2px; }
@@ -158,6 +159,22 @@ input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 input[type=file] { width: 100%; font-size: 13.5px; color: var(--ink-soft); }
 input[type=file]::file-selector-button { font: inherit; margin-right: 10px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); cursor: pointer; }
 input[type=file]::file-selector-button:hover { background: var(--surface-2); color: var(--ink); }
+
+/* the tree — the hourglass chart */
+.tree-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.tree-head .back { margin: 0 0 0 -10px; }
+.tree-title { flex: 1; font-size: 18px; font-weight: 500; margin: 0; letter-spacing: -.01em; }
+.tree-scroll { overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg-raised); margin-top: 12px; padding: 8px 0; }
+.tree-vine { stroke: var(--line); stroke-width: 1.5; }
+.tree-vine-partner { stroke: var(--bark); stroke-dasharray: 3 4; }
+.tnode { cursor: pointer; }
+.tnode rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; transition: stroke .15s; }
+.tnode:hover rect { stroke: var(--fern); }
+.tnode:focus-visible { outline: none; }
+.tnode:focus-visible rect { stroke: var(--fern); stroke-width: 2; }
+.tnode-focus rect { fill: var(--fern-dim); stroke: var(--fern); }
+.tnode-name { fill: var(--ink); font-size: 13px; }
+.tnode-life { fill: var(--ink-faint); font-size: 10.5px; font-family: var(--mono); }
 
 /* gate (welcome / lock) */
 .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 26px; }

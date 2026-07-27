@@ -89,6 +89,7 @@ export function PersonPage({
   onBack,
   onUpdate,
   onRemove,
+  onTree,
   onAddRelative,
   onAddKeepsake,
   onRemoveKeepsake,
@@ -102,6 +103,7 @@ export function PersonPage({
   onBack: () => void;
   onUpdate: (patch: Partial<Omit<Person, "id" | "createdAt" | "updatedAt">>) => void;
   onRemove: () => void;
+  onTree: () => void;
   onAddRelative: (relation: Relation) => void;
   onAddKeepsake: (draft: KeepsakeDraft, file?: File) => void;
   onRemoveKeepsake: (k: Keepsake) => void;
@@ -127,7 +129,10 @@ export function PersonPage({
 
       <div className="person-head">
         <h2 className="person-title">{displayName(person)}</h2>
-        <button className="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
+        <div className="person-actions">
+          <button className="btn btn-ghost btn-sm" onClick={onTree}>In the tree</button>
+          <button className="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
+        </div>
       </div>
       {span ? <p className="person-life">{span}</p> : null}
 
