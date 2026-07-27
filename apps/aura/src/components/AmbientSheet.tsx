@@ -44,9 +44,13 @@ function micErrorMessage(e: unknown): string {
 }
 
 export function AmbientSheet({
+  title = "Home",
   onApplyVibe,
   onClose,
 }: {
+  // "Home" applies to every light; any other value scopes both the applied
+  // vibe and the copy to that one room — see App.tsx's per-room "Auto…".
+  title?: string;
   onApplyVibe: (vibeId: string) => void;
   onClose: () => void;
 }) {
@@ -93,12 +97,16 @@ export function AmbientSheet({
   const setSimField = <K extends keyof AmbientReading>(k: K, v: AmbientReading[K]) =>
     setSim((s) => ({ ...s, [k]: v }));
 
+  const scoped = title !== "Home";
+
   return (
-    <Sheet onClose={onClose} ariaLabel="Ambient vibe">
-      <h3>Read the room</h3>
+    <Sheet onClose={onClose} ariaLabel={scoped ? `Read the room for ${title}` : "Read the room"}>
+      <h3>{scoped ? `Read the room for ${title}` : "Read the room"}</h3>
       <p className="hint">
-        Aura can sense the room and set the vibe — dialed in by the time of day. Simulate what it hears
-        (or try your mic), or just describe the moment, and watch it decide.
+        {scoped
+          ? `Aura can sense what's around you and set ${title}'s vibe from it — only these lights change, dialed in by the time of day.`
+          : "Aura can sense the room and set the vibe — dialed in by the time of day."}{" "}
+        Simulate what it hears (or try your mic), or just describe the moment, and watch it decide.
       </p>
 
       <div className="seg">
