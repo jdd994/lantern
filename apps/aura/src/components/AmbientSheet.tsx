@@ -50,7 +50,7 @@ type VoiceState = "idle" | "confirm" | "downloading" | "recording" | "transcribi
 
 // Speak the moment instead of typing it — same describeScene() matcher either
 // way, this is just a different way to get text into it. Tap to record, tap
-// again to stop and transcribe; the model behind it downloads once (~100MB —
+// again to stop and transcribe; the model behind it downloads once (~65MB —
 // speech model + the WASM engine that runs it), with plain consent first,
 // then runs fully on-device from then on.
 function VoiceInput({ onTranscript }: { onTranscript: (text: string) => void }) {
@@ -146,7 +146,7 @@ function VoiceInput({ onTranscript }: { onTranscript: (text: string) => void }) 
     return (
       <div className="voice-confirm">
         <p className="hint">
-          This downloads a small on-device speech model (about 100MB), once — after that it works fully
+          This downloads a small on-device speech model (about 65MB), once — after that it works fully
           offline, and nothing about your voice ever leaves this device.
         </p>
         <div className="io-row">

@@ -1,8 +1,14 @@
 # Security headers, applied to every response. connect-src is the allowlist of
 # every host Aura may contact — the Govee cloud APIs (which set CORS headers,
-# so the browser calls them directly) plus aura-server, the one small Worker
-# behind the feedback box (never lights, keys, or scenes). Adding a host here
-# is a security decision, not a config tweak.
+# so the browser calls them directly), aura-server (the one small Worker
+# behind the feedback box — never lights, keys, or scenes), and Aura's own R2
+# bucket (the speech-to-text model + its WASM runtime — see
+# scripts/voice-assets.mjs; too big for Pages itself, CORS scoped to this
+# domain specifically, still our infrastructure, not a third party). Adding a
+# host here is a security decision, not a config tweak.
+#
+# worker-src allows blob: alongside self — onnxruntime-web's WASM runtime may
+# spin up a worker from a blob URL for its threaded execution path.
 #
 # Permissions-Policy grants camera/microphone/geolocation to this origin
 # (`self`) — identify/rename uses none of them, but QR setup-transfer (camera),
@@ -12,7 +18,7 @@
 # sensor-consent rule — this header must never be the thing that decides that,
 # only the thing that stops it from being silently unreachable regardless.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://openapi.api.govee.com https://developer-api.govee.com https://aura-server.jdd994.workers.dev; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://openapi.api.govee.com https://developer-api.govee.com https://aura-server.jdd994.workers.dev https://pub-265b50abb06d41f9afcab96b2dee95ae.r2.dev; manifest-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

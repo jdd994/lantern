@@ -4,16 +4,21 @@
 // ever recorded to disk or sent anywhere — the audio buffer lives in memory
 // for exactly as long as transcription takes, then it's gone.
 //
-// The model (Xenova/whisper-tiny.en, fp16 — ~76MB) plus onnxruntime-web's own
-// wasm runtime (~24MB) are vendored into public/voice/ at build time by
-// scripts/voice-assets.mjs — see that file for why, and for why fp16 rather
-// than a quantized dtype. ~100MB total, downloaded to the browser once, on
-// first use, cached via the Cache API by transformers.js itself, and never
-// touches a third party after that: allowRemoteModels is explicitly off below.
+// The model (Xenova/whisper-tiny.en, uint8 — ~41MB) plus onnxruntime-web's
+// own wasm runtime (~24MB) live in Aura's own Cloudflare R2 bucket, not
+// Cloudflare Pages alongside the rest of the app — Pages caps individual
+// files at 25MiB, and every viable ONNX decoder variant for this model is at
+// or above that. See scripts/voice-assets.mjs for the full reasoning
+// (including why uint8 specifically) and how to (re-)populate the bucket.
+// ~65MB total, downloaded to the browser once, on first use, cached via the
+// Cache API by transformers.js itself. Still our own infrastructure, not a
+// third party — CORS on the bucket is scoped to auravibe.app specifically —
+// but note this is the one place Aura's otherwise-strict "everything from
+// our own origin" story bends to "our own *bucket*" instead.
 //
 // Not yet confirmed working end-to-end — verified in a real browser is the
 // next step (see the commit message). graphOptimizationLevel is disabled
-// below as a defensive measure against an ONNX Runtime graph-fusion error
+// below as a defensive measure against an ONNX Runtime graph-execution error
 // hit during testing; harmless if unneeded (only affects inference speed,
 // not correctness), worth revisiting once real-device testing narrows down
 // whether it's actually load-bearing.
@@ -23,6 +28,7 @@
 // paid only by someone who actually taps to speak, never part of the app's
 // own bundle (same reasoning as Ballast's on-device OCR).
 const MODEL_ID = "Xenova/whisper-tiny.en";
+const R2_BASE = "https://pub-265b50abb06d41f9afcab96b2dee95ae.r2.dev/";
 
 export type VoiceDownloadProgress = { file: string; loaded: number; total: number };
 
@@ -36,13 +42,13 @@ function getTranscriber(onProgress?: (p: VoiceDownloadProgress) => void) {
     transcriberPromise = import("@huggingface/transformers").then(({ env, pipeline }) => {
       env.allowRemoteModels = false;
       env.allowLocalModels = true;
-      env.localModelPath = "/voice/";
+      env.localModelPath = R2_BASE;
       // onnxruntime-web's own WASM runtime defaults to cdn.jsdelivr.net if
-      // this isn't set — vendored locally by voice-assets.mjs instead.
-      if (env.backends.onnx.wasm) env.backends.onnx.wasm.wasmPaths = "/voice/ort/";
+      // this isn't set — vendored to the same R2 bucket instead.
+      if (env.backends.onnx.wasm) env.backends.onnx.wasm.wasmPaths = `${R2_BASE}ort/`;
       return pipeline("automatic-speech-recognition", MODEL_ID, {
         // Not the "q8" default — see voice-assets.mjs's file-top note on why.
-        dtype: "fp16",
+        dtype: "uint8",
         session_options: { graphOptimizationLevel: "disabled" },
         progress_callback: (data: { status: string; file?: string; loaded?: number; total?: number }) => {
           if (data.status === "progress" && data.file && onProgress) {
