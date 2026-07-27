@@ -188,6 +188,23 @@ export function useJournal() {
   const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
   const sharedRef = useRef<Map<string, LiveShared>>(new Map()); // shared strands live (with unwrapped DEKs)
   const pairingSessionRef = useRef<PairingSession | null>(null); // this device's throwaway keypair while showing a pairing QR
+  // Live mirrors of `entries`/`strands`. Mutations read and update these
+  // synchronously, then set state — never compute inside a setState updater:
+  // React defers the updater when another update is already pending (e.g. the
+  // addToStrand right after createEntry in write-into-strand), which skipped
+  // the persist step — the piece showed on screen but never reached the vault.
+  const entriesRef = useRef<Entry[]>([]);
+  const strandsRef = useRef<Strand[]>([]);
+
+  const commitEntries = useCallback((next: Entry[]) => {
+    entriesRef.current = next;
+    setEntries(next);
+  }, []);
+
+  const commitStrands = useCallback((next: Strand[]) => {
+    strandsRef.current = next;
+    setStrands(next);
+  }, []);
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
@@ -229,8 +246,8 @@ export function useJournal() {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
     }
-    setEntries(decrypted);
-  }, []);
+    commitEntries(decrypted);
+  }, [commitEntries]);
 
   const loadStrands = useCallback(async (key: CryptoKey) => {
     const stored = await allStoredStrands();
@@ -245,8 +262,8 @@ export function useJournal() {
       }
     }
     out.sort((a, b) => b.updatedAt - a.updatedAt);
-    setStrands(out);
-  }, []);
+    commitStrands(out);
+  }, [commitStrands]);
 
   const loadDayNotes = useCallback(async (key: CryptoKey) => {
     const stored = await allStoredDayNotes();
@@ -514,8 +531,8 @@ export function useJournal() {
           createdAt: Date.now(),
         });
         keyRef.current = dek;
-        setEntries([]);
-        setStrands([]);
+        commitEntries([]);
+        commitStrands([]);
         setDayNotes({});
       }
       if (account) {
@@ -526,7 +543,7 @@ export function useJournal() {
       void requestDurableStorage();
       return null;
     },
-    [requestDurableStorage, connectCreateAccount]
+    [requestDurableStorage, connectCreateAccount, commitEntries, commitStrands]
   );
 
   // Returning: unlock with the passphrase. Returns false on a wrong one.
@@ -888,8 +905,8 @@ export function useJournal() {
 
   const lock = useCallback(() => {
     keyRef.current = null;
-    setEntries([]);
-    setStrands([]);
+    commitEntries([]);
+    commitStrands([]);
     mediaUrls.current.clear(); // free decrypted image data URLs from memory
     identityRef.current = null;
     sharedRef.current.clear(); // drop unwrapped strand keys + decrypted shared content
@@ -900,7 +917,7 @@ export function useJournal() {
     setRecoveryStatus(null);
     setPendingGuardianRequests([]);
     setVaultState("locked");
-  }, []);
+  }, [commitEntries, commitStrands]);
 
   // Writes a record as ciphertext, always marked `dirty` so the (future) sync
   // engine knows it has local changes to push. A deleted record is a tombstone:
@@ -952,11 +969,11 @@ export function useJournal() {
     async (text: string, heading?: boolean): Promise<Entry> => {
       const t = Date.now();
       const entry: Entry = { id: uid(), text, createdAt: t, updatedAt: t, heading: heading || undefined };
-      setEntries((prev) => [...prev, entry]);
+      commitEntries([...entriesRef.current, entry]);
       await guardedPersist(entry);
       return entry;
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   const addEntry = useCallback(
@@ -966,53 +983,36 @@ export function useJournal() {
     [createEntry]
   );
 
-  const updateEntry = useCallback(
-    async (id: string, text: string) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          updated = { ...e, text, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+  // Apply a change to one entry (bumping updatedAt) and persist it. Reads the
+  // ref so a mutation chained right after another update still sees the entry.
+  const mutateEntry = useCallback(
+    async (id: string, change: (e: Entry) => Entry) => {
+      const current = entriesRef.current.find((e) => e.id === id);
+      if (!current) return;
+      const updated = { ...change(current), updatedAt: Date.now() };
+      commitEntries(entriesRef.current.map((e) => (e.id === id ? updated : e)));
+      await guardedPersist(updated);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
+  );
+
+  const updateEntry = useCallback(
+    (id: string, text: string) => mutateEntry(id, (e) => ({ ...e, text })),
+    [mutateEntry]
   );
 
   // Attach / change / clear a thought's anchor in lived time. Pass null to
   // un-anchor it. Bumps updatedAt so the change syncs.
   const setAnchor = useCallback(
-    async (id: string, anchor: Anchor | null) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          updated = { ...e, anchor: anchor ?? undefined, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
-    },
-    [guardedPersist]
+    (id: string, anchor: Anchor | null) => mutateEntry(id, (e) => ({ ...e, anchor: anchor ?? undefined })),
+    [mutateEntry]
   );
 
   // Flag/unflag a thought as a strand section heading (STRANDS_PLAN.md §2).
   // Only meaningful inside a Strand — the Stream/Timeline ignore it.
   const setHeading = useCallback(
-    async (id: string, heading: boolean) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          updated = { ...e, heading: heading || undefined, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
-    },
-    [guardedPersist]
+    (id: string, heading: boolean) => mutateEntry(id, (e) => ({ ...e, heading: heading || undefined })),
+    [mutateEntry]
   );
 
   // Attach a photo to a thought: compress → encrypt → store locally, then add
@@ -1044,34 +1044,17 @@ export function useJournal() {
         deleted: false,
         dirty: true,
       });
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          updated = { ...e, mediaIds: [...(e.mediaIds ?? []), mediaId], updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+      await mutateEntry(entryId, (e) => ({ ...e, mediaIds: [...(e.mediaIds ?? []), mediaId] }));
     },
-    [guardedPersist]
+    [mutateEntry]
   );
 
   const removeMedia = useCallback(
     async (entryId: string, mediaId: string) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          updated = {
-            ...e,
-            mediaIds: (e.mediaIds ?? []).filter((m) => m !== mediaId),
-            updatedAt: Date.now(),
-          };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+      await mutateEntry(entryId, (e) => ({
+        ...e,
+        mediaIds: (e.mediaIds ?? []).filter((m) => m !== mediaId),
+      }));
       await deleteMedia(mediaId);
       mediaUrls.current.delete(mediaId);
       // Also free it from storage if we're connected (best-effort, idempotent).
@@ -1084,26 +1067,19 @@ export function useJournal() {
         }
       }
     },
-    [guardedPersist]
+    [mutateEntry]
   );
 
   // Adjust a photo's look (size / tilt) within a thought. Merges into the
   // entry's per-photo config and persists.
   const setMediaConfig = useCallback(
-    async (entryId: string, mediaId: string, partial: MediaConfig) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          const cfg = { ...(e.mediaConfig ?? {}) };
-          cfg[mediaId] = { ...(cfg[mediaId] ?? {}), ...partial };
-          updated = { ...e, mediaConfig: cfg, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
-    },
-    [guardedPersist]
+    (entryId: string, mediaId: string, partial: MediaConfig) =>
+      mutateEntry(entryId, (e) => {
+        const cfg = { ...(e.mediaConfig ?? {}) };
+        cfg[mediaId] = { ...(cfg[mediaId] ?? {}), ...partial };
+        return { ...e, mediaConfig: cfg };
+      }),
+    [mutateEntry]
   );
 
   // Decrypt a stored image to an in-memory object URL (cached). Returns null if
@@ -1143,12 +1119,12 @@ export function useJournal() {
 
   const removeEntry = useCallback(
     async (entry: Entry) => {
-      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      commitEntries(entriesRef.current.filter((e) => e.id !== entry.id));
       // Soft delete: write a tombstone (deleted + dirty, bumped updatedAt) so
       // the removal can sync and win last-write-wins on other devices.
       await guardedPersist({ ...entry, updatedAt: Date.now() }, true);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   // Used by Undo: re-insert a previously deleted entry. Bump updatedAt so this
@@ -1156,10 +1132,10 @@ export function useJournal() {
   const restoreEntry = useCallback(
     async (entry: Entry) => {
       const revived: Entry = { ...entry, updatedAt: Date.now() };
-      setEntries((prev) => [...prev, revived]);
+      commitEntries([...entriesRef.current, revived]);
       await guardedPersist(revived);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   // A restorable, ciphertext-only backup of the whole vault. Returns null if
@@ -1282,31 +1258,28 @@ export function useJournal() {
     [persistStrand, scheduleSync]
   );
 
-  // Apply a change to one strand (bumping updatedAt) and persist it.
+  // Apply a change to one strand (bumping updatedAt) and persist it. Reads the
+  // ref so a mutation chained right after another update still sees the strand.
   const mutateStrand = useCallback(
     async (id: string, change: (s: Strand) => Strand) => {
-      let updated: Strand | null = null;
-      setStrands((prev) =>
-        prev.map((s) => {
-          if (s.id !== id) return s;
-          updated = { ...change(s), updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedStrandPersist(updated);
+      const current = strandsRef.current.find((s) => s.id === id);
+      if (!current) return;
+      const updated = { ...change(current), updatedAt: Date.now() };
+      commitStrands(strandsRef.current.map((s) => (s.id === id ? updated : s)));
+      await guardedStrandPersist(updated);
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   const createStrand = useCallback(
     async (title: string): Promise<Strand> => {
       const t = Date.now();
       const strand: Strand = { id: uid(), title: title.trim(), entryIds: [], createdAt: t, updatedAt: t };
-      setStrands((prev) => [strand, ...prev]);
+      commitStrands([strand, ...strandsRef.current]);
       await guardedStrandPersist(strand);
       return strand;
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   const renameStrand = useCallback(
@@ -1316,10 +1289,10 @@ export function useJournal() {
 
   const deleteStrand = useCallback(
     async (strand: Strand) => {
-      setStrands((prev) => prev.filter((s) => s.id !== strand.id));
+      commitStrands(strandsRef.current.filter((s) => s.id !== strand.id));
       await guardedStrandPersist({ ...strand, updatedAt: Date.now() }, true);
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   // Add an existing thought to a strand (no-op if already a member).
