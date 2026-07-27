@@ -12,11 +12,15 @@ import {
   encodeUnion,
   keepsakesFor,
   lifespanLabel,
+  linkRelative,
   parentsOf,
   partnersOf,
   siblingsOf,
   unplaced,
   whenLabel,
+  whenYear,
+  withEventWhen,
+  yearWhen,
   type Keepsake,
   type Person,
   type Union,
@@ -149,6 +153,77 @@ describe("walking the tree", () => {
     const drifter = person("d", "Dora");
     expect(unplaced([june, mary, drifter], unions)).toEqual([drifter]);
     expect(unplaced([june, mary], unions)).toEqual([]);
+  });
+});
+
+describe("placing a relative", () => {
+  const NOW = 9000;
+
+  it("adds a partner to an open union rather than splitting the family", () => {
+    const solo = union("u", ["mary"], ["ada"]);
+    const [u] = linkRelative("mary", "sam", "partner", [solo], undefined, NOW);
+    expect(u.id).toBe("u");
+    expect(u.partnerIds).toEqual(["mary", "sam"]);
+    expect(u.updatedAt).toBe(NOW);
+    expect(solo.partnerIds).toEqual(["mary"]); // input untouched
+  });
+
+  it("starts a fresh partnership when the anchor's unions are full", () => {
+    const [u] = linkRelative("mary", "leo", "partner", [union("u", ["mary", "sam"], [])], undefined, NOW);
+    expect(u.id).not.toBe("u");
+    expect(u.partnerIds).toEqual(["mary", "leo"]);
+    expect(u.children).toEqual([]);
+  });
+
+  it("adds a child to the anchor's union, or makes a solo one", () => {
+    const [joined] = linkRelative("mary", "ada", "child", [union("u", ["mary", "sam"], [])], "birth", NOW);
+    expect(joined.children).toEqual([{ personId: "ada", kind: "birth" }]);
+    const [made] = linkRelative("mary", "tom", "child", [], "adoptive", NOW);
+    expect(made.partnerIds).toEqual(["mary"]);
+    expect(made.children).toEqual([{ personId: "tom", kind: "adoptive" }]);
+  });
+
+  it("slots a second parent into the anchor's childhood union", () => {
+    const childhood = union("u", ["june"], ["mary"]);
+    const [u] = linkRelative("mary", "arthur", "parent", [childhood], undefined, NOW);
+    expect(u.id).toBe("u");
+    expect(u.partnerIds).toEqual(["june", "arthur"]);
+    const [fresh] = linkRelative("mary", "june", "parent", [], "birth", NOW);
+    expect(fresh.partnerIds).toEqual(["june"]);
+    expect(fresh.children).toEqual([{ personId: "mary", kind: "birth" }]);
+  });
+
+  it("gives siblings the anchor's childhood union, partnerless if need be", () => {
+    const [shared] = linkRelative("mary", "tom", "sibling", [union("u", ["june"], ["mary"])], "adoptive", NOW);
+    expect(shared.id).toBe("u");
+    expect(shared.children).toEqual([{ personId: "mary" }, { personId: "tom", kind: "adoptive" }]);
+    const [orphaned] = linkRelative("mary", "tom", "sibling", [], undefined, NOW);
+    expect(orphaned.partnerIds).toEqual([]);
+    expect(orphaned.children.map((c) => c.personId)).toEqual(["mary", "tom"]);
+  });
+});
+
+describe("year ↔ when helpers", () => {
+  it("round-trips a year through a UTC calendar When", () => {
+    const w = yearWhen(1885, "about");
+    expect(w).toEqual({ time: Date.UTC(1885, 0, 1), precision: "year", qualifier: "about" });
+    expect(whenYear(w)).toBe(1885);
+    expect(yearWhen(undefined)).toBeUndefined();
+    expect(whenYear(undefined)).toBeUndefined();
+  });
+
+  it("replaces an event's when but keeps its place and note", () => {
+    const events = [{ kind: "birth" as const, when: yearWhen(1885), place: "Galway" }];
+    const next = withEventWhen(events, "birth", yearWhen(1886));
+    expect(next[0].place).toBe("Galway");
+    expect(whenYear(next[0].when)).toBe(1886);
+  });
+
+  it("drops an event left saying nothing, keeps one that still speaks", () => {
+    expect(withEventWhen([{ kind: "death", when: yearWhen(1962) }], "death", undefined)).toEqual([]);
+    const kept = withEventWhen([{ kind: "death", when: yearWhen(1962), note: "at home" }], "death", undefined);
+    expect(kept).toEqual([{ kind: "death", when: undefined, note: "at home" }]);
+    expect(withEventWhen([], "death", undefined)).toEqual([]);
   });
 });
 

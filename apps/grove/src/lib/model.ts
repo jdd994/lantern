@@ -198,6 +198,27 @@ export function whenLabel(w: When | undefined): string {
   return q + (w.precision === "month" ? my : `${d.getUTCDate()} ${my}`);
 }
 
+// A year the UI collected → a When (UTC midnight of Jan 1, year precision,
+// same calendar-date discipline as whenLabel), and back again.
+export function yearWhen(year: number | undefined, qualifier?: When["qualifier"]): When | undefined {
+  if (year === undefined || !Number.isFinite(year)) return undefined;
+  return qualifier ? { time: Date.UTC(year, 0, 1), precision: "year", qualifier } : { time: Date.UTC(year, 0, 1), precision: "year" };
+}
+
+export function whenYear(w: When | undefined): number | undefined {
+  return w?.time === undefined ? undefined : new Date(w.time).getUTCFullYear();
+}
+
+// Replace the `when` of a person's birth/death event, preserving whatever else
+// the event carries (place, note). An event left saying nothing is dropped.
+export function withEventWhen(events: LifeEvent[], kind: "birth" | "death", when: When | undefined): LifeEvent[] {
+  const i = events.findIndex((e) => e.kind === kind);
+  if (i === -1) return hasWhen(when) ? [...events, { kind, when }] : events;
+  const next: LifeEvent = { ...events[i], when: hasWhen(when) ? when : undefined };
+  if (!hasWhen(next.when) && !next.place && !next.note) return events.filter((_, j) => j !== i);
+  return events.map((e, j) => (j === i ? next : e));
+}
+
 // ---- Walking the tree ----------------------------------------------------
 // The graph is small (a family, not a social network) so walks are plain
 // scans — no indexes until a real tree proves they're needed.
@@ -288,6 +309,63 @@ export function descendantsOf(personId: string, unions: Union[], maxGen = 32): s
     frontier = next;
   }
   return gens;
+}
+
+// ---- Placing a relative ---------------------------------------------------
+// Where a new person attaches to the graph. Pure: takes the current unions,
+// returns only the unions to upsert (fresh objects, inputs untouched). The
+// caller persists them and the new person together, so a relative is added and
+// placed in one gesture — never left invisible half-linked.
+
+export type Relation = "parent" | "partner" | "child" | "sibling";
+
+export function linkRelative(
+  anchorId: string,
+  newId: string,
+  relation: Relation,
+  unions: Union[],
+  childKind?: ChildLink["kind"],
+  now: number = Date.now()
+): Union[] {
+  const fresh = (partnerIds: string[], children: ChildLink[]): Union => ({
+    id: uid(),
+    partnerIds,
+    children,
+    events: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  switch (relation) {
+    case "partner": {
+      // Join an existing solo union (e.g. one made by adding a child first),
+      // otherwise start a new partnership.
+      const open = unions.find((u) => u.partnerIds.includes(anchorId) && u.partnerIds.length < 2);
+      if (open) return [{ ...open, partnerIds: [...open.partnerIds, newId], updatedAt: now }];
+      return [fresh([anchorId, newId], [])];
+    }
+    case "child": {
+      const u = unions.find((x) => x.partnerIds.includes(anchorId));
+      const link: ChildLink = { personId: newId, kind: childKind };
+      if (u) return [{ ...u, children: [...u.children, link], updatedAt: now }];
+      return [fresh([anchorId], [link])];
+    }
+    case "parent": {
+      // Slot into the union the anchor is already a child of, if it has room;
+      // otherwise a new union with the anchor as its child.
+      const u = unions.find((x) => x.children.some((c) => c.personId === anchorId));
+      if (u && u.partnerIds.length < 2) return [{ ...u, partnerIds: [...u.partnerIds, newId], updatedAt: now }];
+      return [fresh([newId], [{ personId: anchorId, kind: childKind }])];
+    }
+    case "sibling": {
+      // Share the anchor's childhood union; a partnerless union is a valid
+      // sibling group when no parent has been recorded yet.
+      const u = unions.find((x) => x.children.some((c) => c.personId === anchorId));
+      const link: ChildLink = { personId: newId, kind: childKind };
+      if (u) return [{ ...u, children: [...u.children, link], updatedAt: now }];
+      return [fresh([], [{ personId: anchorId }, link])];
+    }
+  }
 }
 
 // The never-silently-dropped rule (same spirit as shared strands): a person
