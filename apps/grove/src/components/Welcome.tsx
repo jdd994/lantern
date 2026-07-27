@@ -9,10 +9,12 @@ export function Welcome({
   onSetup,
   busy,
   onSignIn,
+  onInstallHelp,
 }: {
   onSetup: (p: string) => Promise<void>;
   busy: boolean;
   onSignIn?: () => void;
+  onInstallHelp?: () => void;
 }) {
   const [step, setStep] = useState<"intro" | "pass">("intro");
   const [pass, setPass] = useState("");
@@ -62,6 +64,14 @@ export function Welcome({
               Already keeping a tree on another device?{" "}
               <button type="button" className="linklike" onClick={onSignIn}>
                 Sign in to sync
+              </button>
+            </p>
+          ) : null}
+          {onInstallHelp ? (
+            <p className="gate-alt">
+              Want Grove on your home screen?{" "}
+              <button type="button" className="linklike" onClick={onInstallHelp}>
+                How to install
               </button>
             </p>
           ) : null}

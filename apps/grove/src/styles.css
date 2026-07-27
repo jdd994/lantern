@@ -218,6 +218,14 @@ input[type=file]::file-selector-button:hover { background: var(--surface-2); col
 .linklike.danger { color: var(--clay); font-size: 12.5px; text-decoration: none; }
 .linklike.danger:hover { color: var(--ink); text-decoration: underline; }
 
+/* install guide */
+.steps { margin: 0 0 6px; padding-left: 20px; }
+.steps li { font-size: 14px; line-height: 1.6; color: var(--ink-soft); margin-bottom: 8px; }
+.steps strong { color: var(--ink); font-weight: 600; }
+.step-icon { vertical-align: -2px; color: var(--fern); margin: 0 2px; }
+.install-more summary { font-size: 13px; color: var(--ink-faint); cursor: pointer; margin-bottom: 8px; }
+.install-more summary:hover { color: var(--ink); }
+
 /* settings sheet sections */
 .set-section { margin-bottom: 1.4rem; }
 .set-section:last-of-type { margin-bottom: 0.8rem; }
