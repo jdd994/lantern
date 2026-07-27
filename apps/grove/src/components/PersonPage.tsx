@@ -88,6 +88,7 @@ export function PersonPage({
   onOpen,
   onBack,
   onUpdate,
+  onRemove,
   onAddRelative,
   onAddKeepsake,
   onRemoveKeepsake,
@@ -100,6 +101,7 @@ export function PersonPage({
   onOpen: (id: string) => void;
   onBack: () => void;
   onUpdate: (patch: Partial<Omit<Person, "id" | "createdAt" | "updatedAt">>) => void;
+  onRemove: () => void;
   onAddRelative: (relation: Relation) => void;
   onAddKeepsake: (draft: KeepsakeDraft, file?: File) => void;
   onRemoveKeepsake: (k: Keepsake) => void;
@@ -179,7 +181,7 @@ export function PersonPage({
         )}
       </section>
 
-      {editing ? <EditPerson person={person} onSave={onUpdate} onClose={() => setEditing(false)} /> : null}
+      {editing ? <EditPerson person={person} onSave={onUpdate} onRemove={onRemove} onClose={() => setEditing(false)} /> : null}
       {addingKeepsake ? <AddKeepsake person={person} onAdd={onAddKeepsake} onClose={() => setAddingKeepsake(false)} /> : null}
     </>
   );

@@ -368,6 +368,27 @@ export function linkRelative(
   }
 }
 
+// Removing a person strips their links so no union points at a ghost. Pure:
+// returns the unions to upsert and the ids of unions left saying nothing
+// (no partners, no children) — the caller tombstones those. Other children
+// and partners keep their places untouched.
+export function unlinkPerson(
+  personId: string,
+  unions: Union[],
+  now: number = Date.now()
+): { upserts: Union[]; emptied: string[] } {
+  const upserts: Union[] = [];
+  const emptied: string[] = [];
+  for (const u of unions) {
+    const partnerIds = u.partnerIds.filter((p) => p !== personId);
+    const children = u.children.filter((c) => c.personId !== personId);
+    if (partnerIds.length === u.partnerIds.length && children.length === u.children.length) continue;
+    if (partnerIds.length === 0 && children.length === 0) emptied.push(u.id);
+    else upserts.push({ ...u, partnerIds, children, updatedAt: now });
+  }
+  return { upserts, emptied };
+}
+
 // The never-silently-dropped rule (same spirit as shared strands): a person
 // no union references still appears — on the "unplaced" shelf — so a relative
 // someone added is never invisible because a linking write lost a race.

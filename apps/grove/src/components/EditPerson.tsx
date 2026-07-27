@@ -16,10 +16,12 @@ function eventWhen(p: Person, kind: "birth" | "death"): When | undefined {
 export function EditPerson({
   person,
   onSave,
+  onRemove,
   onClose,
 }: {
   person: Person;
   onSave: (patch: Partial<PersonDraft>) => void;
+  onRemove: () => void;
   onClose: () => void;
 }) {
   const first = person.names[0] ?? {};
@@ -117,6 +119,24 @@ export function EditPerson({
         <div className="sheet-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary">Save</button>
+        </div>
+        <div className="danger-zone">
+          <button
+            type="button"
+            className="linklike danger"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
+                )
+              ) {
+                onRemove();
+                onClose();
+              }
+            }}
+          >
+            Remove from the tree
+          </button>
         </div>
       </form>
     </Sheet>
