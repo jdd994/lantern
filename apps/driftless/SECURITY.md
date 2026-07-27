@@ -43,9 +43,28 @@ it's what makes the journal truly yours. So protect it accordingly (below).
 Being honest about the threat model matters more than reassuring noise.
 
 **A full server compromise would expose:** account emails, password *hashes*
-(PBKDF2, not the passwords), the opaque encrypted blobs, and entry *timestamps*
-(these are currently plaintext so the app can sort/group cheaply — see the
-roadmap), plus any feedback notes you chose to send.
+(PBKDF2, not the passwords), the opaque encrypted blobs, and — this is the
+part worth understanding — some **metadata about your writing rhythm**:
+
+- each record's created/updated *timestamps* (plaintext, so devices can
+  reconcile edits), and the order things arrived in;
+- how *many* entries, strands, and photos you have, and roughly how large
+  each is;
+- for day notes, *which days* have one (they're stored under the date);
+- any feedback notes you chose to send.
+
+In short: a breach could learn **when and how much you write — never a word
+of what you wrote.** Your entries' content, titles, tags, photos, and even
+the *lived* dates you anchor memories to all live inside the encryption.
+And because the app syncs shortly after you write, the *timing* of sync
+requests reflects your writing rhythm too — that part no amount of encrypting
+stored fields can hide from whoever operates the server.
+
+This trade is deliberate and accepted for now (decided 2026-07-27): hiding
+the stored timestamps without hiding the sync timing would add complexity
+while mostly moving the leak, not closing it. A fuller "metadata-private
+records" design (timestamps and day-note keys inside the ciphertext) is
+planned as part of a future shared-sync rework — see the roadmap.
 
 **It would NOT expose:** your passphrase, your encryption keys, or a single word
 of any journal entry or shared strand. Those never reach the server in readable

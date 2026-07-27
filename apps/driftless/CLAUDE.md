@@ -124,8 +124,17 @@ npm run e2e      # e2e/smoke.mjs — drives the real app in headless Chromium
    `updatedAt`, per-user `seq` cursor, `deleted` tombstones) to Driftless's
    entries/strands, plus a `pushMedia` for encrypted photos. Wired end-to-end
    via `useJournal.ts`'s `syncNow`, triggered from `App.tsx`.
-3. **Encrypt timestamps** before/when syncing if metadata privacy matters (today
-   they're plaintext so local sort/group is cheap). Decide explicitly. Still open.
+3. **Timestamp metadata — DECIDED 2026-07-27: accept + document now, fix fully
+   in the shared core later.** What the server can see (writing rhythm: record
+   timestamps, seq order, counts/sizes/kinds, day-note ids which are literal
+   dates) is documented honestly in SECURITY.md. Encrypting stored timestamps
+   alone was rejected: sync fires ~1.5s after writing, so request timing leaks
+   the same rhythm to a live server — partial fixes add complexity without
+   closing the leak. The full fix — **metadata-private records** (createdAt/
+   updatedAt inside the ciphertext, version-counter LWW instead of wall-clock,
+   opaque day-note ids, `markAllDirty` re-push as migration) — is a designed-in
+   REQUIREMENT of the shared-core sync extraction, so all apps inherit it at
+   once. Don't half-do it per-app.
 4. **Account + key portability — BUILT.** Register/login on the server; the vault
    salt + verifier travel with the account so a new device re-derives the same
    key from the passphrase. The account (login) and the passphrase stay
