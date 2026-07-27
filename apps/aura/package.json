@@ -11,9 +11,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name aura --branch=production"
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name aura --branch=production",
+    "voice-assets": "node scripts/voice-assets.mjs",
+    "predev": "npm run voice-assets",
+    "prebuild": "npm run voice-assets"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@lantern/core": "*",
     "@lantern/ui": "*",
     "@tauri-apps/api": "^2.11.1",
