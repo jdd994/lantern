@@ -14,16 +14,18 @@
 // outbox, and the unplaced shelf catches any union that loses a race.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createVault as makeVault, openVault, rewrapVault, setPassphraseFromDEK } from "@lantern/core/vault";
+import { createVault as makeVault, openVault, rewrapVault, setPassphraseFromDEK, verifyDEK } from "@lantern/core/vault";
 import { importPublicKeyB64, wrapDEKForRecipient, unwrapDEK } from "@lantern/core/sharing";
 import {
   VERIFIER_TEXT, encryptString, decryptString, encryptBytes, decryptBytes,
   generateDEK, generateIdentityKeypair, exportPublicKeyB64, exportPrivateKeyB64,
   importPrivateKeyB64, unwrapPrivateKey, sealJSON, openJSON, PBKDF2_ITERATIONS,
+  exportKeyRaw, importKeyRaw,
   createRecoveryCircle, approveAsGuardian, reconstructDEK,
 } from "../lib/crypto";
 import * as db from "../lib/db";
 import * as api from "../lib/api";
+import { biometricSupported, enrollBiometric, unlockBiometric } from "../lib/biometric";
 import { syncNow as engineSyncNow } from "../lib/sync";
 import { bytesToBase64, prepareKeepsakeFile } from "../lib/media";
 import { fromGedcom, toGedcom, type GedcomTree } from "../lib/gedcom";
@@ -75,6 +77,10 @@ export function useGrove() {
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
 
+  // ---- biometric quick unlock (per-device, opt-in) ----
+  const [canBiometric, setCanBiometric] = useState(false);
+  const [hasBiometric, setHasBiometric] = useState(false);
+
   // ---- account & sync state ----
   const [account, setAccount] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -106,8 +112,14 @@ export function useGrove() {
 
   useEffect(() => {
     void (async () => {
-      const v = await db.getVault();
-      const st = await db.getSyncState();
+      const [v, st, device, supported] = await Promise.all([
+        db.getVault(),
+        db.getSyncState(),
+        db.getDevice(),
+        biometricSupported(),
+      ]);
+      setCanBiometric(supported);
+      setHasBiometric(!!device);
       if (st?.token) {
         tokenRef.current = st.token;
         setAccount(st.accountEmail ?? null);
@@ -440,6 +452,7 @@ export function useGrove() {
     async (dek: CryptoKey) => {
       keyRef.current = dek;
       await loadAll(dek);
+      setError(null); // a losing race's complaint must not outlive the unlock
       setStatus("unlocked");
       void requestDurableStorage();
       if (tokenRef.current) {
@@ -487,6 +500,48 @@ export function useGrove() {
     },
     [finishUnlock]
   );
+
+  // Quick unlock: the passkey's PRF secret (released only after the device's
+  // own biometric check) unwraps this device's copy of the DEK. A wrapped key
+  // that no longer verifies is stale (e.g. recovery minted a new vault) — it
+  // clears itself rather than lingering as a door to nowhere.
+  const unlockWithBiometric = useCallback(async (): Promise<boolean> => {
+    setError(null);
+    const [vault, device] = await Promise.all([db.getVault(), db.getDevice()]);
+    if (!vault || !device) return false;
+    // A rejected ceremony (cancelled, or a second request while one is up —
+    // StrictMode fires the auto-offer twice in dev) is a quiet no, not a crash.
+    const raw = await unlockBiometric(device).catch(() => null);
+    if (!raw) {
+      setError("Couldn't unlock with biometrics. Use your passphrase.");
+      return false;
+    }
+    const key = await importKeyRaw(raw);
+    if (!(await verifyDEK(key, vault.verifier, VERIFIER_TEXT))) {
+      await db.clearDevice();
+      setHasBiometric(false);
+      setError("This device's quick unlock is out of date. Use your passphrase.");
+      return false;
+    }
+    await finishUnlock(key);
+    return true;
+  }, [finishUnlock]);
+
+  // Enroll THIS device: a platform passkey wraps the vault key; the wrap never
+  // syncs and is meaningless anywhere else. Opt-in, never the default — the
+  // passphrase stays the durable root.
+  const enableBiometric = useCallback(async (): Promise<boolean> => {
+    const key = keyRef.current;
+    if (!key) return false;
+    const enrollment = await enrollBiometric(await exportKeyRaw(key));
+    if (!enrollment) {
+      setError("This device can't do biometric unlock.");
+      return false;
+    }
+    await db.saveDevice({ id: "device", ...enrollment });
+    setHasBiometric(true);
+    return true;
+  }, []);
 
   const lock = useCallback(() => {
     keyRef.current = null;
@@ -1091,6 +1146,10 @@ export function useGrove() {
     setup,
     unlock,
     lock,
+    canBiometric,
+    hasBiometric,
+    unlockWithBiometric,
+    enableBiometric,
     addPerson,
     updatePerson,
     removePerson,

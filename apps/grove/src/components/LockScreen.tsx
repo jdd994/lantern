@@ -1,14 +1,16 @@
 // LockScreen.tsx
 // The vault is closed. Not a name, not a date, not a word of a letter is in
-// memory until the passphrase opens it. "Forgot it" hands off to the guardian
-// recovery flow. (Biometric unlock is still a follow-up.)
+// memory until the passphrase (or a biometric shortcut to the same key) opens
+// it. "Forgot it" hands off to the guardian recovery flow.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RecoveryFlow } from "./RecoveryFlow";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 export function LockScreen({
   onUnlock,
+  onBiometric,
+  hasBiometric,
   error,
   busy,
   account,
@@ -22,6 +24,8 @@ export function LockScreen({
   onFinishRecovery,
 }: {
   onUnlock: (p: string) => Promise<boolean>;
+  onBiometric: () => Promise<boolean>;
+  hasBiometric: boolean;
   error: string | null;
   busy: boolean;
   // Social recovery — "I forgot my passphrase." See RecoveryFlow.tsx.
@@ -37,6 +41,12 @@ export function LockScreen({
 }) {
   const [pass, setPass] = useState("");
   const [showRecovery, setShowRecovery] = useState(false);
+
+  // An enrolled device offers the quick way first; declining costs one tap.
+  useEffect(() => {
+    if (hasBiometric) void onBiometric();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +85,11 @@ export function LockScreen({
           <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={busy || !pass}>
             {busy ? "Unlocking…" : "Unlock"}
           </button>
+          {hasBiometric ? (
+            <button type="button" className="btn btn-ghost" style={{ width: "100%", marginTop: 9 }} onClick={() => void onBiometric()}>
+              Use biometrics instead
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-ghost"
