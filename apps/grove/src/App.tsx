@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
-import { useTheme } from "@lantern/ui";
+import { InstallSheet, useTheme } from "@lantern/ui";
 import { useGrove } from "./hooks/useGrove";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -11,7 +11,6 @@ import { AddRelative } from "./components/AddRelative";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Sync } from "./components/Sync";
 import { Family } from "./components/Family";
-import { InstallSheet } from "./components/InstallSheet";
 import { Gear } from "./components/icons";
 import type { Relation } from "./lib/model";
 
@@ -81,7 +80,7 @@ export default function App() {
       <>
         <Welcome onSetup={g.setup} busy={g.busy} onSignIn={() => setSync(true)} onInstallHelp={() => setInstallHelp(true)} />
         {syncSheet}
-        {installHelp ? <InstallSheet onClose={() => setInstallHelp(false)} /> : null}
+        {installHelp ? <InstallSheet appName="Grove" onClose={() => setInstallHelp(false)} /> : null}
       </>
     );
   }
@@ -225,7 +224,7 @@ export default function App() {
           onClose={() => setSettings(false)}
         />
       ) : null}
-      {installHelp ? <InstallSheet onClose={() => setInstallHelp(false)} /> : null}
+      {installHelp ? <InstallSheet appName="Grove" onClose={() => setInstallHelp(false)} /> : null}
       {family ? (
         <Family
           account={g.account}

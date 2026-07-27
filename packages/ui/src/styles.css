@@ -162,3 +162,30 @@
 }
 .l-ledger-meta { margin: 3px 0 0; font-size: 12px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }
 .l-ledger-empty { font-size: 13px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }
+
+/* ---- InstallSheet — "keep it close", said for everyone -------------------- */
+.l-install-title { margin: 0 0 14px; font-size: 18px; font-weight: 500; color: var(--ink, #eaeaea); }
+.l-install-lede { font-size: 14px; line-height: 1.6; color: var(--ink-soft, #bbb); margin: 0 0 16px; }
+.l-install-section { margin-bottom: 18px; }
+.l-install-head { font-size: 13px; font-weight: 600; color: var(--ink-soft, #bbb); margin: 0 0 8px; letter-spacing: 0.02em; }
+.l-steps { margin: 0 0 6px; padding-left: 20px; }
+.l-steps li { font-size: 14px; line-height: 1.6; color: var(--ink-soft, #bbb); margin-bottom: 8px; }
+.l-steps strong { color: var(--ink, #eaeaea); font-weight: 600; }
+.l-step-icon { vertical-align: -2px; color: var(--accent, var(--ink, #eaeaea)); margin: 0 2px; }
+.l-install-more summary { font-size: 13px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); cursor: pointer; margin-bottom: 8px; }
+.l-install-more summary:hover { color: var(--ink, #eaeaea); }
+.l-install-now {
+  display: block; width: 100%; margin: 0 0 18px; padding: 11px 15px;
+  border-radius: 12px; border: 1px solid var(--accent, #888);
+  background: var(--accent, #888); color: var(--bg, #111);
+  font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.l-install-hint { font-size: 12.5px; line-height: 1.55; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); margin: 0 0 6px; }
+.l-install-hint strong { color: var(--ink-soft, #bbb); }
+.l-install-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.l-install-close {
+  padding: 9px 15px; border-radius: 12px; border: 1px solid transparent;
+  background: none; color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.l-install-close:hover { color: var(--ink, #eaeaea); }

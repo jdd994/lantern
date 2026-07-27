@@ -2,6 +2,7 @@
 export { useTheme } from "./useTheme";
 export { useAccent } from "./useAccent";
 export { Sheet } from "./Sheet";
+export { InstallSheet } from "./InstallSheet";
 export { ThemePicker, type ThemeOption } from "./ThemePicker";
 export { TierBadge } from "./TierBadge";
 export { TradeOffCard } from "./TradeOffCard";
