@@ -3,10 +3,28 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Tauri's CLI sets this for every `tauri dev`/`tauri build` invocation of
+// this app's own beforeDevCommand/beforeBuildCommand, so it's a reliable way
+// to tell "this build is going inside the desktop shell" from "this build is
+// auravibe.app in a browser" without any extra config on our end.
+const isTauriBuild = !!process.env.TAURI_ENV_PLATFORM;
+
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Desktop already ships every asset in the installer — a Workbox cache
+      // on top of that has no offline benefit and one real cost: WebView2's
+      // cache/service-worker storage lives in a per-user folder that survives
+      // an uninstall, so a stale cached build can keep serving itself forever
+      // even after installing a newer version over it (this happened: v0.1.16
+      // kept showing pre-transfer-feature UI after a clean reinstall).
+      // selfDestroying ships a service worker whose only job is to unregister
+      // itself, clear every cache, and reload — once a previously-registered
+      // real one updates into this, the desktop app self-heals. Cheap enough
+      // to just leave in place for every future Tauri build, so this class of
+      // bug can't recur; the browser build below is untouched.
+      ...(isTauriBuild ? { selfDestroying: true } : {}),
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {

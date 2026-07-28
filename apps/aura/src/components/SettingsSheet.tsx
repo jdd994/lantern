@@ -1,9 +1,10 @@
 // SettingsSheet.tsx — the app's own vibe, your connected brands, and a plain word
 // on how Aura works. No account, no vault: Aura is a controller for your lights.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CapabilityLedger, Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 import { connectorFor, tierWording, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
+import { appVersion } from "../lib/platform";
 import { TransferPanel } from "./TransferPanel";
 
 const DEFAULT_ACCENT = "#E7B75A";
@@ -48,6 +49,12 @@ export function SettingsSheet({
   const [transferring, setTransferring] = useState(false);
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  // Desktop only — a plain way to confirm you're on the build you think
+  // you're on, since Windows/macOS installers don't always show this.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    appVersion().then(setVersion);
+  }, []);
 
   function exportSetup() {
     const blob = new Blob([onExport()], { type: "application/json" });
@@ -250,6 +257,7 @@ export function SettingsSheet({
           account, and your keys, devices, and scenes never leave here. The only exception is a note you
           choose to send from Help — that's the one thing that ever reaches a server of ours.
         </p>
+        {version && <p className="hint io-note">Aura desktop v{version}</p>}
       </div>
     </Sheet>
   );
