@@ -75,12 +75,32 @@ export function SettingsSheet({
     appVersion().then(setVersion);
   }, []);
 
-  function exportSetup() {
-    const blob = new Blob([onExport(includeAccounts)], { type: "application/json" });
+  // The actual friction in "move a file to your other device" was never the
+  // JSON — it's getting that file across, which used to mean emailing it to
+  // yourself or hunting for a cloud drive. Every phone already has a fast,
+  // native answer to that (AirDrop, Nearby Share, Windows Share) reachable
+  // from the browser as navigator.share() with a file attached — so try that
+  // first, and only fall back to a plain download where it isn't supported
+  // (most desktop browsers today).
+  async function exportSetup() {
+    const filename = `aura-setup-${new Date().toISOString().slice(0, 10)}.json`;
+    const text = onExport(includeAccounts);
+    const file = new File([text], filename, { type: "application/json" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Aura setup" });
+        setIoNote("Setup shared.");
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return; // you backed out — no note needed
+        // any other share failure falls through to the plain download below
+      }
+    }
+    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `aura-setup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     setIoNote("Setup exported.");
