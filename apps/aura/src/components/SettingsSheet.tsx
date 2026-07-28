@@ -80,12 +80,15 @@ export function SettingsSheet({
   async function importSetup(file: File) {
     const text = await file.text();
     const res = await onImport(text);
-    setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+    // A successful import can still carry an error — e.g. rooms/scenes came
+    // through fine but a connected account failed to reconnect. Surfacing
+    // only "Setup imported." in that case hid a real, actionable failure.
+    setIoNote(res.ok ? (res.error ?? "Setup imported.") : (res.error ?? "Import failed."));
   }
 
   async function importPastedText() {
     const res = await onImport(pasteText);
-    setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+    setIoNote(res.ok ? (res.error ?? "Setup imported.") : (res.error ?? "Import failed."));
     if (res.ok) {
       setPasting(false);
       setPasteText("");
