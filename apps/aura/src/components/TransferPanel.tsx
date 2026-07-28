@@ -37,7 +37,7 @@ export function TransferPanel({
   onClose,
 }: {
   onExport: (includeAccounts: boolean, compact: boolean) => string;
-  onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
+  onImport: (text: string) => Promise<{ ok: boolean; error?: string; summary?: string }>;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
@@ -130,7 +130,7 @@ function ScanCode({
   onImport,
   onDone,
 }: {
-  onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
+  onImport: (text: string) => Promise<{ ok: boolean; error?: string; summary?: string }>;
   onDone: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -178,7 +178,7 @@ function ScanCode({
       if (cancelled) return true;
       const res = await onImport(decodeTransferQr(rawValue));
       if (cancelled) return true;
-      setResult(res.ok ? (res.error ?? "Setup imported.") : (res.error ?? "That code didn't import."));
+      setResult(res.ok ? (res.summary ?? "Setup imported.") : (res.error ?? "That code didn't import."));
       return true;
     }
 

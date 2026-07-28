@@ -756,7 +756,7 @@ export function useAura() {
   );
 
   const importSetup = useCallback(
-    async (text: string): Promise<{ ok: boolean; error?: string }> => {
+    async (text: string): Promise<{ ok: boolean; error?: string; summary?: string }> => {
       let data: any;
       try {
         data = JSON.parse(text);
@@ -787,6 +787,7 @@ export function useAura() {
         // A transferred account (only present when the sender chose to include
         // it) is re-validated the same way a fresh connect is — never trusted
         // blindly — which also repopulates that source's devices and states.
+        const hadSources = Array.isArray(data.sources) && data.sources.length > 0;
         const sourceErrors: string[] = [];
         if (Array.isArray(data.sources)) {
           for (const s of data.sources) {
@@ -795,9 +796,28 @@ export function useAura() {
             if (err) sourceErrors.push(`${s.id}: ${err}`);
           }
         }
-        return sourceErrors.length
-          ? { ok: true, error: `Imported, but couldn't reconnect: ${sourceErrors.join("; ")}` }
-          : { ok: true };
+
+        // "Setup imported." on its own says nothing about what actually
+        // happened — this spells out counts and account status so an empty
+        // or partial file (a common case: not everyone has custom rooms or
+        // scenes to begin with) doesn't read as a silent no-op.
+        const parts: string[] = [];
+        if (rms.length) parts.push(`${rms.length} room${rms.length === 1 ? "" : "s"}`);
+        if (scns.length) parts.push(`${scns.length} scene${scns.length === 1 ? "" : "s"}`);
+        if (cvs.length) parts.push(`${cvs.length} custom vibe${cvs.length === 1 ? "" : "s"}`);
+        if (autos.length) parts.push(`${autos.length} automation${autos.length === 1 ? "" : "s"}`);
+        const nameCount = Object.keys(names).length;
+        if (nameCount) parts.push(`${nameCount} renamed light${nameCount === 1 ? "" : "s"}`);
+        let summary = parts.length
+          ? `Imported ${parts.join(", ")}.`
+          : "That file had no rooms, scenes, vibes, or automations to import.";
+        summary += hadSources
+          ? sourceErrors.length
+            ? ` Couldn't reconnect: ${sourceErrors.join("; ")}.`
+            : " Connected account reconnected — your lights should show up now."
+          : " No connected account was in this file — use Connect lights, or re-export with accounts included.";
+
+        return { ok: true, summary };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
       }
