@@ -50,7 +50,16 @@ export function TransferPanel({
     let cancelled = false;
     setTooBig(false);
     setQrDataUrl(null);
-    QRCode.toDataURL(encodeTransferQr(onExport(includeAccounts, true)), { margin: 1, width: 260 })
+    // Low error-correction: with accounts included the payload is large
+    // enough to need a dense (high-version) code, and every extra bit of
+    // error-correction overhead pushes it denser still — right when a
+    // laptop webcam most needs bigger, easier-to-resolve modules, not
+    // smaller ones. Worth the trade against a smudged phone screen.
+    QRCode.toDataURL(encodeTransferQr(onExport(includeAccounts, true)), {
+      margin: 1,
+      width: 320,
+      errorCorrectionLevel: "L",
+    })
       .then((url) => {
         if (!cancelled) setQrDataUrl(url);
       })
@@ -103,7 +112,7 @@ export function TransferPanel({
             That's too much to fit in one code — try again with accounts off, or use Export/Import below.
           </p>
         ) : qrDataUrl ? (
-          <img className="transfer-qr" src={qrDataUrl} alt="Scan this on your other device" width={260} height={260} />
+          <img className="transfer-qr" src={qrDataUrl} alt="Scan this on your other device" width={320} height={320} />
         ) : (
           <p className="hint">Building code…</p>
         )}
@@ -130,6 +139,10 @@ function ScanCode({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  // Distinguishes "nothing decodable in frame yet" from "we read something,
+  // it just wasn't an Aura code" — the latter with zero feedback looks
+  // exactly like a scanner that's silently doing nothing.
+  const [sawOtherCode, setSawOtherCode] = useState(false);
   const [deviceId, setDeviceId] = useState<string | undefined>(() => {
     try {
       return localStorage.getItem(SCAN_CAMERA_KEY) ?? undefined;
@@ -157,7 +170,10 @@ function ScanCode({
     // A decoded string only counts as a hit if it looks like a setup payload —
     // stops a random QR in the room from being "imported" as garbage.
     async function handleHit(rawValue: string): Promise<boolean> {
-      if (!(isTransferQr(rawValue) || rawValue.trim().startsWith("{"))) return false;
+      if (!(isTransferQr(rawValue) || rawValue.trim().startsWith("{"))) {
+        if (!cancelled) setSawOtherCode(true);
+        return false;
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       if (cancelled) return true;
       const res = await onImport(decodeTransferQr(rawValue));
@@ -198,8 +214,18 @@ function ScanCode({
       raf = requestAnimationFrame(scanFrame);
     }
 
+    // A dense code (accounts included) packs small modules into the frame —
+    // asking for the browser's default capture resolution (often 640x480)
+    // can leave too few pixels per module to resolve them at all. "ideal" is
+    // a request, not a requirement, so this never fails a camera that can't
+    // do it.
+    const videoConstraints: MediaTrackConstraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }),
+    };
     navigator.mediaDevices
-      .getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" } })
+      .getUserMedia({ video: videoConstraints })
       .then(async (stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -256,6 +282,9 @@ function ScanCode({
     <div className="transfer-panel">
       <p className="hint">Point this at the code shown on your other device.</p>
       {error && <p className="hint io-note">{error}</p>}
+      {!error && sawOtherCode && (
+        <p className="hint io-note">Reading a code, but it's not an Aura setup — keep it steady and centered.</p>
+      )}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video ref={videoRef} className="pairing-scanner" muted playsInline />
       <canvas ref={canvasRef} hidden />
