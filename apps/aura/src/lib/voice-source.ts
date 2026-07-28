@@ -39,14 +39,14 @@ let transcriberPromise: Promise<any> | null = null;
 // this again while already loaded resolves immediately from the cached promise.
 function getTranscriber(onProgress?: (p: VoiceDownloadProgress) => void) {
   if (!transcriberPromise) {
-    transcriberPromise = import("@huggingface/transformers").then(({ env, pipeline }) => {
+    transcriberPromise = import("@huggingface/transformers").then(async ({ env, pipeline, AutoProcessor }) => {
       env.allowRemoteModels = false;
       env.allowLocalModels = true;
       env.localModelPath = R2_BASE;
       // onnxruntime-web's own WASM runtime defaults to cdn.jsdelivr.net if
       // this isn't set — vendored to the same R2 bucket instead.
       if (env.backends.onnx.wasm) env.backends.onnx.wasm.wasmPaths = `${R2_BASE}ort/`;
-      return pipeline("automatic-speech-recognition", MODEL_ID, {
+      const transcriber = await pipeline("automatic-speech-recognition", MODEL_ID, {
         // Not the "q8" default — see voice-assets.mjs's file-top note on why.
         dtype: "uint8",
         session_options: { graphOptimizationLevel: "disabled" },
@@ -56,6 +56,21 @@ function getTranscriber(onProgress?: (p: VoiceDownloadProgress) => void) {
           }
         },
       });
+      // pipeline() decides whether to bother loading a processor at all by
+      // pre-checking whether preprocessor_config.json "exists" — a check
+      // that only has two code paths (a true local filesystem path, or
+      // env.remoteHost, i.e. huggingface.co), neither of which matches
+      // localModelPath being a real URL pointing at our own R2 bucket. It
+      // silently decides the processor doesn't exist and never loads one,
+      // even though the file is genuinely there — confirmed on a real
+      // device ("cannot read properties of null (reading 'feature_extractor')"
+      // the moment transcription actually runs). Load it ourselves instead
+      // of relying on that heuristic; this calls the exact same fetch path
+      // that already worked for the model weights.
+      if (!transcriber.processor) {
+        transcriber.processor = await AutoProcessor.from_pretrained(MODEL_ID, {});
+      }
+      return transcriber;
     });
   }
   return transcriberPromise;
