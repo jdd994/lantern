@@ -122,9 +122,14 @@ export const hue: Connector = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ devicetype: "aura#desktop" }),
       });
-    } catch {
+    } catch (e) {
+      // The guidance is a guess at the likeliest cause, not a diagnosis —
+      // show the actual underlying error alongside it instead of replacing
+      // it, so a cause other than "unreachable" (a permission scope, a TLS
+      // failure, anything) doesn't get silently hidden behind a wrong guess.
+      const detail = e instanceof Error ? e.message : String(e);
       throw new Error(
-        "Couldn't reach a bridge at that address — check you're on the same network, and that a VPN isn't routing local traffic through its tunnel."
+        `Couldn't reach a bridge at that address (${detail}) — check you're on the same network, and that a VPN isn't routing local traffic through its tunnel.`
       );
     }
     const data = await res.json();
