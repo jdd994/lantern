@@ -49,6 +49,7 @@ export function SettingsSheet({
   const [transferring, setTransferring] = useState(false);
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [includeAccounts, setIncludeAccounts] = useState(false);
   // Desktop only — a plain way to confirm you're on the build you think
   // you're on, since Windows/macOS installers don't always show this.
   const [version, setVersion] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function SettingsSheet({
   }, []);
 
   function exportSetup() {
-    const blob = new Blob([onExport()], { type: "application/json" });
+    const blob = new Blob([onExport(includeAccounts)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -69,7 +70,7 @@ export function SettingsSheet({
 
   async function copyAsText() {
     try {
-      await navigator.clipboard.writeText(onExport());
+      await navigator.clipboard.writeText(onExport(includeAccounts));
       setIoNote("Setup copied — paste it anywhere you'd move text.");
     } catch {
       setIoNote("Couldn't copy — try Export setup instead.");
@@ -205,8 +206,24 @@ export function SettingsSheet({
       <div className="set-section">
         <span className="label">Export / Import</span>
         <p className="hint">
-          Move your rooms, scenes, and vibes another way. The file (and the copied text) hold no keys —
-          you re-pair your lights there, and everything lines back up.
+          Move your rooms, scenes, and vibes another way — a file, or copied text, instead of a scan.
+        </p>
+        <div className="adaptive-row">
+          <span className="hint">Include your connected accounts (Govee, Home Assistant…)</span>
+          <button
+            className="toggle sm"
+            role="switch"
+            aria-checked={includeAccounts}
+            aria-label="Include connected accounts in export"
+            onClick={() => setIncludeAccounts((v) => !v)}
+          >
+            <span className="toggle-knob" />
+          </button>
+        </div>
+        <p className="hint">
+          {includeAccounts
+            ? "This file can control your lights too — only send it somewhere you trust."
+            : "Off (default): the file holds no keys — you re-pair your lights on the other device, and everything else lines back up."}
         </p>
         <div className="io-row">
           <button className="btn btn-sm" onClick={exportSetup}>
