@@ -186,7 +186,10 @@ export function AmbientSheet({
   // "Home" applies to every light; any other value scopes both the applied
   // vibe and the copy to that one room — see App.tsx's per-room "Auto…".
   title?: string;
-  onApplyVibe: (vibeId: string) => void;
+  // brightnessScale (optional, default 1): a multiplier on the vibe's own
+  // base brightness — how mic-mode "tracking" nudges brightness within a
+  // vibe over a show's arc, below, without that counting as a new vibe pick.
+  onApplyVibe: (vibeId: string, brightnessScale?: number) => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<"simulate" | "mic" | "describe">("simulate");
@@ -203,22 +206,40 @@ export function AmbientSheet({
   const decision: VibeDecision | null = mode === "describe" ? describeScene(describeText) : decideVibe(reading, { hour });
   const vibe = decision ? VIBES.find((v) => v.id === decision.vibeId) : undefined;
 
+  // Rolling history of live mic readings, for the tracking effect below —
+  // keeps roughly the last 12s (250ms samples), well past any single loud
+  // moment, so a night's actual arc drives the light rather than one cheer.
+  const READING_HISTORY_MAX = 48;
+  const readingHistory = useRef<AmbientReading[]>([]);
+
   // Microphone lifecycle — start when the mic tab is active, always stop on leave.
   useEffect(() => {
     if (mode !== "mic") return;
     const source = createMicSource();
     let live = true;
     setMicError(null);
-    source.start((r) => live && setMicReading(r)).catch((e) => setMicError(micErrorMessage(e)));
+    readingHistory.current = [];
+    source
+      .start((r) => {
+        if (!live) return;
+        setMicReading(r);
+        readingHistory.current.push(r);
+        if (readingHistory.current.length > READING_HISTORY_MAX) readingHistory.current.shift();
+      })
+      .catch((e) => setMicError(micErrorMessage(e)));
     return () => {
       live = false;
       source.stop();
     };
   }, [mode]);
 
-  // Apply automatically: push the chosen vibe whenever it changes (not every reading).
+  // Apply automatically, simulate/describe: push the chosen vibe whenever it
+  // changes (not every reading) — unchanged from before. Mic mode gets its
+  // own tracking effect below instead, since "every reading" there is noisy
+  // 250ms samples, not a deliberate slider move or typed description.
   const lastApplied = useRef<string | null>(null);
   useEffect(() => {
+    if (mode === "mic") return;
     if (!auto || !decision) {
       lastApplied.current = null;
       return;
@@ -227,7 +248,62 @@ export function AmbientSheet({
       lastApplied.current = decision.vibeId;
       onApplyVibe(decision.vibeId);
     }
-  }, [auto, decision?.vibeId, onApplyVibe]);
+  }, [mode, auto, decision?.vibeId, onApplyVibe]);
+
+  // Track the room, mic mode: re-evaluate every few seconds from a smoothed
+  // reading (averaged/majority-voted over the rolling history above) rather
+  // than the raw instantaneous sample — a long set's actual quiet-to-peak
+  // arc should move the room, not a single loud drum hit. Nudges brightness
+  // within whatever vibe is picked (restrained range, see brightnessScale)
+  // so a show's build is something the room's lights genuinely track without
+  // turning into a visualizer — see ambient.ts's restraint rule.
+  useEffect(() => {
+    if (mode !== "mic" || !auto) return;
+    const TRACK_INTERVAL_MS = 5000;
+    const MIN_SAMPLES = 8; // ~2s — long enough for a first read
+
+    function evaluate() {
+      const history = readingHistory.current;
+      if (history.length < MIN_SAMPLES) return;
+
+      const avg = (f: (r: AmbientReading) => number) => history.reduce((sum, r) => sum + f(r), 0) / history.length;
+      const majority = <T,>(f: (r: AmbientReading) => T | undefined): T | undefined => {
+        const counts = new Map<T, number>();
+        for (const r of history) {
+          const v = f(r);
+          if (v !== undefined) counts.set(v, (counts.get(v) ?? 0) + 1);
+        }
+        let best: T | undefined;
+        let bestCount = 0;
+        for (const [v, c] of counts) {
+          if (c > bestCount) {
+            best = v;
+            bestCount = c;
+          }
+        }
+        return best;
+      };
+
+      const smoothed: AmbientReading = {
+        level: avg((r) => r.level),
+        energy: avg((r) => r.energy),
+        tone: majority((r) => r.tone) ?? "neutral",
+        kind: majority((r) => r.kind),
+        musicStyle: majority((r) => r.musicStyle),
+      };
+
+      const smoothedDecision = decideVibe(smoothed, { hour });
+      // Restrained: ±15% of the vibe's own brightness, not a strobe — the
+      // room breathes with the set's intensity, it doesn't flash with it.
+      const intensity = Math.max(0, Math.min(1, (smoothed.level + smoothed.energy) / 2));
+      const brightnessScale = 0.85 + 0.3 * intensity;
+      onApplyVibe(smoothedDecision.vibeId, brightnessScale);
+    }
+
+    evaluate(); // first read as soon as there's enough history, not a 5s wait
+    const id = setInterval(evaluate, TRACK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [mode, auto, hour, onApplyVibe]);
 
   const setSimField = <K extends keyof AmbientReading>(k: K, v: AmbientReading[K]) =>
     setSim((s) => ({ ...s, [k]: v }));

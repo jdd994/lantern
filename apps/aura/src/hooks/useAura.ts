@@ -417,16 +417,31 @@ export function useAura() {
   // Aura renders it in light. Internal: no relay publish, so the relay subscription
   // below can call this directly without echoing a vibe right back out.
   const applyVibeInternal = useCallback(
-    (vibeId: string, roomId?: string) => {
+    // brightnessScale: an optional multiplier on the vibe's own base
+    // brightness (1 = unchanged) — how "read the room, tracking" nudges
+    // brightness within a vibe over a live show's arc, below, without
+    // changing which named vibe is active.
+    (vibeId: string, roomId?: string, brightnessScale = 1) => {
       // Resolve the light target from either a built-in (@lantern/core) or a
       // user-made custom vibe.
       const builtin = vibeById(vibeId);
       const custom = customVibes.find((c) => c.id === vibeId);
-      const target: { brightness: number; rgb: Color; kelvin?: number } | null = builtin
-        ? { brightness: builtin.light.brightness, rgb: builtin.light.rgb, kelvin: builtin.light.kelvin }
-        : custom
-          ? { brightness: custom.brightness, rgb: custom.rgb }
-          : null;
+      const baseBrightness = builtin ? builtin.light.brightness : custom ? custom.brightness : null;
+      const target: { brightness: number; rgb: Color; kelvin?: number } | null =
+        baseBrightness === null
+          ? null
+          : builtin
+            ? {
+                brightness: Math.max(1, Math.min(100, Math.round(baseBrightness * brightnessScale))),
+                rgb: builtin.light.rgb,
+                kelvin: builtin.light.kelvin,
+              }
+            : custom
+              ? {
+                  brightness: Math.max(1, Math.min(100, Math.round(baseBrightness * brightnessScale))),
+                  rgb: custom.rgb,
+                }
+              : null;
       if (!target) return;
       const targetRoom = roomId ? rooms.find((r) => r.id === roomId) : undefined;
       const targetIds = roomId
@@ -458,11 +473,15 @@ export function useAura() {
 
   // The local end of the cross-app vibe layer: apply here, and — if mirroring is
   // on — tell the relay too. Only built-in vibes travel (other apps only know the
-  // shared @lantern/core vocabulary, not Aura's custom ones).
+  // shared @lantern/core vocabulary, not Aura's custom ones). A non-1
+  // brightnessScale means this is a "read the room, tracking" nudge within
+  // an already-picked vibe (see AmbientSheet's mic-mode tracking), not a new
+  // vibe choice — those stay local-only and never hit the relay, or every
+  // few-second nudge would spam other apps with the same vibe repeatedly.
   const applyVibe = useCallback(
-    (vibeId: string, roomId?: string) => {
-      applyVibeInternal(vibeId, roomId);
-      if (mirrorVibes && vibeById(vibeId)) relayRef.current?.publish({ vibeId, roomId });
+    (vibeId: string, roomId?: string, brightnessScale = 1) => {
+      applyVibeInternal(vibeId, roomId, brightnessScale);
+      if (brightnessScale === 1 && mirrorVibes && vibeById(vibeId)) relayRef.current?.publish({ vibeId, roomId });
     },
     [applyVibeInternal, mirrorVibes]
   );
