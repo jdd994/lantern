@@ -355,7 +355,7 @@ export default function App() {
       {(ambient || ambientRoom) && (
         <AmbientSheet
           title={ambientRoom?.name}
-          onApplyVibe={(id) => aura.applyVibe(id, ambientRoom?.id)}
+          onApplyVibe={(id, brightnessScale) => aura.applyVibe(id, ambientRoom?.id, brightnessScale)}
           onClose={() => {
             setAmbient(false);
             setAmbientRoom(null);
