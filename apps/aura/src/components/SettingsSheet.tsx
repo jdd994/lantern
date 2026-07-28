@@ -8,6 +8,7 @@ import { appVersion } from "../lib/platform";
 import { TransferPanel } from "./TransferPanel";
 
 const DEFAULT_ACCENT = "#E7B75A";
+const EXPORT_ACCOUNTS_KEY = "aura-export-include-accounts";
 
 export function SettingsSheet({
   themes,
@@ -41,7 +42,7 @@ export function SettingsSheet({
   mirrorVibes: boolean;
   onMirrorVibes: (on: boolean) => void;
   onExport: (includeAccounts?: boolean, compact?: boolean) => string;
-  onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
+  onImport: (text: string) => Promise<{ ok: boolean; error?: string; summary?: string }>;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,7 +50,24 @@ export function SettingsSheet({
   const [transferring, setTransferring] = useState(false);
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");
-  const [includeAccounts, setIncludeAccounts] = useState(false);
+  // Persisted, not just component state — this toggle living only in memory
+  // meant closing and reopening Settings between "turn it on" and "tap
+  // Export" silently reset it back off, with no visible sign it had.
+  const [includeAccounts, setIncludeAccounts] = useState(() => {
+    try {
+      return localStorage.getItem(EXPORT_ACCOUNTS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function setIncludeAccountsPersisted(v: boolean) {
+    setIncludeAccounts(v);
+    try {
+      localStorage.setItem(EXPORT_ACCOUNTS_KEY, v ? "1" : "0");
+    } catch {
+      /* private mode — it'll just default off next time */
+    }
+  }
   // Desktop only — a plain way to confirm you're on the build you think
   // you're on, since Windows/macOS installers don't always show this.
   const [version, setVersion] = useState<string | null>(null);
@@ -80,15 +98,15 @@ export function SettingsSheet({
   async function importSetup(file: File) {
     const text = await file.text();
     const res = await onImport(text);
-    // A successful import can still carry an error — e.g. rooms/scenes came
-    // through fine but a connected account failed to reconnect. Surfacing
-    // only "Setup imported." in that case hid a real, actionable failure.
-    setIoNote(res.ok ? (res.error ?? "Setup imported.") : (res.error ?? "Import failed."));
+    // A generic "Setup imported." says nothing about what actually happened
+    // — summary spells out counts and account status, so an empty or
+    // partial file doesn't read as a silent no-op.
+    setIoNote(res.ok ? (res.summary ?? "Setup imported.") : (res.error ?? "Import failed."));
   }
 
   async function importPastedText() {
     const res = await onImport(pasteText);
-    setIoNote(res.ok ? (res.error ?? "Setup imported.") : (res.error ?? "Import failed."));
+    setIoNote(res.ok ? (res.summary ?? "Setup imported.") : (res.error ?? "Import failed."));
     if (res.ok) {
       setPasting(false);
       setPasteText("");
@@ -218,7 +236,7 @@ export function SettingsSheet({
             role="switch"
             aria-checked={includeAccounts}
             aria-label="Include connected accounts in export"
-            onClick={() => setIncludeAccounts((v) => !v)}
+            onClick={() => setIncludeAccountsPersisted(!includeAccounts)}
           >
             <span className="toggle-knob" />
           </button>
