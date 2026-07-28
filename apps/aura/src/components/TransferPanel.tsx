@@ -25,6 +25,12 @@ function getBarcodeDetector(): (new (opts: { formats: string[] }) => BarcodeDete
 
 type Mode = "idle" | "show" | "scan";
 
+// Remembers which camera actually worked, past first pick — matters most on
+// Windows machines where a linked phone (Phone Link) can register itself as
+// a virtual "environment"-facing camera, which the plain facingMode request
+// below would otherwise land on ahead of the laptop's own built-in webcam.
+const SCAN_CAMERA_KEY = "aura-scan-camera";
+
 export function TransferPanel({
   onExport,
   onImport,
@@ -123,6 +129,23 @@ function ScanCode({
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem(SCAN_CAMERA_KEY) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
+  function pickCamera(id: string) {
+    setDeviceId(id);
+    try {
+      localStorage.setItem(SCAN_CAMERA_KEY, id);
+    } catch {
+      /* private mode — it'll just ask again next time */
+    }
+  }
 
   useEffect(() => {
     const Detector = getBarcodeDetector();
@@ -176,7 +199,7 @@ function ScanCode({
     }
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
+      .getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" } })
       .then(async (stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -188,15 +211,35 @@ function ScanCode({
           await videoRef.current.play();
         }
         raf = requestAnimationFrame(scanFrame);
+        // Labels are only populated once permission is granted, which just
+        // happened above — this is what lets the picker below show real
+        // names ("Integrated Webcam") instead of blank options.
+        navigator.mediaDevices.enumerateDevices().then((all) => {
+          if (!cancelled) setCameras(all.filter((d) => d.kind === "videoinput"));
+        });
       })
-      .catch(() => setError("Couldn't access the camera — check this site's camera permission."));
+      .catch(() => {
+        // A remembered camera that's no longer plugged in (or the exact-match
+        // failed for any reason) shouldn't strand the scanner — drop back to
+        // the default pick once, rather than surfacing a dead end.
+        if (deviceId) {
+          try {
+            localStorage.removeItem(SCAN_CAMERA_KEY);
+          } catch {
+            /* ignore */
+          }
+          setDeviceId(undefined);
+        } else {
+          setError("Couldn't access the camera — check this site's camera permission.");
+        }
+      });
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, [onImport]);
+  }, [onImport, deviceId]);
 
   if (result) {
     return (
@@ -216,6 +259,19 @@ function ScanCode({
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video ref={videoRef} className="pairing-scanner" muted playsInline />
       <canvas ref={canvasRef} hidden />
+      {cameras.length > 1 && (
+        <label className="field">
+          <span className="label">Camera</span>
+          <select value={deviceId ?? ""} onChange={(e) => pickCamera(e.target.value)}>
+            {!deviceId && <option value="">Default</option>}
+            {cameras.map((c, i) => (
+              <option key={c.deviceId} value={c.deviceId}>
+                {c.label || `Camera ${i + 1}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <button className="btn btn-ghost btn-sm" onClick={onDone}>
         Cancel
       </button>
