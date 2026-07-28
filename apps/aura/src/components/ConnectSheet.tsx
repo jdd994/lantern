@@ -3,9 +3,17 @@
 // accounts and Hearth's wearables — see @lantern/core/connect), then that brand's
 // consent + credential. No brand is pre-selected — the picker is the first thing
 // you see, not a tab strip behind a Govee key field.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sheet, TierBadge, TradeOffCard } from "@lantern/ui";
 import { connectors, tierWording } from "../lib/connectors";
+
+// Pairing used to be one shot: press the bridge's button, then click Pair,
+// with the two having to land within the bridge's ~30s window or it just
+// failed. Polling instead — press the button any time in this window, no
+// exact synchronization needed — is the forgiving pattern most smart-home
+// apps use for exactly this kind of physical-button handshake.
+const PAIR_RETRY_MS = 2000;
+const PAIR_TIMEOUT_MS = 40_000;
 
 export function ConnectSheet({
   onConnect,
@@ -31,6 +39,17 @@ export function ConnectSheet({
   const [address, setAddress] = useState("");
   const [bridges, setBridges] = useState<string[]>([]);
   const [finding, setFinding] = useState(false);
+  const [pairSecondsLeft, setPairSecondsLeft] = useState<number | null>(null);
+  const pairCancelRef = useRef(false);
+
+  // A closed/unmounted sheet mid-poll must stop retrying — nothing left to
+  // report the result to.
+  useEffect(
+    () => () => {
+      pairCancelRef.current = true;
+    },
+    []
+  );
 
   // Switching brands (including "back") clears every field — a leftover Govee
   // key must never get submitted as a Home Assistant token.
@@ -67,18 +86,43 @@ export function ConnectSheet({
 
   async function pairSubmit() {
     if (!conn?.pair || !address.trim()) return;
+    const addr = address.trim();
     setBusy(true);
     setError(null);
-    try {
-      const paired = await conn.pair(address.trim());
-      const err = await onConnect(conn.id, paired);
-      if (err) setError(err);
-      else onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Pairing failed.");
-    } finally {
-      setBusy(false);
+    pairCancelRef.current = false;
+    const deadline = Date.now() + PAIR_TIMEOUT_MS;
+    let lastError: unknown = null;
+
+    while (Date.now() < deadline) {
+      if (pairCancelRef.current) return;
+      setPairSecondsLeft(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
+      try {
+        const paired = await conn.pair(addr);
+        if (pairCancelRef.current) return;
+        const err = await onConnect(conn.id, paired);
+        setBusy(false);
+        setPairSecondsLeft(null);
+        if (err) setError(err);
+        else onClose();
+        return;
+      } catch (e) {
+        // Most retries during this window are the bridge honestly saying
+        // "link button not pressed yet" — expected, not a failure to show.
+        // Only the final attempt's error, if the whole window runs out,
+        // is worth surfacing.
+        lastError = e;
+        await new Promise((r) => setTimeout(r, PAIR_RETRY_MS));
+      }
     }
+
+    if (pairCancelRef.current) return;
+    setBusy(false);
+    setPairSecondsLeft(null);
+    setError(
+      lastError instanceof Error
+        ? lastError.message
+        : "Didn't hear back from the bridge in time — press the link button and try again."
+    );
   }
 
   return (
@@ -119,8 +163,9 @@ export function ConnectSheet({
       {conn && canPair ? (
         <>
           <p className="hint">
-            Aura will find your Hue bridge on this network. Press the round button on top of the
-            bridge, then pair — the key it gives back stays on this device.
+            Aura will find your Hue bridge on this network. Tap Pair, then press the round button on
+            top of the bridge any time in the next 40 seconds — no need to time it exactly. The key it
+            gives back stays on this device.
           </p>
 
           <div className="sheet-actions" style={{ justifyContent: "flex-start" }}>
@@ -150,14 +195,17 @@ export function ConnectSheet({
             />
           </label>
 
+          {busy && pairSecondsLeft !== null && (
+            <p className="hint">Waiting for the bridge's button — {pairSecondsLeft}s left…</p>
+          )}
           {error ? <div className="error">{error}</div> : null}
 
           <div className="sheet-actions">
             <button className="btn btn-ghost" onClick={onClose}>
-              Cancel
+              {busy ? "Stop waiting" : "Cancel"}
             </button>
             <button className="btn btn-primary" disabled={busy || !address.trim()} onClick={pairSubmit}>
-              {busy ? "Pairing…" : "Press link button, then Pair"}
+              {busy ? "Waiting…" : "Pair"}
             </button>
           </div>
         </>
