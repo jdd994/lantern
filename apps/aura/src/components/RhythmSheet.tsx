@@ -15,6 +15,7 @@ import {
 } from "../lib/rhythm";
 import type { Coords } from "../lib/automations";
 import type { RhythmSettings } from "../hooks/useAura";
+import { isTauri } from "../lib/platform";
 
 const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -158,8 +159,10 @@ export function RhythmSheet({
 
       <p className="hint auto-foot">
         The rhythm only shapes lights that are already on — it never switches one on, and a color
-        you set yourself is left alone until that light goes off and on again. Like automations, it
-        runs while Aura is open; steady background rhythm comes with the desktop app.
+        you set yourself is left alone until that light goes off and on again.{" "}
+        {isTauri()
+          ? "It keeps breathing from the tray even with this window closed."
+          : "Like automations, it runs while Aura is open; the desktop app keeps it going from the tray."}
       </p>
     </Sheet>
   );
