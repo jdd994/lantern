@@ -4,7 +4,7 @@
 // once (asked only when you pick one). A few starters sit above the form — each
 // one just fills the form in, so what you add is always something you've seen and
 // could tweak. Tap an existing automation to edit it in the same form. These run
-// while Aura is open — background firing arrives with the desktop app.
+// while Aura is open; the desktop app keeps them firing from the tray.
 import { useMemo, useState } from "react";
 import { Sheet } from "@lantern/ui";
 import { VIBES, vibeById } from "@lantern/core";
@@ -19,6 +19,7 @@ import {
 import type { Sensor } from "../lib/connectors";
 import type { CustomVibe, StoredScene } from "../lib/db";
 import type { Room } from "../lib/rooms";
+import { isTauri } from "../lib/platform";
 
 const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const fmtMinutes = (min: number) => {
@@ -593,8 +594,9 @@ export function AutomationsSheet({
       </div>
 
       <p className="hint auto-foot">
-        Automations run while Aura is open on this device. Reliable background timing —
-        firing with the app closed — comes with the desktop app.
+        {isTauri()
+          ? "These keep running from the tray, even with this window closed — Quit (in the tray menu) is what stops them."
+          : "Automations run while Aura is open on this device. The desktop app keeps them running in the tray, even with its window closed."}
       </p>
     </Sheet>
   );

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CapabilityLedger, Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 import { connectorFor, tierWording, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
-import { appVersion } from "../lib/platform";
+import { appVersion, isTauri } from "../lib/platform";
 import { TransferPanel } from "./TransferPanel";
 
 const DEFAULT_ACCENT = "#E7B75A";
@@ -70,6 +70,31 @@ export function SettingsSheet({
   useEffect(() => {
     appVersion().then(setVersion);
   }, []);
+
+  // Desktop only: start-at-login. null until the shell answers (or forever, in
+  // the browser) — the toggle simply doesn't render until there's a real state
+  // to show, rather than guessing and flickering.
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    void import("@tauri-apps/plugin-autostart").then(async ({ isEnabled }) => {
+      try {
+        setAutostart(await isEnabled());
+      } catch {
+        /* leave the toggle unrendered rather than lie about the state */
+      }
+    });
+  }, []);
+  async function toggleAutostart() {
+    try {
+      const { enable, disable, isEnabled } = await import("@tauri-apps/plugin-autostart");
+      if (autostart) await disable();
+      else await enable();
+      setAutostart(await isEnabled());
+    } catch {
+      /* the OS said no — the toggle stays showing the real state */
+    }
+  }
 
   // The actual friction in "move a file to your other device" was never the
   // JSON — it's getting that file across, which used to mean emailing it to
@@ -285,6 +310,30 @@ export function SettingsSheet({
         )}
         {ioNote && <p className="hint io-note">{ioNote}</p>}
       </div>
+
+      {isTauri() && (
+        <div className="set-section">
+          <span className="label">Desktop</span>
+          <p className="hint">
+            Closing the window keeps Aura running in the tray, so automations and the day rhythm
+            carry on. Quit from the tray icon when you want it fully stopped.
+          </p>
+          {autostart !== null && (
+            <div className="adaptive-row">
+              <span className="hint">Start quietly in the tray when you log in</span>
+              <button
+                className="toggle sm"
+                role="switch"
+                aria-checked={autostart}
+                aria-label="Start Aura when you log in"
+                onClick={toggleAutostart}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="set-section">
         <span className="label">How Aura works</span>

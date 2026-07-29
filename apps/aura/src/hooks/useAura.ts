@@ -10,6 +10,7 @@ import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
 import { simulateDemoMotion } from "../lib/connectors/demo";
 import { assign, effectiveDeviceIds, type Room } from "../lib/rooms";
+import { startCadence } from "../lib/cadence";
 import { RHYTHM_PRESETS, rhythmPresetById, rhythmTarget } from "../lib/rhythm";
 import { paletteVariant } from "../lib/palette";
 import {
@@ -583,11 +584,14 @@ export function useAura() {
     });
   }, []);
 
-  // A gentle brightness ramp over minutes (wake-up / wind-down). Runs while the app
-  // is open, stepping every 20s; fading to 0 turns the lights off at the end.
+  // A gentle brightness ramp over minutes (wake-up / wind-down). Steps every 20s;
+  // fading to 0 turns the lights off at the end. Progress rides the wall clock,
+  // not a step counter, so a throttled or delayed timer can't stretch a
+  // 20-minute fade into an hour — a late tick just lands wherever the fade
+  // should be by now.
   const statesRef = useRef(states);
   statesRef.current = states;
-  const activeFades = useRef<ReturnType<typeof setInterval>[]>([]);
+  const activeFades = useRef<(() => void)[]>([]);
   const startFade = useCallback(
     (action: Extract<Action, { kind: "fade" }>) => {
       const fadeRoom = action.roomId ? rooms.find((r) => r.id === action.roomId) : undefined;
@@ -602,27 +606,28 @@ export function useAura() {
         starts[id] = cur[id]?.on ? (cur[id]?.brightness ?? 100) : 0;
         if (to > 0) setDevice(id, { on: true, brightness: Math.max(1, Math.round(starts[id] || 1)) }, true);
       }
-      const stepMs = 20_000;
-      const steps = Math.max(1, Math.min(120, Math.round((action.minutes * 60_000) / stepMs)));
-      let i = 0;
-      const timer = setInterval(() => {
-        i++;
-        const done = i >= steps;
+      const startedAt = Date.now();
+      const totalMs = Math.max(1, action.minutes) * 60_000;
+      const holder: { stop?: () => void } = {};
+      const step = () => {
+        const frac = Math.min(1, (Date.now() - startedAt) / totalMs);
+        const done = frac >= 1;
         for (const id of ids) {
-          const b = Math.round(starts[id] + (to - starts[id]) * (i / steps));
+          const b = Math.round(starts[id] + (to - starts[id]) * frac);
           if (done && to <= 0) setDevice(id, { on: false }, true);
           else setDevice(id, { brightness: Math.max(1, Math.min(100, b)) }, true);
         }
-        if (done) {
-          clearInterval(timer);
-          activeFades.current = activeFades.current.filter((t) => t !== timer);
+        if (done && holder.stop) {
+          holder.stop();
+          activeFades.current = activeFades.current.filter((s) => s !== holder.stop);
         }
-      }, stepMs);
-      activeFades.current.push(timer);
+      };
+      holder.stop = startCadence(20_000, step);
+      activeFades.current.push(holder.stop);
     },
     [devices, rooms, setDevice]
   );
-  useEffect(() => () => activeFades.current.forEach(clearInterval), []);
+  useEffect(() => () => activeFades.current.forEach((stop) => stop()), []);
 
   // "Which one is this?" — a few quick bright/dim pulses (or on/off, for a
   // fixture with no brightness control), then back to exactly whatever it was
@@ -746,10 +751,11 @@ export function useAura() {
     setAutomations((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  // The scheduler. A pure PWA can only fire while it's running, so this is a plain
-  // interval over the pure `dueAutomations` check; a Tauri background process can
-  // later drive the same check while the window is closed. Refs keep the ticker
-  // stable while reading the latest automations/coords/action-runner each tick.
+  // The scheduler: a steady cadence over the pure `dueAutomations` check. In the
+  // browser it runs while the tab is open; in the Tauri shell the window closes
+  // to the tray and the native heartbeat keeps this ticking (see lib/cadence.ts).
+  // Refs keep the ticker stable while reading the latest automations/coords/
+  // action-runner each tick.
   const autoRef = useRef(automations);
   autoRef.current = automations;
   const coordsRef = useRef(coords);
@@ -771,8 +777,7 @@ export function useAura() {
       }
     };
     tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    return startCadence(30_000, tick);
   }, []);
 
   // ---- portability: move your setup between devices (no account) ----------
@@ -907,8 +912,7 @@ export function useAura() {
         }
       }
     };
-    const id = setInterval(() => void tick(), 5_000);
-    return () => clearInterval(id);
+    return startCadence(5_000, () => void tick());
   }, []);
 
   // Make the demo sensor "see" motion, so sensor automations can be felt with no
@@ -987,8 +991,7 @@ export function useAura() {
       }
     };
     apply();
-    const id = setInterval(apply, 2 * 60_000);
-    return () => clearInterval(id);
+    return startCadence(2 * 60_000, apply);
   }, [rhythm, setDevice]);
 
   const connected = useMemo(() => sources.length > 0, [sources]);
