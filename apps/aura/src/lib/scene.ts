@@ -86,9 +86,13 @@ const ASSOCIATIONS: Record<string, string[]> = {
     "can't sleep", "tucking in", "nightlight", "red light before bed",
   ],
   yoga: [
-    "yoga", "meditate", "meditation", "stretch", "stretching", "breathing",
-    "mindfulness", "practice", "namaste", "asana", "savasana", "on the mat",
-    "morning stretch", "deep breaths",
+    "yoga", "stretch", "stretching", "practice", "namaste", "asana",
+    "savasana", "on the mat", "morning stretch",
+  ],
+  meditation: [
+    "meditate", "meditating", "meditation", "mindfulness", "mindful",
+    "breathing", "deep breaths", "breathwork", "sitting quietly", "quiet mind",
+    "still my mind", "clear my head", "zazen", "sitting practice", "morning sit",
   ],
   "night-yoga": [
     "night yoga", "evening yoga", "yoga after dark", "yoga at night",
