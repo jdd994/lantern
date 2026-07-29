@@ -1,0 +1,15 @@
+name = "manifest-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Before first deploy: `wrangler d1 create manifest`, paste the id below, then
+# `npm run db:init -w manifest-server` and `wrangler secret put TOKEN_SECRET`.
+[[d1_databases]]
+binding = "DB"
+database_name = "manifest"
+database_id = "REPLACE-AFTER-wrangler-d1-create-manifest"
+
+[vars]
+# Comma-separated allowed origins. Add the real domain when it exists;
+# empty string reflects * (dev only).
+ALLOWED_ORIGIN = "https://manifest.pages.dev"
