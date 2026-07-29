@@ -157,6 +157,19 @@ export const VIBES: Vibe[] = [
     palette: "everyday",
   },
   {
+    id: "meditation",
+    label: "Meditation",
+    description: "Low and utterly still — enough light to find your seat, soft enough to disappear once your eyes close.",
+    accent: "#CFA875",
+    // Deliberately dimmer and warmer than Yoga: that vibe is light for seeing
+    // (balance, edges, the mat); this one is light for not-seeing. Low enough
+    // not to press through closed eyelids, steadier than candlelight's flicker,
+    // and — unlike Wind-down — not aimed at sleep: a morning sit deserves the
+    // same stillness without the going-to-bed connotation.
+    light: { brightness: 22, rgb: { r: 255, g: 196, b: 140 }, kelvin: 2500 },
+    palette: "everyday",
+  },
+  {
     id: "night-yoga",
     label: "Night yoga",
     description: "Low amber light to move by outside after dark — enough to see your mat, none of the blue that would wake you up.",

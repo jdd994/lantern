@@ -33,6 +33,15 @@ describe("describeScene", () => {
     expect(describeScene("time for my yoga practice")?.vibeId).toBe("yoga");
   });
 
+  it("sends meditation to its own vibe, not yoga's brighter light", () => {
+    expect(describeScene("meditation")?.vibeId).toBe("meditation");
+    expect(describeScene("about to meditate for a bit")?.vibeId).toBe("meditation");
+    expect(describeScene("my morning sit")?.vibeId).toBe("meditation");
+    // "sitting practice" mentions yoga's bare "practice" too — the more
+    // specific two-word phrase should win.
+    expect(describeScene("sitting practice")?.vibeId).toBe("meditation");
+  });
+
   it("maps bedtime phrasing to night, not wind-down", () => {
     expect(describeScene("getting ready for bed")?.vibeId).toBe("night");
   });
