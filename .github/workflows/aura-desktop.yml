@@ -21,7 +21,11 @@ jobs:
         include:
           - os: macos-latest # Apple Silicon (M-series)
             target: aarch64-apple-darwin
-          - os: macos-13 # Intel Macs
+          # Intel Macs — cross-compiled from an M-series runner. GitHub retired
+          # the macos-13 Intel runners; jobs asking for them queue forever
+          # (a v0.1.27 build sat 12h without ever starting). The toolchain step
+          # below already installs the matrix target, so the same build works.
+          - os: macos-latest
             target: x86_64-apple-darwin
           - os: ubuntu-22.04
             target: ""
