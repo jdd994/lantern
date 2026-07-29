@@ -11,7 +11,8 @@ const ITEMS: { title: string; body: string }[] = [
   { title: "Vibe", body: "The row at the top sets a mood across everything in one tap. Make your own with + New, or open Auto… to let the room and time of day choose." },
   { title: "Scenes", body: "Set your lights how you like them, then Save current. One tap later brings that whole look back — per room, or the whole home." },
   { title: "Rooms", body: "Group lights by where they are. Each room has its own vibe and All on / All off. A light lives in one room, or none." },
-  { title: "Automations", body: "Have the lights change on their own — at a set time, or at sunrise / sunset. They run while Aura is open." },
+  { title: "Day rhythm", body: "Open Rhythm to let lit lights follow the sun — cool and bright at midday, warm at the edges, ember-red after dusk. It never turns a light on, and a color you set yourself is left alone." },
+  { title: "Automations", body: "Have the lights change on their own — at a set time, or at sunrise / sunset. Start from a ready-made one and tweak it, or tap an existing one to edit. They run while Aura is open." },
 ];
 
 // Tip / support options — same addresses as the other lantern apps (same

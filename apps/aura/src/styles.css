@@ -318,11 +318,19 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .auto-toggle { display: flex; align-items: center; gap: 8px; margin-right: auto; font-size: 14px; color: var(--ink-soft); }
 .auto-toggle input { width: auto; }
 
+/* ---- day rhythm ---- */
+.rhythm-desc { margin-top: 10px; }
+.rhythm-sun { margin-top: 14px; }
+
 /* ---- automations ---- */
 .auto-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .auto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .auto-row.off { opacity: .55; }
-.auto-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+.auto-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; min-width: 0; text-align: left; padding: 0; }
+.auto-main:hover .auto-when { color: var(--glow); }
+.auto-row.editing { border-color: var(--glow); background: var(--glow-dim); }
+.auto-starters { margin-bottom: 16px; }
+.auto-starters .hint { margin-top: 8px; }
 .auto-when { font-size: 14px; color: var(--ink); font-weight: 600; }
 .auto-arrow { color: var(--ink-faint); }
 .auto-do { font-size: 14px; color: var(--ink-soft); }

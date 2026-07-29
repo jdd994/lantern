@@ -9,6 +9,7 @@ import { DeviceList, RoomDots } from "./components/DeviceList";
 import { Scenes } from "./components/Scenes";
 import { RoomsSheet } from "./components/RoomsSheet";
 import { AutomationsSheet } from "./components/AutomationsSheet";
+import { RhythmSheet } from "./components/RhythmSheet";
 import { CustomVibeSheet } from "./components/CustomVibeSheet";
 import { VibePicker } from "./components/VibePicker";
 import { AmbientSheet } from "./components/AmbientSheet";
@@ -32,6 +33,7 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [managingRooms, setManagingRooms] = useState(false);
   const [automating, setAutomating] = useState(false);
+  const [rhythmOpen, setRhythmOpen] = useState(false);
   const [ambient, setAmbient] = useState(false);
   const [ambientRoom, setAmbientRoom] = useState<Room | null>(null);
   const [creatingVibe, setCreatingVibe] = useState(false);
@@ -154,6 +156,9 @@ export default function App() {
               <div className="section-head">
                 <h2>Vibe</h2>
                 <div className="head-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => setRhythmOpen(true)}>
+                    Rhythm{aura.rhythm.enabled ? " ●" : ""}
+                  </button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setAmbient(true)}>
                     Auto…
                   </button>
@@ -305,13 +310,24 @@ export default function App() {
           scenes={aura.scenes}
           rooms={aura.rooms}
           sensors={aura.sensors}
+          customVibes={aura.customVibes}
           coords={aura.coords}
           onRequestLocation={aura.requestLocation}
           onAdd={aura.addAutomation}
+          onUpdate={aura.updateAutomation}
           onToggle={aura.toggleAutomation}
           onRemove={aura.removeAutomation}
           onSimulateMotion={aura.simulateMotion}
           onClose={() => setAutomating(false)}
+        />
+      )}
+      {rhythmOpen && (
+        <RhythmSheet
+          rhythm={aura.rhythm}
+          coords={aura.coords}
+          onRequestLocation={aura.requestLocation}
+          onSet={aura.setRhythm}
+          onClose={() => setRhythmOpen(false)}
         />
       )}
       {(creatingVibe || editingVibe) && (
@@ -374,8 +390,6 @@ export default function App() {
           sources={aura.sources}
           devices={aura.devices}
           onDisconnect={aura.disconnect}
-          adaptive={aura.adaptive}
-          onAdaptive={aura.setAdaptive}
           mirrorVibes={aura.mirrorVibes}
           onMirrorVibes={aura.setMirrorVibes}
           onExport={aura.exportSetup}

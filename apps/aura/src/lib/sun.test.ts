@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sunTime } from "./sun";
+import { sunTime, twilight } from "./sun";
 
 // London, summer solstice 2020-06-20. Reference almanac: sunrise ~03:43 UTC,
 // sunset ~20:21 UTC. We assert coarse windows so the test catches gross errors
@@ -31,5 +31,25 @@ describe("sunTime", () => {
   it("returns null in the polar night (no sunrise)", () => {
     // Longyearbyen (78°N) in mid-December — the sun never rises.
     expect(sunTime(new Date(2021, 11, 21), 78.22, 15.65, "sunrise")).toBeNull();
+  });
+});
+
+describe("twilight", () => {
+  it("puts civil dawn before sunrise and civil dusk after sunset", () => {
+    const day = new Date(2021, 2, 15); // NYC equinox-ish
+    const dawn = twilight(day, 40.71, -74.0, "dawn")!;
+    const rise = sunTime(day, 40.71, -74.0, "sunrise")!;
+    const set = sunTime(day, 40.71, -74.0, "sunset")!;
+    const dusk = twilight(day, 40.71, -74.0, "dusk")!;
+    expect(dawn.getTime()).toBeLessThan(rise.getTime());
+    expect(dusk.getTime()).toBeGreaterThan(set.getTime());
+    // Civil twilight is roughly 20–40 minutes at mid-latitudes — coarse sanity.
+    expect(rise.getTime() - dawn.getTime()).toBeGreaterThan(10 * 60_000);
+    expect(rise.getTime() - dawn.getTime()).toBeLessThan(60 * 60_000);
+  });
+
+  it("returns null in white nights where the sun never gets 6° under", () => {
+    // Reykjavík (64°N) at midsummer — bright all night, no true civil dusk.
+    expect(twilight(new Date(2021, 5, 21), 64.15, -21.94, "dusk")).toBeNull();
   });
 });

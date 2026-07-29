@@ -10,7 +10,7 @@ import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
 import { simulateDemoMotion } from "../lib/connectors/demo";
 import { assign, effectiveDeviceIds, type Room } from "../lib/rooms";
-import { adaptiveKelvin } from "../lib/adaptive";
+import { RHYTHM_PRESETS, rhythmPresetById, rhythmTarget } from "../lib/rhythm";
 import { paletteVariant } from "../lib/palette";
 import {
   actionsOf,
@@ -26,6 +26,32 @@ import type { Color } from "../lib/connectors";
 import type { CustomVibe, StoredScene, StoredSource } from "../lib/db";
 
 const GEO_KEY = "aura-geo";
+const RHYTHM_KEY = "aura-rhythm";
+
+// The day rhythm's settings: on/off plus which preset shape the day follows.
+export type RhythmSettings = { enabled: boolean; presetId: string };
+
+const readRhythm = (): RhythmSettings => {
+  try {
+    const raw = localStorage.getItem(RHYTHM_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as RhythmSettings;
+      if (typeof parsed?.enabled === "boolean" && typeof parsed?.presetId === "string") return parsed;
+    }
+    // Migration: "Adaptive white" was the rhythm before it had a name. Carry that
+    // choice over as the whites-only preset — exactly what the old toggle did —
+    // rather than surprising anyone with brightness or color changes they never
+    // asked for. Richer shapes stay one deliberate tap away.
+    if (localStorage.getItem("aura-adaptive") === "1") {
+      const migrated: RhythmSettings = { enabled: true, presetId: "whites" };
+      localStorage.setItem(RHYTHM_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+  } catch {
+    /* private mode */
+  }
+  return { enabled: false, presetId: "sun" };
+};
 const readGeo = (): Coords | null => {
   try {
     const raw = localStorage.getItem(GEO_KEY);
@@ -40,6 +66,10 @@ const uid = () => crypto.randomUUID();
 // Recalling a scene or vibe should feel like a room easing, not a light switch.
 // Brands that fade natively (Hue) honor this; others simply snap.
 const SCENE_TRANSITION_MS = 800;
+// The day rhythm's steps are small and frequent — a longer native fade makes each
+// one imperceptible on brands that honor it (Hue, Home Assistant); the rest snap
+// through steps small enough not to be noticed anyway.
+const RHYTHM_TRANSITION_MS = 4000;
 
 // Merge two lists by id; items in `next` overwrite matching ones in `prev`.
 function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
@@ -61,13 +91,7 @@ export function useAura() {
   // lives apart from the (fully-replaced-on-refresh) device cache.
   const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
   const [coords, setCoords] = useState<Coords | null>(readGeo);
-  const [adaptive, setAdaptiveState] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("aura-adaptive") === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [rhythm, setRhythmState] = useState<RhythmSettings>(readRhythm);
   // Mirror vibes with other lantern apps on this machine (the vibe relay). Off by
   // default: this only ever starts talking to localhost after an explicit choice.
   const [mirrorVibes, setMirrorVibesState] = useState<boolean>(() => {
@@ -658,6 +682,9 @@ export function useAura() {
   const runAction = useCallback(
     (action: Action) => {
       if (action.kind === "scene") applyScene(action.sceneId);
+      // A scheduled vibe is a real vibe change — same path as tapping it, so it
+      // mirrors to other apps too when mirroring is on.
+      else if (action.kind === "vibe") applyVibe(action.vibeId, action.roomId);
       else if (action.kind === "allOff") setRoomPower(devices.map((d) => d.id), false);
       else if (action.kind === "fade") startFade(action);
       else if (action.kind === "roomPower") {
@@ -665,7 +692,7 @@ export function useAura() {
         if (room) setRoomPower(effectiveDeviceIds(room, rooms), action.on);
       }
     },
-    [applyScene, setRoomPower, startFade, devices, rooms]
+    [applyScene, applyVibe, setRoomPower, startFade, devices, rooms]
   );
 
   const addAutomation = useCallback(
@@ -680,6 +707,27 @@ export function useAura() {
       };
       await db.putAutomation(a);
       setAutomations((prev) => [...prev, a].sort((x, y) => x.name.localeCompare(y.name)));
+    },
+    []
+  );
+
+  // Rework an existing automation in place — trigger, actions, and days replaced
+  // wholesale (the sheet edits the whole thing as one form). Keeps enabled/lastRun.
+  const updateAutomation = useCallback(
+    async (id: string, name: string, trigger: Trigger, actions: Action[], days?: number[]) => {
+      setAutomations((prev) => {
+        const next = prev.map((a) => {
+          if (a.id !== id) return a;
+          const updated: Automation = { ...a, name: name.trim() || a.name, trigger, actions };
+          delete updated.action; // the legacy single-action shape is superseded
+          if (days && days.length) updated.days = days;
+          else delete updated.days;
+          return updated;
+        });
+        const changed = next.find((a) => a.id === id);
+        if (changed) void db.putAutomation(changed);
+        return [...next].sort((x, y) => x.name.localeCompare(y.name));
+      });
     },
     []
   );
@@ -867,13 +915,16 @@ export function useAura() {
   // hardware.
   const simulateMotion = useCallback(() => simulateDemoMotion(), []);
 
-  // Adaptive (circadian) white: nudge tunable-white bulbs toward the day's natural
-  // temperature every few minutes. Leaves color bulbs showing a color alone, and
-  // never turns a light on — it just shapes the whites already in use.
-  const setAdaptive = useCallback((on: boolean) => {
-    setAdaptiveState(on);
+  // The day rhythm (grown from the old "adaptive white"): every couple of minutes,
+  // nudge each lit fixture toward where the rhythm's curve sits right now — cool
+  // whites at midday, warm at the edges, and (preset permitting) brightness along
+  // with it and ember red past dusk on color bulbs. Two promises, kept here:
+  // it never turns a light on, and it never paints over a color you chose —
+  // the only colors it touches are the ember ones it set itself.
+  const setRhythm = useCallback((next: RhythmSettings) => {
+    setRhythmState(next);
     try {
-      localStorage.setItem("aura-adaptive", on ? "1" : "0");
+      localStorage.setItem(RHYTHM_KEY, JSON.stringify(next));
     } catch {
       /* private mode */
     }
@@ -881,23 +932,64 @@ export function useAura() {
 
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
+  // What the rhythm itself last set, per device — how it tells "its" ember color
+  // and brightness apart from yours. A light that goes off (or that you override)
+  // simply leaves the rhythm; turning it back on rejoins it fresh.
+  const rhythmColor = useRef<Record<string, Color>>({});
+  const rhythmBright = useRef<Record<string, number>>({});
   useEffect(() => {
-    if (!adaptive) return;
+    if (!rhythm.enabled) return;
+    const sameColor = (a?: Color, b?: Color) => !!a && !!b && a.r === b.r && a.g === b.g && a.b === b.b;
+    const forget = (id: string) => {
+      delete rhythmColor.current[id];
+      delete rhythmBright.current[id];
+    };
     const apply = () => {
-      const k = adaptiveKelvin(new Date(), coordsRef.current);
+      const preset = rhythmPresetById(rhythm.presetId) ?? RHYTHM_PRESETS[0];
+      const target = rhythmTarget(new Date(), coordsRef.current, preset);
       for (const d of devicesRef.current) {
-        if (!d.canColorTemp) continue;
         const st = statesRef.current[d.id];
-        if (!st?.on) continue;
-        if (d.canColor && st.kelvin === undefined) continue; // in color mode — leave it
-        if (st.kelvin !== undefined && Math.abs(st.kelvin - k) < 60) continue; // already close
-        setDevice(d.id, { kelvin: k }, true);
+        if (!st?.on) {
+          forget(d.id);
+          continue;
+        }
+        const oursInColor = st.color !== undefined && sameColor(st.color, rhythmColor.current[d.id]);
+        if (st.color !== undefined && st.kelvin === undefined && !oursInColor) {
+          forget(d.id); // showing a color you (or a vibe) chose — not the rhythm's to touch
+          continue;
+        }
+        const patch: Partial<LightState> = {};
+        if (target.ember && d.canColor) {
+          // The descent past white: kelvin has said all it can, color carries on.
+          if (!sameColor(st.color, target.ember)) patch.color = target.ember;
+          rhythmColor.current[d.id] = target.ember;
+        } else {
+          if (d.canColorTemp) {
+            const back = oursInColor; // dawn: climb back out of ember into white
+            if (back || st.kelvin === undefined || Math.abs(st.kelvin - target.kelvin) >= 60) {
+              patch.kelvin = target.kelvin;
+            }
+          }
+          if (oursInColor) delete rhythmColor.current[d.id];
+        }
+        if (target.brightness !== null && d.canBrightness) {
+          const cur = st.brightness ?? 100;
+          const last = rhythmBright.current[d.id];
+          // You moved the dimmer since the rhythm last did — that dial is yours
+          // now (until the light cycles off and on again).
+          const overridden = last !== undefined && Math.abs(cur - last) > 6;
+          if (!overridden && Math.abs(cur - target.brightness) >= 3) {
+            patch.brightness = target.brightness;
+            rhythmBright.current[d.id] = target.brightness;
+          }
+        }
+        if (Object.keys(patch).length) setDevice(d.id, patch, true, RHYTHM_TRANSITION_MS);
       }
     };
     apply();
-    const id = setInterval(apply, 5 * 60_000);
+    const id = setInterval(apply, 2 * 60_000);
     return () => clearInterval(id);
-  }, [adaptive, setDevice]);
+  }, [rhythm, setDevice]);
 
   const connected = useMemo(() => sources.length > 0, [sources]);
 
@@ -916,9 +1008,9 @@ export function useAura() {
     sources, devices: displayDevices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
     createRoom, renameRoom, removeRoom, createComboRoom, assignDevice, setRoomPower, setRoomBrightness, renameDevice,
-    requestLocation, addAutomation, toggleAutomation, removeAutomation,
+    requestLocation, addAutomation, updateAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
-    exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
+    exportSetup, importSetup, rhythm, setRhythm, simulateMotion,
     mirrorVibes, setMirrorVibes, identifyDevice, identifying,
   };
 }

@@ -20,6 +20,9 @@ export type Trigger =
 
 export type Action =
   | { kind: "scene"; sceneId: string }
+  // Set a vibe (built-in @lantern/core vocabulary or a custom one) — the same
+  // thing tapping it in the vibe row does. roomId omitted means the whole home.
+  | { kind: "vibe"; vibeId: string; roomId?: string }
   | { kind: "roomPower"; roomId: string; on: boolean }
   | { kind: "allOff" }
   // Gently ramp brightness to a target over some minutes (wake-up = fade up;
