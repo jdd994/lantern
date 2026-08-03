@@ -3,9 +3,10 @@
 // directory, no suggestions, no graph. And an item is claimed, never
 // assigned: nobody hands out chores here.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet } from "@lantern/ui";
 import type { Checklist } from "../lib/model";
+import type { InviteInfo } from "../lib/api";
 import type { SharedList } from "../hooks/useManifest";
 
 export function ShareSheet({
@@ -16,6 +17,10 @@ export function ShareSheet({
   sharedError,
   onShare,
   onInvite,
+  onCreateLink,
+  onFetchInvites,
+  onRevokeInvite,
+  onRemoveMember,
   onLeave,
   onRefresh,
   onOpenSync,
@@ -28,6 +33,10 @@ export function ShareSheet({
   sharedError: string | null;
   onShare: () => Promise<string | null>;
   onInvite: (email: string) => Promise<string | null>;
+  onCreateLink: () => Promise<{ link: string } | { error: string }>;
+  onFetchInvites: () => Promise<InviteInfo[]>;
+  onRevokeInvite: (inviteId: string) => Promise<string | null>;
+  onRemoveMember: (userId: string) => Promise<string | null>;
   onLeave: () => Promise<string | null>;
   onRefresh: () => Promise<void>;
   onOpenSync: () => void;
@@ -37,6 +46,70 @@ export function ShareSheet({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [invites, setInvites] = useState<InviteInfo[]>([]);
+
+  const isShared = !!shared;
+  useEffect(() => {
+    if (isShared) void onFetchInvites().then(setInvites);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShared]);
+
+  async function createLink() {
+    setLinkBusy(true);
+    setLinkErr(null);
+    const res = await onCreateLink();
+    setLinkBusy(false);
+    if ("error" in res) setLinkErr(res.error);
+    else {
+      setLink(res.link);
+      setInvites(await onFetchInvites());
+    }
+  }
+
+  async function copyLink() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the link is visible to copy by hand */
+    }
+  }
+
+  async function shareLink() {
+    if (!link) return;
+    try {
+      await navigator.share({ text: "Help pack this list on Manifest:", url: link });
+    } catch {
+      /* dismissed */
+    }
+  }
+
+  async function revoke(inviteId: string) {
+    setLinkErr(null);
+    const err = await onRevokeInvite(inviteId);
+    if (err) setLinkErr(err);
+    setInvites(await onFetchInvites());
+  }
+
+  const openInvites = invites.filter((i) => !i.revoked && i.expiresAt > Date.now() && i.uses < i.maxUses);
+  const iAmOwner = !!shared?.members.some((m) => m.email === account && m.role === "owner");
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [memberBusy, setMemberBusy] = useState(false);
+
+  async function removeMember(userId: string) {
+    setError(null);
+    setMemberBusy(true);
+    const err = await onRemoveMember(userId);
+    setMemberBusy(false);
+    setRemovingId(null);
+    if (err) setError(err);
+  }
 
   async function share() {
     setError(null);
@@ -107,9 +180,29 @@ export function ShareSheet({
               {shared.members.map((m) => (
                 <div key={m.userId} className="member-row">
                   <span className="member-email">{m.email}</span>
-                  <span className="member-role">{m.role}</span>
+                  <span style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <span className="member-role">{m.role}</span>
+                    {iAmOwner && m.email !== account ? (
+                      removingId === m.userId ? (
+                        <>
+                          <button className="linklike" disabled={memberBusy} onClick={() => setRemovingId(null)}>keep</button>
+                          <button className="linklike danger" disabled={memberBusy} onClick={() => void removeMember(m.userId)}>
+                            {memberBusy ? "removing…" : "yes, remove"}
+                          </button>
+                        </>
+                      ) : (
+                        <button className="linklike danger" onClick={() => setRemovingId(m.userId)}>remove</button>
+                      )
+                    ) : null}
+                  </span>
                 </div>
               ))}
+              {removingId ? (
+                <p className="hint" style={{ marginTop: 8 }}>
+                  Removing re-keys the list, so they can't read anything added afterwards. What's
+                  already on their device stays theirs.
+                </p>
+              ) : null}
             </section>
           ) : null}
 
@@ -135,6 +228,43 @@ export function ShareSheet({
                 </button>
               </div>
             </form>
+          </section>
+
+          <section className="set-section">
+            <h4 className="set-head">Or share a link</h4>
+            <p className="hint">
+              Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The
+              list's key rides inside the link itself — the server only ever holds a locked
+              envelope — so send it somewhere you'd trust with the list.
+            </p>
+            {link ? (
+              <>
+                <div className="invite-link">{link}</div>
+                <div className="sheet-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
+                  <button className="btn" onClick={() => void copyLink()}>{copied ? "Copied" : "Copy link"}</button>
+                  {typeof navigator.share === "function" ? (
+                    <button className="btn btn-ghost" onClick={() => void shareLink()}>Share…</button>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <button className="btn" disabled={linkBusy} onClick={() => void createLink()}>
+                {linkBusy ? "Making a link…" : "Make an invite link"}
+              </button>
+            )}
+            {linkErr ? <div className="error" style={{ marginTop: 10 }}>{linkErr}</div> : null}
+            {openInvites.length ? (
+              <div style={{ marginTop: 10 }}>
+                {openInvites.map((i) => (
+                  <div key={i.inviteId} className="member-row">
+                    <span className="hint" style={{ margin: 0 }}>
+                      Link from {new Date(i.createdAt).toLocaleDateString()} — used {i.uses} of {i.maxUses}
+                    </span>
+                    <button className="linklike danger" onClick={() => void revoke(i.inviteId)}>revoke</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <div className="sheet-actions">

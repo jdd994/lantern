@@ -147,6 +147,36 @@ export function cloneList(
   return { list, items };
 }
 
+// The way back in: Markdown checklists → drafts ready to persist. Tolerant of
+// hand-written files — `## Title` starts a list, `- [ ]`/`- [x]` are items,
+// the first plain line under a heading becomes the note. Claims are NOT
+// imported (a trailing " — someone@example.com" from our own export is
+// stripped): a claim is volunteered in person, never carried in on paper.
+export type ImportedList = { title: string; note?: string; items: { text: string; checked: boolean }[] };
+
+export function fromMarkdown(text: string): ImportedList[] {
+  const out: ImportedList[] = [];
+  let current: ImportedList | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    if (heading) {
+      current = { title: heading[1].trim(), items: [] };
+      out.push(current);
+      continue;
+    }
+    if (!current || !line || line === "_(empty)_") continue;
+    const item = /^[-*]\s+\[([ xX])\]\s+(.*)$/.exec(line);
+    if (item) {
+      const text = item[2].replace(/\s+—\s+\S+@\S+$/, "").trim();
+      if (text) current.items.push({ text, checked: item[1] !== " " });
+    } else if (!current.note && current.items.length === 0) {
+      current.note = line;
+    }
+  }
+  return out.filter((l) => l.title || l.items.length);
+}
+
 // ---- Portability ----------------------------------------------------------
 // Every list as plain Markdown checklists — readable anywhere, forever. Your
 // lists are never hostage here.

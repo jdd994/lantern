@@ -1,6 +1,7 @@
 // SettingsSheet.tsx — vibe picker, a short gentle "how it works", and the
-// portability drawer (your lists as plain Markdown — never hostage here), on
-// the shared @lantern/ui primitives.
+// portability drawer (your lists as plain Markdown, out AND back in — never
+// hostage here), on the shared @lantern/ui primitives.
+import { useRef, useState } from "react";
 import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
 
 export const MOODS: ThemeOption[] = [
@@ -13,15 +14,21 @@ export function SettingsSheet({
   mood,
   onMood,
   onExport,
+  onImport,
   onInstallHelp,
   onClose,
 }: {
   mood: string;
   onMood: (id: string) => void;
   onExport: () => string;
+  onImport: (text: string) => { lists: number; items: number } | string;
   onInstallHelp: () => void;
   onClose: () => void;
 }) {
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
   function download() {
     const text = onExport();
     // data: URL, not blob: — the CSP-safe pattern shared with the siblings.
@@ -29,6 +36,24 @@ export function SettingsSheet({
     a.href = `data:text/markdown;charset=utf-8,${encodeURIComponent(text)}`;
     a.download = "manifest.md";
     a.click();
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    setImportError(null);
+    setImportNote(null);
+    try {
+      const result = onImport(await file.text());
+      if (typeof result === "string") setImportError(result);
+      else {
+        setImportNote(
+          `Brought aboard ${result.lists} ${result.lists === 1 ? "list" : "lists"} and ` +
+            `${result.items} ${result.items === 1 ? "item" : "items"}.`
+        );
+      }
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
 
   return (
@@ -49,7 +74,18 @@ export function SettingsSheet({
         </p>
         <div className="sheet-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
           <button className="btn" onClick={download}>Export .md</button>
+          <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>Import a .md</button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".md,.txt,text/markdown,text/plain"
+            style={{ display: "none" }}
+            onChange={(e) => void importFile(e.target.files?.[0] ?? undefined)}
+          />
         </div>
+        {importNote ? <p className="hint">{importNote}</p> : null}
+        {importError ? <div className="error">{importError}</div> : null}
+        <p className="hint">Import adds fresh private lists — it never overwrites, and claims don't travel on paper.</p>
       </section>
 
       <section className="set-section">
