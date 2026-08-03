@@ -4,6 +4,7 @@
 // out of a shared Google calendar and keep every plan.
 import { useRef, useState } from "react";
 import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
+import { shortName } from "../lib/model";
 import type { IcsImport } from "../lib/ics";
 
 export const MOODS: ThemeOption[] = [
@@ -15,6 +16,9 @@ export const MOODS: ThemeOption[] = [
 export function SettingsSheet({
   mood,
   onMood,
+  account,
+  myName,
+  onSetName,
   onExport,
   onImport,
   onImportICS,
@@ -23,6 +27,9 @@ export function SettingsSheet({
 }: {
   mood: string;
   onMood: (id: string) => void;
+  account: string | null;
+  myName: string; // the raw chosen name ("" when none yet)
+  onSetName: (name: string) => void;
   onExport: () => string;
   onImport: (text: string) => { calendars: number; happenings: number } | string;
   onImportICS: (text: string) => { calendarId: string; added: number; skipped: IcsImport } | string;
@@ -31,7 +38,16 @@ export function SettingsSheet({
 }) {
   const [importNote, setImportNote] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [name, setName] = useState(myName);
+  const [nameSaved, setNameSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  function saveName(e: React.FormEvent) {
+    e.preventDefault();
+    onSetName(name);
+    setNameSaved(true);
+    setTimeout(() => setNameSaved(false), 1800);
+  }
 
   function download() {
     const text = onExport();
@@ -88,6 +104,32 @@ export function SettingsSheet({
         <p className="hint">Pick the look that feels right. Saved on this device.</p>
         <ThemePicker options={MOODS} current={mood} onSelect={onMood} />
       </section>
+
+      {account ? (
+        <section className="set-section">
+          <h4 className="set-head">How you're signed</h4>
+          <p className="hint">
+            The name your circle sees next to "I'm in" — instead of{" "}
+            <strong>{shortName(account)}</strong> from your address. It travels encrypted with
+            your plans; leave it empty to stay {shortName(account)}.
+          </p>
+          <form onSubmit={saveName}>
+            <div className="row">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Johnny"
+                maxLength={40}
+                aria-label="Your display name"
+              />
+              <button type="submit" className="btn" disabled={name.trim() === myName.trim()}>
+                {nameSaved ? "Saved" : "Save"}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       <section className="set-section">
         <h4 className="set-head">Your plans are portable</h4>

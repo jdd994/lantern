@@ -31,10 +31,10 @@ import * as api from "../lib/api";
 import { biometricSupported, enrollBiometric, unlockBiometric } from "../lib/biometric";
 import { syncNow as engineSyncNow } from "../lib/sync";
 import {
-  decodeCalendar, decodeHappening, decodeMark,
-  encodeCalendar, encodeHappening, encodeMark,
+  decodeCalendar, decodeHappening, decodeMark, decodeProfile,
+  encodeCalendar, encodeHappening, encodeMark, encodeProfile,
   fromMarkdown, myMarks, toMarkdown, uid,
-  type Calendar, type Happening, type Mark,
+  type Calendar, type Happening, type Mark, type Profile,
 } from "../lib/model";
 import { parseICS, type IcsImport } from "../lib/ics";
 
@@ -50,13 +50,14 @@ export type SharedCalendar = {
   members: api.StrandMember[];
 };
 
-const SHARED_KINDS = new Set<string>(["calendar", "happening", "mark"]);
+const SHARED_KINDS = new Set<string>(["calendar", "happening", "mark", "profile"]);
 
 export function useAlmanac() {
   const [status, setStatus] = useState<Status>("loading");
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [happenings, setHappenings] = useState<Happening[]>([]);
   const [marks, setMarks] = useState<Mark[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
@@ -132,6 +133,7 @@ export function useAlmanac() {
     setCalendars(await decode(await db.allCalendars(), decodeCalendar));
     setHappenings(await decode(await db.allHappenings(), decodeHappening));
     setMarks(await decode(await db.allMarks(), decodeMark));
+    setProfiles(await decode(await db.allProfiles(), decodeProfile));
   }, []);
 
   // ---- sync ----------------------------------------------------------------
@@ -381,6 +383,18 @@ export function useAlmanac() {
         // skip what won't decrypt
       }
     }
+    for (const rec of await db.allProfiles()) {
+      if (rec.deleted) continue;
+      try {
+        const payload = await decryptString(key, rec.content);
+        changes.push({
+          kind: "profile", id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt,
+          deleted: false, dekEpoch, content: await encryptString(dek, payload),
+        });
+      } catch {
+        // skip what won't decrypt
+      }
+    }
     for (let i = 0; i < changes.length; i += 100) {
       await api.sharedPush(token, calendarId, changes.slice(i, i + 100));
     }
@@ -556,6 +570,25 @@ export function useAlmanac() {
         const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(selfPub, dek);
         await api.joinFinish(token, inviteId, proofB64, ephemeralPub, wrappedDEK);
         await syncShared();
+        // Arrive with your name on: mirror my profile into the new strand.
+        const me = accountRef.current;
+        const entry = strandKeys.current.get(claim.strandId);
+        if (me && entry) {
+          for (const rec of await db.allProfiles()) {
+            if (rec.deleted) continue;
+            try {
+              const payload = await decryptString(keyRef.current!, rec.content);
+              const pr = decodeProfile(payload, { id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
+              if (pr.who !== me) continue;
+              await api.sharedPush(token, claim.strandId, [{
+                kind: "profile", id: rec.id, createdAt: rec.createdAt, updatedAt: rec.updatedAt,
+                deleted: false, dekEpoch: entry.dekEpoch, content: await encryptString(entry.dek, payload),
+              }]);
+            } catch {
+              // best-effort — the next name change mirrors everywhere anyway
+            }
+          }
+        }
         return { calendarId: claim.strandId };
       } catch (e) {
         return { error: e instanceof Error ? e.message : "Couldn't join with that link." };
@@ -669,6 +702,7 @@ export function useAlmanac() {
     setCalendars([]);
     setHappenings([]);
     setMarks([]);
+    setProfiles([]);
     setShared({});
     setError(null);
     setSaveError(null);
@@ -1028,6 +1062,23 @@ export function useAlmanac() {
     [guardedPersist, pushToShared, scheduleSync]
   );
 
+  const persistProfile = useCallback(
+    (pr: Profile, deleted = false) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const payload = encodeProfile(pr);
+      guardedPersist(async () => {
+        const content = await encryptString(key, payload);
+        await db.putProfile({ id: pr.id, createdAt: pr.createdAt, updatedAt: pr.updatedAt, deleted, dirty: true, content });
+      });
+      for (const calendarId of strandKeys.current.keys()) {
+        pushToShared("profile", calendarId, pr, payload, deleted);
+      }
+      scheduleSync();
+    },
+    [guardedPersist, pushToShared, scheduleSync]
+  );
+
   const stamp = useCallback(<T extends { author?: string }>(draft: T): T => {
     // Attribution, not a score: whose hand last touched the record.
     const me = myUserIdRef.current;
@@ -1142,6 +1193,25 @@ export function useAlmanac() {
     [marks, persistMark, stamp]
   );
 
+  // "Call me Jo." One profile record per person; only your own is ever
+  // written here. The name travels, encrypted, to every calendar you keep.
+  const setMyName = useCallback(
+    (name: string) => {
+      const me = accountRef.current;
+      if (!me) return;
+      const now = Date.now();
+      const mine = profiles.filter((pr) => pr.who === me).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      const next = stamp<Profile>(
+        mine
+          ? { ...mine, name: name.trim(), updatedAt: now }
+          : { id: uid(), who: me, name: name.trim(), createdAt: now, updatedAt: now }
+      );
+      setProfiles((prev) => (mine ? prev.map((pr) => (pr.id === mine.id ? next : pr)) : [...prev, next]));
+      persistProfile(next);
+    },
+    [profiles, persistProfile, stamp]
+  );
+
   // Every calendar as plain Markdown — readable anywhere, forever.
   const exportMarkdown = useCallback((): string => toMarkdown(calendars, happenings), [calendars, happenings]);
 
@@ -1214,6 +1284,7 @@ export function useAlmanac() {
     calendars,
     happenings,
     marks,
+    profiles,
     busy,
     error,
     saveError,
@@ -1232,6 +1303,7 @@ export function useAlmanac() {
     updateHappening,
     removeHappening,
     setMark,
+    setMyName,
     exportMarkdown,
     importMarkdown,
     importICS,
