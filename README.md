@@ -15,10 +15,14 @@ is the flame each app is lit from.
 | **[Driftless](apps/driftless)** | a quiet place to catch your thoughts | the time rail |
 | **[Ballast](apps/ballast)** | steady footing with your money | the waterline |
 | **[Hearth](apps/hearth)** | tending and nourishing yourself, gently | the day's plate |
+| **[Grove](apps/grove)** | a family tree the family writes together | the hourglass tree |
+| **[Aura](apps/aura)** | your home's light, following your day | the day rhythm |
+| **[Manifest](apps/manifest)** | the list of what you carry, packed together | claimed, never assigned |
 
 Each is a Vite + React PWA, deployed independently to its own domain
-(driftless.page · ballast.gold · hearth.garden). None of them can see your data,
-and neither can we — that's the whole point.
+(driftless.page · ballast.gold · hearth.garden · grove.page · auravibe.app ·
+tripmanifest.app). None of them can see your data, and neither can we — that's
+the whole point.
 
 ## Layout
 
@@ -31,8 +35,8 @@ packages/
                              sync server as a factory. Stores opaque ciphertext only.
   ui       @lantern/ui     — Sheet, useTheme, ThemePicker, themed by each app's tokens.
 apps/
-  driftless  ballast  hearth   — each supplies its own content, domain logic,
-                                  palette, copy, and config; imports the shared core.
+  driftless  ballast  hearth      — each supplies its own content, domain logic,
+  grove      aura     manifest      palette, copy, and config; imports the shared core.
 ```
 
 An npm-workspaces monorepo. The shared spine lives in `packages/`; each app is its

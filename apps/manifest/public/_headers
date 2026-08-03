@@ -1,0 +1,21 @@
+# Security headers, applied to every response. The CSP is deliberately strict:
+# Manifest is fully self-contained, so nothing loads from or talks to a third
+# party — ever. A packing list is a small thing, but where you're going and
+# when you're leaving home is not; there is exactly one wire out of the
+# building:
+#
+# `connect-src` — our own sync server, which receives opaque ciphertext and
+# non-secret metadata only (never the passphrase, never the key, never an item,
+# a title, or who's bringing what).
+# `ws://localhost:51774` is the vibe relay (@lantern/vibe-relay) — the
+# same-machine, account-free mood transport. It can only ever reach the
+# user's own machine; if the relay isn't running it silently no-ops.
+# Never an analytics host; there is no analytics.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://manifest-server.jdd994.workers.dev ws://localhost:51774; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin

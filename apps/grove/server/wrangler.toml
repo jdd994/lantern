@@ -1,0 +1,16 @@
+name = "grove-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "grove"
+database_id = "3e1ba73d-bbd8-4126-a093-0f3027034849"
+
+# Keepsake scans and photos: opaque iv||ciphertext blobs, encrypted on-device.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "grove-media"
+
+[vars]
+ALLOWED_ORIGIN = "https://grove.page,https://grove-1c9.pages.dev"

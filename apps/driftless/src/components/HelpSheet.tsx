@@ -124,9 +124,11 @@ function HelpItem({
 export function HelpSheet({
   onClose,
   focus,
+  onInstallHelp,
 }: {
   onClose: () => void;
   focus?: "top" | "support";
+  onInstallHelp: () => void;
 }) {
   const supportRef = useRef<HTMLElement>(null);
 
@@ -302,6 +304,17 @@ export function HelpSheet({
               so back up now and then.
             </p>
           </HelpItem>
+
+          <section className="help-install">
+            <h3>Keep Driftless close</h3>
+            <p>
+              Driftless can live on your home screen like any app — no app store, nothing to
+              download.{" "}
+              <button type="button" className="linklike" onClick={onInstallHelp}>
+                How to install, step by step
+              </button>
+            </p>
+          </section>
 
           <NoteToMaker />
 
