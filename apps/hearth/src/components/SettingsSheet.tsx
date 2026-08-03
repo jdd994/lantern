@@ -50,9 +50,10 @@ export function SettingsSheet({
           watching what you eat.
         </p>
         <p className="hint">
-          The trade: your passphrase never leaves this device, so there's no reset. Forget it and
-          the data can't be recovered by anyone, including us. Keep it somewhere safe — or set up
-          Guardians (in Sync) so a few people you trust can jointly help you back in.
+          The trade: your passphrase never leaves this device, so there's no reset by email —
+          that button would mean someone else could read your data. If you forget it, Guardians
+          (in Sync) are the way back in: a few people you trust, jointly. Keep it somewhere
+          safe as well.
         </p>
       </section>
 

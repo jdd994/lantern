@@ -127,8 +127,10 @@ export function SettingsSheet({
           still living get minimal entries by default; they fill in their own story when they join.
         </p>
         <p className="hint">
-          The trade: your passphrase never leaves this device, so there's no reset. Forget it and
-          the tree can't be recovered by anyone, including us. Keep it somewhere safe.
+          The trade: your passphrase never leaves this device, so there's no reset by email —
+          that button would mean someone else could read the tree. If you forget it, Guardians
+          (in Sync) are the way back in: a few people you trust, jointly. Keep it somewhere
+          safe as well.
         </p>
       </section>
 

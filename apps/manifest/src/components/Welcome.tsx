@@ -49,10 +49,11 @@ export function Welcome({
           </div>
 
           <p style={{ fontSize: 13.5, color: "var(--ink-faint)" }}>
-            Because the key is made from your passphrase and never leaves this device, there's{" "}
-            <strong style={{ color: "var(--ink-soft)" }}>no reset</strong>. Forget it and the lists
-            can't be recovered by anyone — including us. Keep it somewhere safe. That's the price of
-            it being truly private.
+            If you ever forget your passphrase, the people you trust can let you back in: set up{" "}
+            <strong style={{ color: "var(--ink-soft)" }}>guardians</strong> (in Sync) and a few of
+            them together can restore your access — nobody else, including us. Until then it's the
+            only key: there's no reset by email, because a reset button would mean someone besides
+            you could read your lists. Keep it somewhere safe.
           </p>
 
           <button className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} onClick={() => setStep("pass")}>
