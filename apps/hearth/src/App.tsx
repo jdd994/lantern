@@ -1,3 +1,4 @@
+import { useRegisterSW } from "virtual:pwa-register/react";
 import { useEffect, useRef, useState } from "react";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useHearth } from "./hooks/useHearth";
@@ -15,7 +16,7 @@ import { Kitchens } from "./components/Kitchens";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Gear } from "./components/icons";
-import { InstallSheet, useTheme } from "@lantern/ui";
+import { InstallSheet, UpdateToast, useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
 
 function timeLabel(at: number): string {
@@ -56,6 +57,26 @@ export default function App() {
     if (vibeId) relayRef.current?.publish({ vibeId });
   };
 
+  // A new deploy parks behind the service worker until the person says so —
+  // the shared UpdateToast (@lantern/ui) is the whole ceremony. Rendered in
+  // every return branch below, locked screens included: an update offer that
+  // hides behind the vault is one most people never see.
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => void registration.update(), 60 * 60_000);
+    },
+  });
+  const updateToast = needRefresh ? (
+    <UpdateToast
+      appName="Hearth"
+      onRefresh={() => void updateServiceWorker(true)}
+      onDismiss={() => setNeedRefresh(false)}
+    />
+  ) : null;
+
   if (h.status === "loading") return null;
   if (h.status === "setup") {
     return (
@@ -82,11 +103,13 @@ export default function App() {
             onApproveGuardianRequest={h.approveGuardianRequest}
           />
         ) : null}
+        {updateToast}
       </>
     );
   }
   if (h.status === "locked") {
     return (
+      <>
       <LockScreen
         onUnlock={h.unlock}
         onBiometric={h.unlockWithBiometric}
@@ -103,6 +126,8 @@ export default function App() {
         onCancelRecovery={h.cancelRecoveryRequest}
         onFinishRecovery={h.finishRecoveryRequest}
       />
+      {updateToast}
+      </>
     );
   }
 
@@ -289,6 +314,7 @@ export default function App() {
           onApproveGuardianRequest={h.approveGuardianRequest}
         />
       ) : null}
+      {updateToast}
     </div>
   );
 }

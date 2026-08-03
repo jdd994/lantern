@@ -23,7 +23,7 @@ function UpdateOffer() {
   if (!needRefresh) return null;
   return (
     <UpdateToast
-      appName="Grove"
+      appName="Almanac"
       onRefresh={() => void updateServiceWorker(true)}
       onDismiss={() => setNeedRefresh(false)}
     />

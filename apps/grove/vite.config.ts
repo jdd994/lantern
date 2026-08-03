@@ -7,7 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt": a new build waits until the person says Refresh (UpdateToast in main.tsx).
+      registerType: "prompt",
       includeAssets: ["favicon.svg"],
       manifest: {
         name: "Grove",
