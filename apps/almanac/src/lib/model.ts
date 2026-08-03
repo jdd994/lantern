@@ -208,13 +208,22 @@ export function groupByMonth(run: Happening[]): Array<{ label: string; items: Ha
   return out;
 }
 
-// "Sat, Aug 21" / "Sat, Aug 21 · 7:30 PM" — the line under a title.
+// "Sat, Aug 21" / "Sat, Aug 21 · 7:30 PM" / "Fri, Aug 21 – Aug 23" — the line
+// under a title. A plan that spans days reads as a range; the almanac keeps it
+// on the agenda until its last day has passed.
 export function formatWhen(h: Happening): string {
   const d = new Date(h.startsAt);
   const day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  if (h.allDay) return day;
-  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `${day} · ${time}`;
+  const start = h.allDay
+    ? day
+    : `${day} · ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  if (h.endsAt) {
+    const e = new Date(h.endsAt);
+    if (e.toDateString() !== d.toDateString()) {
+      return `${start} – ${e.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    }
+  }
+  return start;
 }
 
 // ---- Marks -----------------------------------------------------------------

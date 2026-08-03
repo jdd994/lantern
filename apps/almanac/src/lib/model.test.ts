@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allComing, decodeCalendar, decodeHappening, decodeMark, decodeProfile,
   displayName, effectiveEnd, encodeCalendar, encodeHappening, encodeMark,
-  encodeProfile, formatStamp, fromMarkdown, groupByMonth, myMarks,
+  encodeProfile, formatStamp, formatWhen, fromMarkdown, groupByMonth, myMarks,
   shortName, splitAgenda, toMarkdown, whoIsIn,
   type Calendar, type Happening, type Mark, type Profile,
 } from "./model";
@@ -118,6 +118,27 @@ describe("whoIsIn / myMarks", () => {
     ];
     expect(whoIsIn("h1", marks)).toEqual(["sam@example.com", "ada@example.com"]);
     expect(myMarks("h1", "sam@example.com", marks).map((m) => m.id)).toEqual(["m1", "m3"]);
+  });
+});
+
+describe("formatWhen", () => {
+  it("reads a single day, with time when there is one", () => {
+    expect(formatWhen(hap({ allDay: true }))).toMatch(/Aug 21/);
+    expect(formatWhen(hap({}))).toMatch(/Aug 21 · 7:30/);
+  });
+
+  it("reads a span as a range, and same-day endsAt as no range", () => {
+    const span = formatWhen(hap({ endsAt: SEP03_1200, allDay: true }));
+    expect(span).toMatch(/Aug 21 – /);
+    expect(span).toMatch(/Sep 3/);
+    // an end within the same local day isn't a span
+    expect(formatWhen(hap({ endsAt: AUG21_2359 }))).not.toContain("–");
+  });
+
+  it("multi-day plans stay on the agenda until the last day passes", () => {
+    const fest = hap({ endsAt: SEP03_1200, allDay: true });
+    const { coming } = splitAgenda("c1", [fest], new Date(2026, 8, 2).getTime());
+    expect(coming).toHaveLength(1);
   });
 });
 

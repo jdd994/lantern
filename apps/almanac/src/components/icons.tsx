@@ -28,6 +28,27 @@ export function Down({ size = 13, className }: Props) {
   );
 }
 
+// Two pages, one behind the other: "same again" — the only recurrence.
+export function Again({ size = 13, className }: Props) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+// The outward arrow: hand this plan to the group chat.
+export function ShareOut({ size = 13, className }: Props) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3 v12" /><path d="M8 7 l4 -4 4 4" /><path d="M5 11 v9 h14 v-9" />
+    </svg>
+  );
+}
+
 // A little calendar page with a downward arrow: "take this to your own app".
 export function CalendarDown({ size = 13, className }: Props) {
   return (
