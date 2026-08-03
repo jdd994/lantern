@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { itemsFor, type Checklist, type Item } from "../lib/model";
 import type { SharedList } from "../hooks/useManifest";
+import { Down, Pencil, Up } from "./icons";
 
 // them@example.com → "them" — a first-name-ish handle for chips.
 function shortName(email: string): string {
@@ -25,6 +26,8 @@ export function ListPage({
   onAddItem,
   onToggle,
   onSetClaim,
+  onEditItem,
+  onMove,
   onRemoveItem,
   onDuplicate,
   onOpenShare,
@@ -39,6 +42,8 @@ export function ListPage({
   onAddItem: (text: string) => void;
   onToggle: (item: Item) => void;
   onSetClaim: (item: Item, mine: boolean) => void;
+  onEditItem: (item: Item, text: string) => void;
+  onMove: (item: Item, dir: -1 | 1) => void;
   onRemoveItem: (item: Item) => void;
   onDuplicate: () => void;
   onOpenShare: () => void;
@@ -49,12 +54,32 @@ export function ListPage({
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(list.title);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [arranging, setArranging] = useState(false);
 
   useEffect(() => {
     setTitle(list.title);
     setRenaming(false);
     setConfirmRemove(false);
+    setEditingId(null);
+    setArranging(false);
   }, [list.id, list.title]);
+
+  function saveEdit(item: Item) {
+    const t = editText.trim();
+    if (t && t !== item.text) onEditItem(item, t);
+    setEditingId(null);
+  }
+
+  // A byline, never a score: on a shared list, whose hand added this — shown
+  // only for other people's items, faintly.
+  const myUserId = shared?.members.find((m) => m.email === account)?.userId;
+  function authorHandle(i: Item): string | null {
+    if (!shared || !i.author || i.author === myUserId) return null;
+    const em = shared.members.find((m) => m.userId === i.author)?.email;
+    return em ? shortName(em) : null;
+  }
 
   function add(e: React.FormEvent) {
     e.preventDefault();
@@ -114,34 +139,96 @@ export function ListPage({
           Empty so far. Add things as you think of them — the list does the remembering.
         </p>
       ) : (
-        <div className="items">
-          {its.map((i) => (
-            <div key={i.id} className={`item-row${i.checked ? " item-done" : ""}`}>
-              <label className="item-main">
-                <input type="checkbox" checked={i.checked} onChange={() => onToggle(i)} />
-                <span className="item-text">{i.text}</span>
-              </label>
-              {shared && account ? (
-                i.claimedBy ? (
-                  i.claimedBy === account ? (
-                    <button className="claim claim-mine" onClick={() => onSetClaim(i, false)} title="Release your claim">
-                      you've got it ✕
-                    </button>
-                  ) : (
-                    <span className="claim">{shortName(i.claimedBy)} has it</span>
-                  )
-                ) : !i.checked ? (
-                  <button className="claim claim-offer" onClick={() => onSetClaim(i, true)}>
-                    I've got it
-                  </button>
-                ) : null
-              ) : null}
-              <button className="item-x" onClick={() => onRemoveItem(i)} aria-label={`Remove ${i.text}`} title="Remove">
-                ×
+        <>
+          {its.length > 1 ? (
+            <div className="items-tools">
+              <button className="linklike" onClick={() => setArranging((a) => !a)}>
+                {arranging ? "Done arranging" : "Arrange"}
               </button>
             </div>
-          ))}
-        </div>
+          ) : null}
+          <div className="items">
+            {its.map((i) => {
+              const group = its.filter((x) => x.checked === i.checked);
+              const gi = group.findIndex((x) => x.id === i.id);
+              return (
+                <div key={i.id} className={`item-row${i.checked ? " item-done" : ""}`}>
+                  {editingId === i.id ? (
+                    <form
+                      className="item-main"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        saveEdit(i);
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={editText}
+                        autoFocus
+                        onChange={(e) => setEditText(e.target.value)}
+                        onBlur={() => saveEdit(i)}
+                        onKeyDown={(e) => e.key === "Escape" && setEditingId(null)}
+                        aria-label={`Edit ${i.text}`}
+                      />
+                    </form>
+                  ) : (
+                    <label className="item-main">
+                      <input type="checkbox" checked={i.checked} onChange={() => onToggle(i)} />
+                      <span className="item-text">
+                        {i.text}
+                        {authorHandle(i) ? <span className="item-author">· {authorHandle(i)}</span> : null}
+                      </span>
+                    </label>
+                  )}
+                  {arranging ? (
+                    <>
+                      <button className="item-x" disabled={gi <= 0} onClick={() => onMove(i, -1)} aria-label={`Move ${i.text} up`}>
+                        <Up />
+                      </button>
+                      <button className="item-x" disabled={gi >= group.length - 1} onClick={() => onMove(i, 1)} aria-label={`Move ${i.text} down`}>
+                        <Down />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {shared && account ? (
+                        i.claimedBy ? (
+                          i.claimedBy === account ? (
+                            <button className="claim claim-mine" onClick={() => onSetClaim(i, false)} title="Release your claim">
+                              you've got it ✕
+                            </button>
+                          ) : (
+                            <span className="claim">{shortName(i.claimedBy)} has it</span>
+                          )
+                        ) : !i.checked ? (
+                          <button className="claim claim-offer" onClick={() => onSetClaim(i, true)}>
+                            I've got it
+                          </button>
+                        ) : null
+                      ) : null}
+                      {editingId !== i.id ? (
+                        <button
+                          className="item-x"
+                          onClick={() => {
+                            setEditingId(i.id);
+                            setEditText(i.text);
+                          }}
+                          aria-label={`Edit ${i.text}`}
+                          title="Edit"
+                        >
+                          <Pencil />
+                        </button>
+                      ) : null}
+                      <button className="item-x" onClick={() => onRemoveItem(i)} aria-label={`Remove ${i.text}`} title="Remove">
+                        ×
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <div className="section" style={{ marginTop: 26 }}>

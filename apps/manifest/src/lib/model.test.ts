@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cloneList, decodeItem, decodeList, encodeItem, encodeList,
-  itemsFor, nextPosition, remainingLabel, toMarkdown,
+  fromMarkdown, itemsFor, nextPosition, remainingLabel, toMarkdown,
   type Checklist, type Item,
 } from "./model";
 
@@ -86,6 +86,32 @@ describe("cloneList — lists remember", () => {
   it("falls back to the source title when the new one is blank", () => {
     const source: Checklist = { id: "l1", title: "North Shore", createdAt: 1, updatedAt: 1 };
     expect(cloneList(source, [], "  ", 99).list.title).toBe("North Shore");
+  });
+});
+
+describe("fromMarkdown", () => {
+  it("round-trips its own export, minus claims", () => {
+    const lists: Checklist[] = [{ id: "l1", title: "Cabin", note: "bring it all", createdAt: 1, updatedAt: 1 }];
+    const md = toMarkdown(lists, [
+      item({ id: "a", text: "stove", claimedBy: "sam@example.com" }),
+      item({ id: "b", text: "matches", checked: true, position: 2 }),
+    ]);
+    const parsed = fromMarkdown(md);
+    expect(parsed).toEqual([
+      { title: "Cabin", note: "bring it all", items: [{ text: "stove", checked: false }, { text: "matches", checked: true }] },
+    ]);
+  });
+
+  it("reads hand-written files tolerantly", () => {
+    const parsed = fromMarkdown("# Trip\n\nsome note\n* [X] tent\n- [ ] rope\nnot an item\n\n## Empty one\n_(empty)_\n");
+    expect(parsed).toEqual([
+      { title: "Trip", note: "some note", items: [{ text: "tent", checked: true }, { text: "rope", checked: false }] },
+      { title: "Empty one", items: [] },
+    ]);
+  });
+
+  it("returns nothing for prose without headings or items", () => {
+    expect(fromMarkdown("just words\nmore words")).toEqual([]);
   });
 });
 

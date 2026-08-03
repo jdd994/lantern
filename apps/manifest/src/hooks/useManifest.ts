@@ -23,6 +23,8 @@ import {
   importPrivateKeyB64, unwrapPrivateKey, PBKDF2_ITERATIONS,
   exportKeyRaw, importKeyRaw,
   createRecoveryCircle, approveAsGuardian, reconstructDEK,
+  randomLinkSecret, deriveInviteKeys, linkWrapDEK, linkUnwrapDEK,
+  sha256B64, b64url, fromB64url, toBase64,
 } from "../lib/crypto";
 import * as db from "../lib/db";
 import * as api from "../lib/api";
@@ -31,7 +33,7 @@ import { syncNow as engineSyncNow } from "../lib/sync";
 import {
   cloneList as modelCloneList,
   decodeItem, decodeList, encodeItem, encodeList,
-  nextPosition, toMarkdown, uid,
+  fromMarkdown, itemsFor, nextPosition, toMarkdown, uid,
   type Checklist, type Item,
 } from "../lib/model";
 
@@ -427,6 +429,118 @@ export function useManifest() {
       return e instanceof Error ? e.message : "Couldn't leave just now.";
     }
   }, [shared]);
+
+  // Re-key a shared list: mint a fresh DEK, re-encrypt the list + every item
+  // under it at the next epoch (pushAllToList overwrites in place — the server
+  // keeps one row per record), and re-wrap that DEK to each remaining member.
+  // A removed member holds only the old DEK — which now decrypts nothing new —
+  // so future content stays out of reach. Remaining members detect the epoch
+  // bump on their next sync and re-unwrap transparently.
+  const rotateListDEK = useCallback(async (listId: string) => {
+    const token = tokenRef.current;
+    const entry = strandKeys.current.get(listId);
+    if (!token || !entry) return;
+    const newDek = await generateDEK();
+    const newEpoch = entry.dekEpoch + 1;
+    await pushAllToList(listId, newDek, newEpoch);
+    const { members } = await api.sharedMembers(token, listId);
+    for (const m of members) {
+      if (!m.identityPublicKey) continue;
+      const w = await wrapDEKForRecipient(m.identityPublicKey, newDek);
+      await api.inviteToStrand(token, listId, m.email, w.ephemeralPub, w.wrappedDEK, newEpoch);
+    }
+    strandKeys.current.set(listId, { dek: newDek, dekEpoch: newEpoch });
+  }, [pushAllToList]);
+
+  // Owner removes a member, then re-keys so they can't read anything new.
+  const removeListMember = useCallback(
+    async (listId: string, userId: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token || !strandKeys.current.get(listId)) return "This shared list isn't ready.";
+      try {
+        await api.sharedRemove(token, listId, userId);
+        await rotateListDEK(listId);
+        await syncShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't remove them just now.";
+      }
+    },
+    [rotateListDEK, syncShared]
+  );
+
+  // ---- invite links ----------------------------------------------------------
+
+  // Mint a shareable invite link for a list: a random secret → HKDF wrapKey
+  // (encrypts the list's DEK, opaque to the server) + joinProof (server stores
+  // only its hash). The secret rides in the URL fragment, never sent anywhere.
+  const createListInviteLink = useCallback(
+    async (listId: string): Promise<{ link: string } | { error: string }> => {
+      const token = tokenRef.current;
+      const entry = strandKeys.current.get(listId);
+      if (!token || !entry) return { error: "This list isn't shared yet." };
+      try {
+        const linkSecret = randomLinkSecret();
+        const { wrapKey, joinProof } = await deriveInviteKeys(linkSecret);
+        const inviteId = uid();
+        const wrappedDEK = await linkWrapDEK(wrapKey, entry.dek);
+        const joinProofHash = await sha256B64(joinProof);
+        const expiresAt = Date.now() + 7 * 86_400_000; // 7 days
+        await api.createInviteLink(token, listId, inviteId, wrappedDEK, joinProofHash, entry.dekEpoch, expiresAt, 20);
+        return { link: `${location.origin}/#join=${inviteId}.${b64url(linkSecret)}` };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Couldn't create a link." };
+      }
+    },
+    []
+  );
+
+  const fetchListInvites = useCallback(async (listId: string): Promise<api.InviteInfo[]> => {
+    const token = tokenRef.current;
+    if (!token) return [];
+    try {
+      return (await api.listInvites(token, listId)).invites;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const revokeListInvite = useCallback(async (listId: string, inviteId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not connected.";
+    try {
+      await api.revokeInvite(token, listId, inviteId);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't revoke that link.";
+    }
+  }, []);
+
+  // Redeem an invite link: prove the joinProof → get the wrapped DEK → unwrap
+  // with the link's wrapKey → re-wrap to our own identity → register membership.
+  // Returns the joined list's id, or an error string.
+  const joinViaInvite = useCallback(
+    async (inviteId: string, linkSecretB64: string): Promise<{ listId: string } | { error: string }> => {
+      const token = tokenRef.current;
+      if (!token) return { error: "Connect an account to join." };
+      const kp = await ensureIdentity();
+      if (!kp) return { error: "Sharing isn't ready yet — try again in a moment." };
+      try {
+        const { wrapKey, joinProof } = await deriveInviteKeys(fromB64url(linkSecretB64));
+        const proofB64 = toBase64(joinProof);
+        const claim = await api.joinClaim(token, inviteId, proofB64);
+        const dek = await linkUnwrapDEK(wrapKey, claim.wrappedDEK);
+        const selfPub = await exportPublicKeyB64(kp.publicKey);
+        const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(selfPub, dek);
+        await api.joinFinish(token, inviteId, proofB64, ephemeralPub, wrappedDEK);
+        await syncShared();
+        return { listId: claim.strandId };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Couldn't join with that link." };
+      }
+    },
+    [ensureIdentity, syncShared]
+  );
 
   // ---- unlock lifecycle ------------------------------------------------------
 
@@ -933,7 +1047,7 @@ export function useManifest() {
   );
 
   const updateItem = useCallback(
-    (item: Item, patch: Partial<Pick<Item, "text" | "checked" | "claimedBy">>) => {
+    (item: Item, patch: Partial<Pick<Item, "text" | "checked" | "claimedBy" | "position">>) => {
       const next = stamp({ ...item, ...patch, updatedAt: Date.now() });
       setItems((prev) => prev.map((i) => (i.id === item.id ? next : i)));
       persistItem(next);
@@ -944,6 +1058,21 @@ export function useManifest() {
   const toggleItem = useCallback(
     (item: Item) => updateItem(item, { checked: !item.checked }),
     [updateItem]
+  );
+
+  // Nudge an item up or down among its neighbors (within its checked/unchecked
+  // group — packed things stay settled at the bottom). A swap of positions,
+  // so it syncs as two ordinary item updates.
+  const moveItem = useCallback(
+    (item: Item, dir: -1 | 1) => {
+      const group = itemsFor(item.listId, items).filter((i) => i.checked === item.checked);
+      const idx = group.findIndex((i) => i.id === item.id);
+      const other = group[idx + dir];
+      if (idx === -1 || !other) return;
+      updateItem(item, { position: other.position });
+      updateItem(other, { position: item.position });
+    },
+    [items, updateItem]
   );
 
   // A claim is a volunteering, never an assignment: the only value the app
@@ -984,6 +1113,35 @@ export function useManifest() {
   // Every list as plain Markdown — readable anywhere, forever.
   const exportMarkdown = useCallback((): string => toMarkdown(lists, items), [lists, items]);
 
+  // The way back in. Import adds — it never overwrites and never merges.
+  // Everything lands as fresh private lists under this vault's key.
+  const importMarkdown = useCallback(
+    (text: string): { lists: number; items: number } | string => {
+      if (!keyRef.current) return "Unlock your lists first.";
+      const parsed = fromMarkdown(text);
+      if (!parsed.length) return "No checklists found in that file — headings (##) and - [ ] lines are what count.";
+      const now = Date.now();
+      const newLists: Checklist[] = [];
+      const newItems: Item[] = [];
+      for (const p of parsed) {
+        const l = stamp<Checklist>({ id: uid(), title: p.title || "Imported list", note: p.note, createdAt: now, updatedAt: now });
+        newLists.push(l);
+        p.items.forEach((it, idx) => {
+          newItems.push(stamp<Item>({
+            id: uid(), listId: l.id, text: it.text, checked: it.checked,
+            position: idx + 1, createdAt: now, updatedAt: now,
+          }));
+        });
+      }
+      setLists((prev) => [...prev, ...newLists]);
+      setItems((prev) => [...prev, ...newItems]);
+      for (const l of newLists) persistList(l);
+      for (const i of newItems) persistItem(i);
+      return { lists: newLists.length, items: newItems.length };
+    },
+    [persistList, persistItem, stamp]
+  );
+
   return {
     status,
     lists,
@@ -1005,10 +1163,12 @@ export function useManifest() {
     addItem,
     updateItem,
     toggleItem,
+    moveItem,
     setClaim,
     removeItem,
     duplicateList,
     exportMarkdown,
+    importMarkdown,
     // account & sync
     account,
     syncing,
@@ -1038,7 +1198,13 @@ export function useManifest() {
     shareList,
     inviteToList,
     leaveList,
+    removeListMember,
     syncShared,
+    // invite links
+    createListInviteLink,
+    fetchListInvites,
+    revokeListInvite,
+    joinViaInvite,
   };
 }
 
