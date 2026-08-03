@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allComing, decodeCalendar, decodeHappening, decodeMark, decodeProfile,
   displayName, effectiveEnd, encodeCalendar, encodeHappening, encodeMark,
-  encodeProfile, formatStamp, formatWhen, fromMarkdown, groupByMonth, myMarks,
+  encodeProfile, formatDistance, formatStamp, formatWhen, fromMarkdown, groupByMonth, myMarks,
   shortName, splitAgenda, toMarkdown, whoIsIn,
   type Calendar, type Happening, type Mark, type Profile,
 } from "./model";
@@ -139,6 +139,24 @@ describe("formatWhen", () => {
     const fest = hap({ endsAt: SEP03_1200, allDay: true });
     const { coming } = splitAgenda("c1", [fest], new Date(2026, 8, 2).getTime());
     expect(coming).toHaveLength(1);
+  });
+});
+
+describe("formatDistance", () => {
+  it("speaks in calendar days, not 24-hour buckets", () => {
+    const show = hap({}); // Aug 21, 7:30pm
+    expect(formatDistance(show, new Date(2026, 7, 21, 8, 0).getTime())).toBe("today");
+    // 11pm the night before is still "tomorrow", not "in 20 hours"
+    expect(formatDistance(show, new Date(2026, 7, 20, 23, 0).getTime())).toBe("tomorrow");
+    expect(formatDistance(show, new Date(2026, 7, 16).getTime())).toBe("in 5 days");
+    expect(formatDistance(show, new Date(2026, 6, 21).getTime())).toBe("in 4 weeks");
+    expect(formatDistance(show, new Date(2026, 2, 21).getTime())).toMatch(/in \d+ months/);
+  });
+
+  it("says 'underway' mid-span and nothing in the wake", () => {
+    const fest = hap({ endsAt: SEP03_1200, allDay: true });
+    expect(formatDistance(fest, new Date(2026, 8, 1).getTime())).toBe("underway");
+    expect(formatDistance(hap({}), new Date(2026, 7, 22, 8, 0).getTime())).toBe("");
   });
 });
 

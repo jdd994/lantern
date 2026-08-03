@@ -238,6 +238,11 @@ export default function App() {
           onEditHappening={(h, draft) => a.updateHappening(h, draft)}
           onRemoveHappening={a.removeHappening}
           onSetMark={a.setMark}
+          onImportICS={(text) => {
+            const r = a.importICS(text, { calendarId: calendar.id });
+            if (typeof r === "string") return r;
+            return { added: r.added, skippedRecurring: r.skipped.skippedRecurring, skippedUnreadable: r.skipped.skippedUnreadable };
+          }}
           onOpenShare={() => {
             setShare(true);
             void a.syncShared();

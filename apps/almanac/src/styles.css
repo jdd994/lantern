@@ -188,6 +188,8 @@ input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 .hap-past { opacity: .62; }
 .hap-confirm { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin: 6px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--lamp-dim); }
 .hap-sharenote { font-size: 11.5px; color: var(--ink-faint); align-self: center; }
+.hap-dist { color: var(--ink-faint); }
+.hap-byline { font-size: 11.5px; color: var(--ink-faint); margin-top: 4px; font-style: italic; }
 .item-x { color: var(--ink-faint); font-size: 17px; line-height: 1; padding: 4px 7px; border-radius: 7px; flex-shrink: 0; }
 .item-x:hover { color: var(--clay); background: var(--surface); }
 .item-x:disabled { opacity: .3; cursor: default; }
