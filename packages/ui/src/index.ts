@@ -6,4 +6,5 @@ export { ThemePicker, type ThemeOption } from "./ThemePicker";
 export { TierBadge } from "./TierBadge";
 export { TradeOffCard } from "./TradeOffCard";
 export { CapabilityLedger } from "./CapabilityLedger";
+export { UpdateToast } from "./UpdateToast";
 export type { ConsentEntry } from "@lantern/core/connect";
