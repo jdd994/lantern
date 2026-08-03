@@ -15,7 +15,7 @@ export type { SyncRecord } from "@lantern/core/sync";
 const API_BASE: string = import.meta.env.VITE_MANIFEST_API || "https://manifest-server.jdd994.workers.dev";
 const client = createApiClient(API_BASE);
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Sharing (a list packed together) speaks the same protocol as its siblings'
 // shared strands, kitchens, and family trees.

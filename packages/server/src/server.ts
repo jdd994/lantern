@@ -208,6 +208,16 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
     if (!v) return c.json({ error: "no vault" }, 404);
     const u = await c.env.DB.prepare("SELECT identity_pub FROM users WHERE id = ?")
       .bind(c.get("userId")).first<{ identity_pub: string | null }>();
+    // Paper recovery kit (opaque blob). Read defensively: an app DB that
+    // hasn't run the recovery_kit ALTER yet must still sign people in.
+    let kit: string | null = null;
+    try {
+      const k = await c.env.DB.prepare("SELECT recovery_kit FROM vaults WHERE user_id = ?")
+        .bind(c.get("userId")).first<{ recovery_kit: string | null }>();
+      kit = k?.recovery_kit ?? null;
+    } catch {
+      // column not there yet — the kit just isn't offered server-side
+    }
     return c.json({
       salt: JSON.parse(v.salt),
       verifier: JSON.parse(v.verifier),
@@ -216,6 +226,7 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
       identityPrivWrapped: v.identity_priv_wrapped ? JSON.parse(v.identity_priv_wrapped) : null,
       currency: v.currency ?? null,
       wrappedDEK: v.wrapped_dek ? JSON.parse(v.wrapped_dek) : null,
+      recoveryKit: kit ? JSON.parse(kit) : null,
     });
   });
 
@@ -234,6 +245,26 @@ export function createServer<E extends BaseEnv = BaseEnv>(config: ServerConfig<E
       body.iterations ?? 600000, JSON.stringify(body.wrappedDEK), userId
     ).run();
     if (!res.meta.changes) return c.json({ error: "No vault found." }, 404);
+    return c.json({ ok: true });
+  });
+
+  // The paper recovery kit rides with the vault envelope: an opaque blob (the
+  // DEK wrapped under a key derived from a printed code we never see). null
+  // clears it — the printed page goes dead the moment this row does.
+  app.put("/vault/recovery-kit", requireAuth, async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (body === null || !("kit" in body)) return c.json({ error: "Missing kit (object or null)." }, 400);
+    const kit = body.kit;
+    if (kit !== null && (typeof kit !== "object" || !Array.isArray(kit.salt) || !kit.wrapped)) {
+      return c.json({ error: "Malformed kit." }, 400);
+    }
+    try {
+      const res = await c.env.DB.prepare("UPDATE vaults SET recovery_kit = ? WHERE user_id = ?")
+        .bind(kit ? JSON.stringify(kit) : null, c.get("userId")).run();
+      if (!res.meta.changes) return c.json({ error: "No vault found." }, 404);
+    } catch {
+      return c.json({ error: "This server hasn't been migrated for recovery kits yet." }, 501);
+    }
     return c.json({ ok: true });
   });
 

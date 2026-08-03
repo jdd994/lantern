@@ -33,6 +33,9 @@ export type VaultMetaDTO = {
   identityPrivWrapped?: WrappedKey | null;
   currency?: string | null;
   wrappedDEK?: CipherBlob | null;
+  // Paper recovery kit: the DEK wrapped under a printed code's derived key.
+  // Opaque to the server; shape owned by @lantern/core/kit.
+  recoveryKit?: { salt: number[]; wrapped: CipherBlob; createdAt: number } | null;
 };
 
 export type ReqOpts = { method?: string; token?: string; body?: unknown };
@@ -49,6 +52,7 @@ export type ApiClient = {
   ): Promise<{ token: string; userId: string }>;
   login(email: string, password: string): Promise<{ token: string; userId: string }>;
   fetchVault(token: string): Promise<VaultMetaDTO>;
+  updateRecoveryKit(token: string, kit: { salt: number[]; wrapped: CipherBlob; createdAt: number } | null): Promise<{ ok: true }>;
   updateVault(
     token: string,
     vault: { salt: number[]; verifier: CipherBlob; iterations?: number; wrappedDEK: CipherBlob }
@@ -84,6 +88,7 @@ export function createApiClient(baseUrl: string): ApiClient {
     login: (email, password) => req("/auth/login", { method: "POST", body: { email, password } }),
     fetchVault: (token) => req("/vault", { token }),
     updateVault: (token, vault) => req("/vault", { method: "PUT", token, body: vault }),
+    updateRecoveryKit: (token, kit) => req("/vault/recovery-kit", { method: "PUT", token, body: { kit } }),
     deleteAccount: (token) => req("/me", { method: "DELETE", token }),
     pushChanges: (token, changes) => req("/sync/push", { method: "POST", token, body: { changes } }),
     pullChanges: (token, since) => req(`/sync/pull?since=${since}`, { token }),

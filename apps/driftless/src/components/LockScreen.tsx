@@ -5,6 +5,7 @@ import { parseBackup, type Backup } from "../lib/backup";
 import { Welcome } from "./Welcome";
 import { IosSetupNote } from "./IosSetupNote";
 import { RecoveryFlow } from "./RecoveryFlow";
+import { RecoverWithCode } from "./RecoveryKit";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 type Props = {
@@ -31,6 +32,7 @@ type Props = {
   onPollRecovery: (requestId: string) => Promise<RecoveryRequestPoll | null>;
   onCancelRecovery: (requestId: string) => Promise<string | null>;
   onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
+  onRecoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
 };
 
 // New, unset-up device: show a throwaway pairing code as a QR and poll until
@@ -132,8 +134,10 @@ export function LockScreen({
   onPollRecovery,
   onCancelRecovery,
   onFinishRecovery,
+  onRecoverWithKit,
 }: Props) {
   const [showRecovery, setShowRecovery] = useState(false);
+  const [showKit, setShowKit] = useState(false);
   const [linkingNewDevice, setLinkingNewDevice] = useState(false);
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -479,9 +483,18 @@ export function LockScreen({
             <button className="save-btn lock-btn" disabled={busy} onClick={submit}>
               {busy ? "Working…" : "Unlock"}
             </button>
-            <button className="lock-restore" onClick={() => setShowRecovery(true)}>
-              Forgot your passphrase? Ask your guardians
-            </button>
+            {showKit ? (
+              <RecoverWithCode onRecover={onRecoverWithKit} onBack={() => setShowKit(false)} />
+            ) : (
+              <>
+                <button className="lock-restore" onClick={() => setShowRecovery(true)}>
+                  Forgot your passphrase? Ask your guardians
+                </button>
+                <button className="lock-restore" onClick={() => setShowKit(true)}>
+                  Use a recovery code
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

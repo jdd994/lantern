@@ -100,6 +100,7 @@ import {
   joinFinish,
   deleteAccount as apiDeleteAccount,
   updateVault,
+  updateRecoveryKit,
   downloadMedia,
   deleteMediaRemote,
   uploadSharedMedia,
@@ -125,6 +126,7 @@ import {
   type RecoveryStatus,
   type PendingForMe,
 } from "../lib/api";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
 import { syncNow } from "../lib/sync";
 import {
   uid,
@@ -167,6 +169,8 @@ type LiveShared = {
 
 export function useJournal() {
   const [vaultState, setVaultState] = useState<VaultState>("loading");
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [strands, setStrands] = useState<Strand[]>([]);
   const [dayNotes, setDayNotes] = useState<Record<string, DayNote>>({});
@@ -208,7 +212,10 @@ export function useJournal() {
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
-    getVault().then((v) => setVaultState(v ? "locked" : "needs-setup"));
+    getVault().then((v) => {
+      setVaultState(v ? "locked" : "needs-setup");
+      setRecoveryKitAt(v?.recoveryKit?.createdAt ?? null);
+    });
     biometricSupported().then(setBioSupported);
     getDevice().then((d) => setBioEnrolled(!!d));
     getSyncState().then((s) => {
@@ -613,6 +620,98 @@ export function useJournal() {
   // is re-encrypted, so it's instant and every other device keeps reading its
   // data with the unchanged DEK. Biometric quick-unlock also survives (it wraps
   // the raw DEK). Returns an error message, or null on success.
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock your journal first.";
+    const vault = await getVault();
+    if (!vault) return "No journal on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await getVault();
+    if (!vault) return "No journal on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper here
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the journal and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const meta = await fetchVault(tokenRef.current);
+          if (meta.recoveryKit) {
+            vault = { ...vault, recoveryKit: meta.recoveryKit };
+            await saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This journal has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this journal. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated: VaultMeta = { ...vault, ...fresh };
+      await saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await updateVault(token, {
+            salt: updated.salt,
+            verifier: updated.verifier,
+            iterations: updated.iterations,
+            wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+      }
+      keyRef.current = dek;
+      await loadEntries(dek);
+      await loadStrands(dek);
+      await loadDayNotes(dek);
+      setVaultState("open");
+      void requestDurableStorage();
+      return null;
+    },
+    [loadEntries, loadStrands, loadDayNotes]
+  );
+
   const changePassphrase = useCallback(
     async (current: string, next: string): Promise<string | null> => {
       const dek = keyRef.current;
@@ -1870,8 +1969,10 @@ export function useJournal() {
           verifier: meta.verifier,
           iterations: meta.iterations,
           wrappedDEK: meta.wrappedDEK ?? undefined,
+          recoveryKit: meta.recoveryKit ?? undefined,
           createdAt: Date.now(),
         });
+        setRecoveryKitAt(meta.recoveryKit?.createdAt ?? null);
         tokenRef.current = token;
         await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
         setAccount(em);
@@ -2073,6 +2174,10 @@ export function useJournal() {
     disconnectAccount,
     deleteAccount,
     changePassphrase,
+    recoveryKitAt,
+    createRecoveryKit,
+    removeRecoveryKit,
+    recoverWithKit,
     syncNow: runSync,
     sharedStrands,
     createSharedStrand,

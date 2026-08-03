@@ -190,6 +190,7 @@ export default function App() {
         onPollRecovery={j.pollRecoveryRequest}
         onCancelRecovery={j.cancelRecoveryRequest}
         onFinishRecovery={j.finishRecoveryRequest}
+          onRecoverWithKit={j.recoverWithKit}
       />
     );
   }
@@ -517,6 +518,9 @@ export default function App() {
           onLinkNewDeviceFromScan={j.linkNewDeviceFromScan}
           onCancelDeviceLink={j.cancelDeviceLink}
           onChangePassphrase={j.changePassphrase}
+          recoveryKitAt={j.recoveryKitAt}
+          onCreateRecoveryKit={j.createRecoveryKit}
+          onRemoveRecoveryKit={j.removeRecoveryKit}
           guardianCircle={j.guardianCircle}
           onSetupGuardians={j.setupGuardians}
           recoveryStatus={j.recoveryStatus}

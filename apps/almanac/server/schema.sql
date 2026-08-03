@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS vaults (
   iterations  INTEGER NOT NULL,
   identity_priv_wrapped TEXT,         -- identity private key, wrapped by the vault key (opaque)
   currency    TEXT,                   -- unused by Almanac; kept for a shared server shape
-  wrapped_dek TEXT,                   -- envelope: the data key (DEK) wrapped by the passphrase-derived KEK (opaque)
+  wrapped_dek TEXT,
+  recovery_kit TEXT,                  -- paper recovery kit: DEK wrapped under a printed code's key (opaque)                   -- envelope: the data key (DEK) wrapped by the passphrase-derived KEK (opaque)
   created_at  INTEGER NOT NULL
 );
 

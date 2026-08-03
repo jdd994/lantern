@@ -67,6 +67,43 @@ ciphertext as **`meta`**, its **palette** + vibe presets, its **help copy**, and
 **Changing either would lock users out of existing vaults / biometric enrollments.
 They are frozen forever.**
 
+## Recovery — the ways back in
+
+The passphrase never leaves the device and the server holds only ciphertext, so
+there is **no reset by email** — a reset button would mean the operator could
+read the vault (operator-recoverability and operator-readability are the same
+property). Instead there are three doors, all built in `@lantern/core` and wired
+into every app, presented **bridge-before-cliff** in the UI (lead with the way
+back in, then state the trade as the reason the privacy is real):
+
+1. **Biometric quick unlock** (`core/biometric`) — per-device, opt-in. A
+   platform passkey's PRF secret wraps the DEK; the wrap never syncs. Enrolling
+   two devices is a practical everyday safety net: either device opens the
+   vault if the passphrase slips.
+2. **Guardians — social recovery** (`core/recovery`) — K-of-N people you trust,
+   each holding an encrypted key share unlockable only with their identity key
+   *plus* a codeword told out loud, behind a server-enforced delay window.
+   Recovery ends by **setting a fresh passphrase** (`setPassphraseFromDEK` —
+   the DEK is re-wrapped; nothing is re-encrypted; the old passphrase dies).
+   Guardians must hold accounts on the same app; right for the shared apps,
+   wrong for a solo vault.
+3. **The paper recovery kit** (`core/kit`) — the solo answer, right for a
+   Ballast with no circle. A random 130-bit code (Crockford base32, typo- and
+   case-forgiving) derives a wrapping key; the DEK is wrapped under it and the
+   blob rides with the vault envelope — locally and in the `vaults.recovery_kit`
+   column (`PUT /vault/recovery-kit`, returned by `GET /vault`) — so the code
+   works on a replacement device after sign-in. The code itself exists only on
+   the printed page (`RecoveryKit.tsx`; `window.print()` behind a CSS veil).
+   The page says honestly what it is: anyone holding it can open the vault —
+   the deed to the house. Minting a new kit or removing it retires the old
+   page. The locked-out door ("Use a recovery code" on every lock screen) ends
+   the same way guardians do: code → DEK → verify → fresh passphrase → unlock.
+
+The escalation deliberately **not** built: an operator-held spare key
+("recoverable vault" tier). If real people still bounce off the model, that
+would be offered per-vault at creation as an informed trade-off — never as a
+silent default.
+
 ## What is deliberately NOT shared
 
 - **The account/sync lifecycle hook** (connect / sign-in / disconnect / delete /

@@ -31,6 +31,9 @@ export type VaultMeta = {
   // passphrase) — those migrate on first unlock. Changing the passphrase re-wraps
   // this without re-encrypting any data. See crypto.ts wrapVaultKey.
   wrappedDEK?: CipherBlob;
+  // Paper recovery kit (@lantern/core/kit): DEK wrapped under a printed
+  // code's derived key. Rides with the envelope to the server.
+  recoveryKit?: { salt: number[]; wrapped: CipherBlob; createdAt: number };
 };
 
 export type StoredEntry = {

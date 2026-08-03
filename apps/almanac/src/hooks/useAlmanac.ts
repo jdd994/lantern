@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createVault as makeVault, openVault, rewrapVault, setPassphraseFromDEK, verifyDEK } from "@lantern/core/vault";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
 import { importPublicKeyB64, wrapDEKForRecipient, unwrapDEK } from "@lantern/core/sharing";
 import {
   VERIFIER_TEXT, encryptString, decryptString,
@@ -64,6 +65,8 @@ export function useAlmanac() {
 
   // ---- biometric quick unlock (per-device, opt-in) ----
   const [canBiometric, setCanBiometric] = useState(false);
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [hasBiometric, setHasBiometric] = useState(false);
 
   // ---- account & sync state ----
@@ -104,6 +107,7 @@ export function useAlmanac() {
       ]);
       setCanBiometric(supported);
       setHasBiometric(!!device);
+      setRecoveryKitAt(v?.recoveryKit?.createdAt ?? null);
       if (st?.token) {
         tokenRef.current = st.token;
         setAccount(st.accountEmail ?? null);
@@ -765,7 +769,9 @@ export function useAlmanac() {
             wrappedDEK: dto.wrappedDEK ?? undefined,
             identityPublic: dto.identityPublicKey ?? undefined,
             identityPrivate: dto.identityPrivWrapped ?? undefined,
+            recoveryKit: dto.recoveryKit ?? undefined,
           });
+          setRecoveryKitAt(dto.recoveryKit?.createdAt ?? null);
           setStatus("locked"); // unlocking with the same passphrase pulls the plans down
         }
         await db.saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
@@ -814,6 +820,91 @@ export function useAlmanac() {
 
   // Change the passphrase: the DEK is re-wrapped, nothing is re-encrypted, and
   // if an account is connected the new envelope travels to the server too.
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock first.";
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await db.saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await db.saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper here
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the vault and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await db.getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const dto = await api.fetchVault(tokenRef.current);
+          if (dto.recoveryKit) {
+            vault = { ...vault, recoveryKit: dto.recoveryKit };
+            await db.saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This vault has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this vault. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated = { ...vault, ...fresh };
+      await db.saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server lags until next sync
+        }
+      }
+      await finishUnlock(dek);
+      return null;
+    },
+    [finishUnlock]
+  );
+
   const changePassphrase = useCallback(
     async (current: string, next: string): Promise<string | null> => {
       const dek = keyRef.current;
@@ -1316,6 +1407,10 @@ export function useAlmanac() {
     disconnect,
     deleteAccount: deleteAccountFn,
     changePassphrase,
+    recoveryKitAt,
+    createRecoveryKit,
+    removeRecoveryKit,
+    recoverWithKit,
     syncNow: runSync,
     // guardians & recovery
     guardianCircle,

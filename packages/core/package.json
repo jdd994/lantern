@@ -19,6 +19,7 @@
     "./pairing-api": "./src/pairing-api.ts",
     "./vibe": "./src/vibe.ts",
     "./vibe-relay": "./src/vibe-relay.ts",
-    "./connect": "./src/connect.ts"
+    "./connect": "./src/connect.ts",
+    "./kit": "./src/kit.ts"
   }
 }

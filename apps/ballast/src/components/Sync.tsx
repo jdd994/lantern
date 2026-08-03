@@ -1,3 +1,4 @@
+import { RecoveryKitSection } from "./RecoveryKit";
 // Sync.tsx
 // Turning on cross-device sync — and the one thing that has to be said plainly
 // while doing it: the account and the passphrase are two different secrets doing
@@ -283,6 +284,9 @@ export function Sync({
   onDelete,
   onSyncNow,
   onChangePassphrase,
+  recoveryKitAt,
+  onCreateRecoveryKit,
+  onRemoveRecoveryKit,
   onClose,
   guardianCircle,
   onSetupGuardians,
@@ -303,6 +307,9 @@ export function Sync({
   onDelete: () => Promise<boolean>;
   onSyncNow: () => Promise<void>;
   onChangePassphrase: (current: string, next: string) => Promise<string | null>;
+  recoveryKitAt: number | null;
+  onCreateRecoveryKit: () => Promise<{ code: string } | string>;
+  onRemoveRecoveryKit: () => Promise<string | null>;
   onClose: () => void;
   guardianCircle: RecoveryCircleInfo | null;
   onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
@@ -477,6 +484,17 @@ export function Sync({
         {/* Change-passphrase lives here because this is the vault's account/
             security surface. Only shown when there's a vault on this device. */}
         {canCreate ? <ChangePassphrase onChange={onChangePassphrase} /> : null}
+
+        {/* The paper answer — needs the vault key to mint, but no account and
+            no other people: exactly right for a solo vault. */}
+        {canCreate ? (
+          <RecoveryKitSection
+            appName="Ballast"
+            recoveryKitAt={recoveryKitAt}
+            onCreate={onCreateRecoveryKit}
+            onRemove={onRemoveRecoveryKit}
+          />
+        ) : null}
 
         {/* Guardians need the vault key (to split it), so same gate as above. */}
         {canCreate && account ? (

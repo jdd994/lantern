@@ -15,7 +15,7 @@ export type { SyncRecord } from "@lantern/core/sync";
 const API_BASE: string = import.meta.env.VITE_GROVE_API || "https://grove-server.jdd994.workers.dev";
 const client = createApiClient(API_BASE);
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Sharing (the family's co-authored tree) speaks the same protocol as its
 // siblings' shared strands and kitchens.

@@ -19,7 +19,7 @@ const client = createApiClient(API_BASE);
 // The Driftless-specific JSON endpoints below reuse the shared wrapper.
 const req = client.req;
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Sharing speaks the shared protocol (@lantern/core/sharing-api) — same names the
 // app has always imported, so nothing above this line had to change.

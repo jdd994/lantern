@@ -1,3 +1,4 @@
+import { RecoveryKitSection } from "./RecoveryKit";
 // Settings.tsx
 // "Set the mood" — a calm sheet to pick a warm theme and toggle night-dimming.
 // Same modal shape as HelpSheet. Preview swatches carry their own colors so you
@@ -31,6 +32,9 @@ type Props = {
   onLinkNewDeviceFromScan: (qrText: string) => Promise<string | null>;
   onCancelDeviceLink: (qrText: string) => Promise<string | null>;
   onChangePassphrase: (current: string, next: string) => Promise<string | null>;
+  recoveryKitAt: number | null;
+  onCreateRecoveryKit: () => Promise<{ code: string } | string>;
+  onRemoveRecoveryKit: () => Promise<string | null>;
   guardianCircle: RecoveryCircleInfo | null;
   onSetupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
   recoveryStatus: RecoveryStatus;
@@ -635,6 +639,9 @@ export function Settings({
   onLinkNewDeviceFromScan,
   onCancelDeviceLink,
   onChangePassphrase,
+  recoveryKitAt,
+  onCreateRecoveryKit,
+  onRemoveRecoveryKit,
   guardianCircle,
   onSetupGuardians,
   recoveryStatus,
@@ -715,6 +722,11 @@ export function Settings({
           />
 
           <ChangePassphraseSection onChangePassphrase={onChangePassphrase} />
+          <RecoveryKitSection
+            recoveryKitAt={recoveryKitAt}
+            onCreate={onCreateRecoveryKit}
+            onRemove={onRemoveRecoveryKit}
+          />
 
           <GuardiansSection
             guardianCircle={guardianCircle}
