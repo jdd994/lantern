@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useTheme, useAccent, type ThemeOption } from "@lantern/ui";
+import { useRegisterSW } from "virtual:pwa-register/react";
+import { UpdateToast, useTheme, useAccent, type ThemeOption } from "@lantern/ui";
 import { isTauri } from "./lib/platform";
 import { useAura } from "./hooks/useAura";
 import { comboLabel, groupByRoom, isCombo, type Room } from "./lib/rooms";
@@ -28,6 +29,27 @@ const THEMES: ThemeOption[] = [
 export default function App() {
   const { mood, setMood } = useTheme("aura-mood", THEMES.map((t) => t.id), "warmth");
   const { accent, setAccent, resetAccent } = useAccent("aura-accent");
+  // A new deploy parks behind the service worker until the person says so —
+  // the UpdateToast at the bottom is the whole ceremony. The hourly re-check
+  // matters here more than most apps: the rhythm invites leaving Aura open
+  // for days, and launch-time-only checks would never see a new build.
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => void registration.update(), 60 * 60_000);
+    },
+  });
+  // Rendered in BOTH return branches below — an update offer that hides on the
+  // Welcome screen is an update offer most fresh installs never see.
+  const updateToast = needRefresh ? (
+    <UpdateToast
+      appName="Aura"
+      onRefresh={() => void updateServiceWorker(true)}
+      onDismiss={() => setNeedRefresh(false)}
+    />
+  ) : null;
   const aura = useAura();
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -108,6 +130,7 @@ export default function App() {
             await aura.connect("demo", "demo");
           }}
         />
+        {updateToast}
       </div>
     );
   }
@@ -378,6 +401,7 @@ export default function App() {
           }}
         />
       )}
+      {updateToast}
       {helping && <HelpSheet onClose={() => setHelping(false)} />}
       {settings && (
         <SettingsSheet

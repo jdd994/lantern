@@ -25,7 +25,11 @@ export default defineConfig({
       // to just leave in place for every future Tauri build, so this class of
       // bug can't recur; the browser build below is untouched.
       ...(isTauriBuild ? { selfDestroying: true } : {}),
-      registerType: "autoUpdate",
+      // "prompt": a new build waits until the person says Refresh (the
+      // UpdateToast in App.tsx), instead of silently swapping under them —
+      // and instead of the old autoUpdate behavior where an installed PWA
+      // only caught up after a couple of blind relaunches.
+      registerType: "prompt",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Aura",
