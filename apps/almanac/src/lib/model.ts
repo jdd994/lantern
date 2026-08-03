@@ -226,6 +226,27 @@ export function formatWhen(h: Happening): string {
   return start;
 }
 
+// How far off a plan is, in words a person would use: "today", "tomorrow",
+// "in 5 days", "in 3 weeks", "in 4 months" — and "underway" for a span you're
+// in the middle of. Calendar days, not 24-hour buckets: at 11pm, tomorrow
+// night's show is still "tomorrow". Plain text, never a countdown clock —
+// the book tells you how far, it doesn't tick.
+export function formatDistance(h: Happening, now: number): string {
+  if (effectiveEnd(h) <= now) return ""; // the wake speaks for itself
+  const day = (ms: number) => {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const days = Math.round((day(h.startsAt) - day(now)) / 86_400_000);
+  if (days < 0) return "underway";
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days < 14) return `in ${days} days`;
+  if (days < 60) return `in ${Math.round(days / 7)} weeks`;
+  return `in ${Math.round(days / 30.4)} months`;
+}
+
 // ---- Marks -----------------------------------------------------------------
 
 // Who's in, by name (email), in the order they volunteered. One entry per

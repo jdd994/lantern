@@ -11,8 +11,8 @@
 // handshake with the friends who live in Google or Apple Calendar. The file
 // is made locally and handed over; no service is ever told.
 
-import { useEffect, useState } from "react";
-import { displayName, formatWhen, groupByMonth, splitAgenda, whoIsIn, type Calendar, type Happening, type Mark, type Profile } from "../lib/model";
+import { useEffect, useRef, useState } from "react";
+import { displayName, formatDistance, formatWhen, groupByMonth, splitAgenda, whoIsIn, type Calendar, type Happening, type Mark, type Profile } from "../lib/model";
 import { toICS } from "../lib/ics";
 import type { SharedCalendar } from "../hooks/useAlmanac";
 import { Again, CalendarDown, Pencil, ShareOut } from "./icons";
@@ -60,6 +60,8 @@ function HappeningRow({
   profiles,
   account,
   isShared,
+  now,
+  byline,
   onSetMark,
   onEdit,
   onSameAgain,
@@ -70,6 +72,8 @@ function HappeningRow({
   profiles: Profile[];
   account: string | null;
   isShared: boolean;
+  now: number;
+  byline: string | null; // "found by Jo" — whose hand added it, on shared calendars
   onSetMark: (h: Happening, mine: boolean) => void;
   onEdit: () => void;
   onSameAgain: () => void;
@@ -92,7 +96,10 @@ function HappeningRow({
   return (
     <div className="hap-card">
       <div className="hap-card-head">
-        <span className="hap-when">{formatWhen(h)}</span>
+        <span className="hap-when">
+          {formatWhen(h)}
+          {formatDistance(h, now) ? <span className="hap-dist"> · {formatDistance(h, now)}</span> : null}
+        </span>
         <span className="hap-tools">
           {shareNote ? <span className="hap-sharenote">{shareNote}</span> : null}
           <button className="item-x" onClick={() => void shareText()} title="Share as text — for the group chat" aria-label={`Share ${h.title} as text`}>
@@ -132,6 +139,7 @@ function HappeningRow({
           {h.link.replace(/^https?:\/\//, "")}
         </a>
       ) : null}
+      {byline ? <div className="hap-byline">found by {byline}</div> : null}
       {isShared ? (
         <div className="hap-marks">
           {others.length ? <span className="hap-who">{others.map((w) => displayName(w, profiles)).join(", ")}{others.length === 1 ? " is" : " are"} in</span> : null}
@@ -209,6 +217,7 @@ export function CalendarPage({
   onEditHappening,
   onRemoveHappening,
   onSetMark,
+  onImportICS,
   onOpenShare,
   onRemoveCalendar,
 }: {
@@ -225,6 +234,7 @@ export function CalendarPage({
   onEditHappening: (h: Happening, draft: HappeningDraft) => void;
   onRemoveHappening: (h: Happening) => void;
   onSetMark: (h: Happening, mine: boolean) => void;
+  onImportICS: (text: string) => { added: number; skippedRecurring: number; skippedUnreadable: number } | string;
   onOpenShare: () => void;
   onRemoveCalendar: () => void;
 }) {
@@ -236,6 +246,35 @@ export function CalendarPage({
   const [editing, setEditing] = useState<Happening | null>(null);
   const [again, setAgain] = useState<Happening | null>(null);
   const [showWake, setShowWake] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement | null>(null);
+
+  // A byline, never a score: on a shared calendar, whose hand added a plan —
+  // shown only for other people's, faintly. author is a server userId; the
+  // member list maps it back to an address, profiles to a chosen name.
+  const myUserId = shared?.members.find((m) => m.email === account)?.userId;
+  function bylineFor(h: Happening): string | null {
+    if (!shared || !h.author || h.author === myUserId) return null;
+    const em = shared.members.find((m) => m.userId === h.author)?.email;
+    return em ? displayName(em, profiles) : null;
+  }
+
+  async function importHere(file: File | undefined) {
+    if (!file) return;
+    setImportNote(null);
+    try {
+      const result = onImportICS(await file.text());
+      if (typeof result === "string") setImportNote(result);
+      else {
+        const bits = [`Brought ${result.added} ${result.added === 1 ? "plan" : "plans"} into this calendar.`];
+        if (result.skippedRecurring) bits.push(`${result.skippedRecurring} repeating stayed behind.`);
+        if (result.skippedUnreadable) bits.push(`${result.skippedUnreadable} couldn't be read.`);
+        setImportNote(bits.join(" "));
+      }
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
 
   useEffect(() => {
     setTitle(calendar.title);
@@ -245,6 +284,7 @@ export function CalendarPage({
     setEditing(null);
     setAgain(null);
     setShowWake(false);
+    setImportNote(null);
   }, [calendar.id, calendar.title]);
 
   function rename(e: React.FormEvent) {
@@ -293,7 +333,22 @@ export function CalendarPage({
             Download all (.ics)
           </button>
         ) : null}
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => importRef.current?.click()}
+          title="Bring a Google/Apple .ics export into THIS calendar — read on this device"
+        >
+          Import .ics here
+        </button>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".ics,text/calendar"
+          style={{ display: "none" }}
+          onChange={(e) => void importHere(e.target.files?.[0] ?? undefined)}
+        />
       </div>
+      {importNote ? <p className="hint">{importNote}</p> : null}
 
       {coming.length === 0 ? (
         <p className="hint" style={{ textAlign: "center", padding: "18px 0" }}>
@@ -312,6 +367,8 @@ export function CalendarPage({
                 profiles={profiles}
                 account={account}
                 isShared={!!shared}
+                now={now}
+                byline={bylineFor(h)}
                 onSetMark={onSetMark}
                 onEdit={() => setEditing(h)}
                 onSameAgain={() => setAgain(h)}
