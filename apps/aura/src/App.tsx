@@ -3,6 +3,18 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 import { UpdateToast, useTheme, useAccent, type ThemeOption } from "@lantern/ui";
 import { isTauri } from "./lib/platform";
 import { useAura } from "./hooks/useAura";
+import { useKeeper } from "./hooks/useKeeper";
+import {
+  activeHomeId,
+  addHome,
+  deleteHomeData,
+  listHomes,
+  removeHome,
+  renameHome,
+  setActiveHome,
+  type Home,
+} from "./lib/homes";
+import { HomesSheet } from "./components/HomesSheet";
 import { comboLabel, groupByRoom, isCombo, type Room } from "./lib/rooms";
 import type { CustomVibe } from "./lib/db";
 import { ConnectSheet } from "./components/ConnectSheet";
@@ -50,7 +62,35 @@ export default function App() {
       onDismiss={() => setNeedRefresh(false)}
     />
   ) : null;
-  const aura = useAura();
+  // Homes: which world is on screen. Every other home keeps running through
+  // the keeper — its automations on its own sunset, its rhythm at its own pace.
+  const [homes, setHomes] = useState<Home[]>(() => listHomes());
+  const [homeId, setHomeId] = useState<string>(() => activeHomeId());
+  const [homesOpen, setHomesOpen] = useState(false);
+  const activeHome = homes.find((h) => h.id === homeId) ?? homes[0];
+  const aura = useAura(homeId);
+  useKeeper(homeId, homes);
+
+  function switchHome(id: string) {
+    setActiveHome(id);
+    setHomeId(id);
+  }
+  function handleAddHome(name: string) {
+    const h = addHome(name);
+    setHomes(listHomes());
+    switchHome(h.id);
+  }
+  function handleRenameHome(id: string, name: string) {
+    renameHome(id, name);
+    setHomes(listHomes());
+  }
+  function handleRemoveHome(id: string) {
+    if (id === homeId) return; // the sheet prevents this; belt and suspenders
+    removeHome(id);
+    setHomes(listHomes());
+    void deleteHomeData(id);
+  }
+
   const [connecting, setConnecting] = useState(false);
   const [settings, setSettings] = useState(false);
   const [managingRooms, setManagingRooms] = useState(false);
@@ -138,9 +178,12 @@ export default function App() {
   return (
     <div className="wrap">
       <header className="top">
-        <h1 className="brand">
-          Aura<span>.</span>
-        </h1>
+        <button type="button" className="brand-home" onClick={() => setHomesOpen(true)} title="Homes">
+          <h1 className="brand">
+            Aura<span>.</span>
+          </h1>
+          {homes.length > 1 && <span className="home-tag">⌂ {activeHome.name}</span>}
+        </button>
         <div className="top-actions">
           {aura.connected && (
             <>
@@ -399,6 +442,23 @@ export default function App() {
             setAmbient(false);
             setAmbientRoom(null);
           }}
+        />
+      )}
+      {homesOpen && (
+        <HomesSheet
+          homes={homes}
+          activeId={homeId}
+          onSwitch={(id) => {
+            switchHome(id);
+            setHomesOpen(false);
+          }}
+          onAdd={(name) => {
+            handleAddHome(name);
+            setHomesOpen(false);
+          }}
+          onRename={handleRenameHome}
+          onRemove={handleRemoveHome}
+          onClose={() => setHomesOpen(false)}
         />
       )}
       {updateToast}
