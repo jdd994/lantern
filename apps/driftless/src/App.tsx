@@ -14,6 +14,7 @@ import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { SharedView } from "./components/SharedView";
 import { HelpSheet } from "./components/HelpSheet";
+import { InstallSheet } from "@lantern/ui";
 import { InstallHint } from "./components/InstallHint";
 import { Settings } from "./components/Settings";
 import { Toast, type ToastData } from "./components/Toast";
@@ -66,6 +67,7 @@ export default function App() {
   const [tag, setTag] = useState<string | null>(null);
   const [view, setView] = useState<"stream" | "timeline" | "strands" | "shared">("stream");
   const [help, setHelp] = useState<null | "top" | "support">(null);
+  const [installHelp, setInstallHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
@@ -489,7 +491,17 @@ export default function App() {
           onTag={gather}
         />
       )}
-      {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
+      {help && (
+        <HelpSheet
+          focus={help}
+          onClose={() => setHelp(null)}
+          onInstallHelp={() => {
+            setHelp(null);
+            setInstallHelp(true);
+          }}
+        />
+      )}
+      {installHelp && <InstallSheet appName="Driftless" onClose={() => setInstallHelp(false)} />}
       {showSettings && (
         <Settings
           onClose={() => setShowSettings(false)}

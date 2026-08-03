@@ -1,0 +1,225 @@
+/* Manifest — the chartroom before departure.
+ *
+ * The sixth sibling. Driftless is a lamplit room; Ballast is deep water at
+ * dusk; Hearth is firelight in a warm kitchen; Grove is green-gold hush under
+ * old trees; Aura is the light itself. Manifest is the chartroom the night
+ * before you sail — dark harbor blue, a brass lamp over the paper, everything
+ * laid out and counted before the door.
+ *
+ * No streaks, no percent-done meters, nothing rendered as a score, ever. A
+ * remaining count ("3 to go") is the list doing its one job — remembering —
+ * never a grade. System-native fonts (so font-src 'self' stays absolute) and
+ * inline SVG for icons (never tofu-prone glyphs).
+ */
+
+:root {
+  --bg:        #0D131A;
+  --bg-raised: #121924;
+  --surface:   #17202C;
+  --surface-2: #1D2735;
+  --line:      #263344;
+  --line-soft: #1B253198;
+
+  --ink:       #E3E4DE;
+  --ink-soft:  #A5AFB9;
+  --ink-faint: #67727E;
+
+  /* Lamp — the accent. Brass light over the charts; warmth, never an alarm. */
+  --lamp:      #D9AE62;
+  --lamp-dim:  rgba(217, 174, 98, 0.14);
+
+  /* Rope — the warm working fiber; claims and quiet badges. */
+  --rope:      #B98F63;
+  --clay:      #C98868; /* gentle trouble tone, never alarm-red */
+
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --maxw: 640px;
+  --radius: 12px;
+
+  /* Canonical accent alias for shared @lantern/ui components. */
+  --accent: var(--lamp);
+}
+
+/* ---- Vibes (presets). Default "Chartroom" is the base palette above; these
+   re-tint by overriding a few tokens. Starter set — deeper customization later. ---- */
+:root[data-mood="nightwatch"] {
+  --bg:        #080D13;
+  --bg-raised: #0C121A;
+  --surface:   #111925;
+  --surface-2: #16202E;
+  --line:      #202C3B;
+  --line-soft: #131C2798;
+}
+:root[data-mood="daybreak"] {
+  --bg:        #EDEAE0;
+  --bg-raised: #F5F2E8;
+  --surface:   #FBF8F0;
+  --surface-2: #E8E4D6;
+  --line:      #D3CFBE;
+  --line-soft: #E0DCCC;
+  --ink:       #232B32;
+  --ink-soft:  #4E5A64;
+  --ink-faint: #808A92;
+  --lamp:      #8F6E33;
+  --lamp-dim:  rgba(143, 110, 51, 0.12);
+  --rope:      #8D6B44;
+  --clay:      #B25B41;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  background:
+    radial-gradient(130% 80% at 50% -10%, rgba(217, 174, 98, 0.05), transparent 60%),
+    var(--bg);
+}
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 22px 120px; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+.brand { font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
+.brand span { color: var(--lamp); }
+.top-actions { display: flex; gap: 8px; align-items: center; }
+
+/* buttons */
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+.btn { padding: 9px 15px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-size: 14px; transition: background .15s, color .15s, border-color .15s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn-primary { background: var(--lamp); border-color: var(--lamp); color: #171104; font-weight: 600; }
+.btn-primary:hover:not(:disabled) { background: #E4BF7C; border-color: #E4BF7C; }
+.btn-ghost { background: none; border-color: transparent; color: var(--ink-faint); }
+.btn-ghost:hover:not(:disabled) { color: var(--ink); background: var(--surface); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; border-radius: 4px; }
+
+/* inputs */
+.field { display: block; margin-bottom: 18px; flex: 1; }
+.field > .label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 7px; }
+input[type=text], input[type=password], input[type=email], input[type=number], select, textarea {
+  width: 100%; padding: 11px 13px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--ink); font: inherit; font-size: 15px;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--lamp); box-shadow: 0 0 0 3px var(--lamp-dim); }
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+
+.hint { font-size: 12.5px; color: var(--ink-faint); line-height: 1.55; margin: 0 0 14px; }
+
+/* sections */
+.section { margin-bottom: 30px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.section-title { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-faint); margin: 0; font-weight: 600; }
+
+.empty { padding: 34px 24px; text-align: center; color: var(--ink-faint); font-size: 14px; line-height: 1.7; border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty p { margin: 0 0 18px; }
+.error { padding: 10px 13px; border-radius: var(--radius); background: rgba(201,136,104,.12); border: 1px solid rgba(201,136,104,.28); color: var(--clay); font-size: 13.5px; margin-bottom: 16px; }
+
+/* list rows — every list a doorway */
+.list-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; padding: 13px 14px; margin-bottom: 7px; border-radius: var(--radius); border: 1px solid var(--line-soft); background: var(--bg-raised); text-align: left; transition: border-color .15s, background .15s; }
+.list-row:hover { border-color: var(--lamp); background: var(--surface); }
+.list-title { font-size: 15px; color: var(--ink); }
+.list-meta { display: flex; gap: 9px; align-items: baseline; white-space: nowrap; }
+.list-remaining { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--ink-faint); }
+.badge { font-size: 11px; color: var(--rope); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+
+/* list page */
+.back { margin-bottom: 14px; margin-left: -10px; }
+.list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.list-actions { display: flex; gap: 7px; align-items: center; }
+.list-title-lg { font-size: 24px; font-weight: 500; letter-spacing: -.01em; margin: 0 0 4px; }
+.list-rename { font-size: 12.5px; color: var(--ink-faint); text-decoration: none; }
+.list-rename:hover { color: var(--lamp); text-decoration: underline; }
+.list-note { font-family: var(--serif); font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 14px; }
+
+/* fast capture — the whole point is one thumb at 11pm */
+.add-row { display: flex; gap: 8px; margin: 16px 0 18px; }
+.add-row input { flex: 1; }
+
+/* items — still-to-gather bright, packed settled and quiet */
+.items { display: flex; flex-direction: column; gap: 6px; }
+.items-tools { display: flex; justify-content: flex-end; margin: -6px 2px 8px; font-size: 12.5px; }
+.item-x:disabled { opacity: .3; cursor: default; }
+.item-author { font-size: 11.5px; color: var(--ink-faint); margin-left: 7px; white-space: nowrap; }
+.item-main input[type=text] { padding: 6px 9px; font-size: 15px; }
+.item-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--line-soft); background: var(--bg-raised); }
+.item-main { display: flex; align-items: center; gap: 11px; flex: 1; cursor: pointer; min-width: 0; }
+.item-main input { accent-color: var(--lamp); width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; }
+.item-text { font-size: 15px; color: var(--ink); overflow-wrap: anywhere; }
+.item-done { opacity: .55; }
+.item-done .item-text { text-decoration: line-through; text-decoration-color: var(--ink-faint); color: var(--ink-soft); }
+.item-x { color: var(--ink-faint); font-size: 17px; line-height: 1; padding: 4px 7px; border-radius: 7px; flex-shrink: 0; }
+.item-x:hover { color: var(--clay); background: var(--surface); }
+
+/* claims — volunteered, never assigned */
+.claim { font-size: 12px; color: var(--rope); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; white-space: nowrap; flex-shrink: 0; }
+.claim-offer { color: var(--ink-faint); border-style: dashed; transition: color .15s, border-color .15s; }
+.claim-offer:hover { color: var(--lamp); border-color: var(--lamp); }
+.claim-mine { background: var(--lamp-dim); border-color: transparent; color: var(--lamp); }
+.claim-mine:hover { border-color: var(--lamp); }
+
+/* gate (welcome / lock) */
+.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 26px; }
+.gate-card { width: 100%; max-width: 440px; }
+.gate-brand { font-size: 15px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 26px; }
+.gate-brand span { color: var(--lamp); }
+.gate h2 { font-size: 22px; font-weight: 500; margin: 0 0 12px; letter-spacing: -.01em; }
+.gate p { font-size: 14.5px; line-height: 1.65; color: var(--ink-soft); margin: 0 0 18px; }
+.trade { padding: 15px 17px; border-radius: var(--radius); border: 1px solid var(--line); border-left: 2px solid var(--lamp); background: var(--bg-raised); font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 22px; }
+.trade strong { color: var(--ink); font-weight: 600; }
+
+/* sheets (the card itself comes from @lantern/ui; Sync brings its own modal
+   shell, same classes as the siblings) */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(4, 7, 11, .72); display: flex; align-items: center; justify-content: center; padding: 22px; z-index: 50; }
+.sheet { width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; padding: 24px; border-radius: 16px; border: 1px solid var(--line); background: var(--bg-raised); }
+.sheet h3 { margin: 0 0 16px; font-size: 18px; font-weight: 500; }
+.sheet-actions { display: flex; gap: 9px; justify-content: flex-end; margin-top: 20px; }
+.row { display: flex; gap: 10px; }
+
+/* segmented toggle (new account / sign in) */
+.seg { display: flex; gap: 4px; padding: 3px; margin: 14px 0 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.seg-btn { flex: 1; padding: 7px 10px; border: none; border-radius: 6px; background: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; }
+.seg-btn[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+
+.btn-danger { color: var(--clay); border-color: transparent; }
+.btn-danger:hover:not(:disabled) { background: rgba(201,136,104,.12); }
+.pass-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; }
+.gate-alt { margin-top: 16px; text-align: center; font-size: 13px; color: var(--ink-faint); }
+
+/* members of a shared list */
+.member-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.member-row:last-child { border-bottom: none; }
+.member-email { color: var(--ink); }
+.member-role { font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
+
+.linklike { border: none; background: none; padding: 0; font: inherit; color: var(--lamp); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.linklike:hover { color: var(--ink); }
+
+/* Removing a list — understated, below the everyday controls, gated by a confirm. */
+.danger-zone { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.linklike.danger { color: var(--clay); font-size: 12.5px; text-decoration: none; }
+.linklike.danger:hover { color: var(--ink); text-decoration: underline; }
+
+/* invite banner + link */
+.banner { padding: 10px 13px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg-raised); margin-bottom: 16px; font-size: 13.5px; }
+.invite-link { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; overflow-wrap: anywhere; user-select: all; }
+
+/* settings sheet sections */
+.set-section { margin-bottom: 1.4rem; }
+.set-section:last-of-type { margin-bottom: 0.8rem; }
+.set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
+.set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }

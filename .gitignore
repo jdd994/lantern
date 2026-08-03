@@ -20,3 +20,6 @@ apps/*/vite.config.d.ts
 # Tauri (Rust) build artifacts + generated bindings
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/
+
+# vite-plugin-pwa dev-mode service worker output
+apps/*/dev-dist/

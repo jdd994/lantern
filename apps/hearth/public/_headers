@@ -20,10 +20,14 @@
 #      NOT here, deliberately: Oura (sends no allow-origin), Garmin and Whoop
 #      (both would need a backend that sees PLAINTEXT body data — see
 #      lib/wearable/fitbit.ts).
+#   4. ws://localhost:51774 — the vibe relay (@lantern/vibe-relay), the
+#      same-machine, account-free mood transport (added 2026-07-27; production
+#      was silently blocking it — Grove caught the wart). It can only ever
+#      reach the user's own machine; if the relay isn't running it no-ops.
 # Never an analytics host; there is no analytics, and nothing that could ever see
 # what someone eats.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://hearth-server.jdd994.workers.dev https://world.openfoodfacts.org https://api.fitbit.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://hearth-server.jdd994.workers.dev https://world.openfoodfacts.org https://api.fitbit.com ws://localhost:51774; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

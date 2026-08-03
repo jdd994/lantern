@@ -12,10 +12,12 @@ export const MOODS: ThemeOption[] = [
 export function SettingsSheet({
   mood,
   onMood,
+  onInstallHelp,
   onClose,
 }: {
   mood: string;
   onMood: (id: string) => void;
+  onInstallHelp: () => void;
   onClose: () => void;
 }) {
   return (
@@ -26,6 +28,14 @@ export function SettingsSheet({
         <h4 className="set-head">Vibe</h4>
         <p className="hint">Pick the look that feels right — calm at any hour. Saved on this device.</p>
         <ThemePicker options={MOODS} current={mood} onSelect={onMood} />
+      </section>
+
+      <section className="set-section">
+        <h4 className="set-head">Keep Ballast close</h4>
+        <p className="hint">
+          Ballast can live on your home screen like any app.{" "}
+          <button type="button" className="linklike" onClick={onInstallHelp}>How to install, step by step</button>
+        </p>
       </section>
 
       <section className="set-section">

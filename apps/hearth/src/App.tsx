@@ -15,7 +15,7 @@ import { Kitchens } from "./components/Kitchens";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Gear } from "./components/icons";
-import { useTheme } from "@lantern/ui";
+import { InstallSheet, useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
 
 function timeLabel(at: number): string {
@@ -43,6 +43,7 @@ export default function App() {
   const [weekOf, setWeekOf] = useState(() => Date.now());
   const [planningDay, setPlanningDay] = useState<number | null>(null);
   const [settings, setSettings] = useState(false);
+  const [installHelp, setInstallHelp] = useState(false);
   const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
   const relayRef = useRef<VibeRelayHandle | null>(null);
   useEffect(() => {
@@ -256,8 +257,17 @@ export default function App() {
       ) : null}
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
       {settings ? (
-        <SettingsSheet mood={mood} onMood={handleMood} onClose={() => setSettings(false)} />
+        <SettingsSheet
+          mood={mood}
+          onMood={handleMood}
+          onInstallHelp={() => {
+            setSettings(false);
+            setInstallHelp(true);
+          }}
+          onClose={() => setSettings(false)}
+        />
       ) : null}
+      {installHelp ? <InstallSheet appName="Hearth" onClose={() => setInstallHelp(false)} /> : null}
       {sync ? (
         <Sync
           account={h.account}
