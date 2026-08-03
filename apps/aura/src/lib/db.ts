@@ -4,15 +4,21 @@
 // Its data lives in IndexedDB: connected sources (+ their credential), a device
 // cache, and your scenes.
 //
+// Multi-home: each home is its own database (see lib/homes.ts for naming), and
+// `forHome(dbName)` hands back that home's store functions. The first home keeps
+// the original "aura" database, so existing setups carry over untouched.
+//
 // The API key is encrypted at rest with a device-local AES-GCM key that is
-// generated once, marked non-extractable, and kept in the `keyring` store. Because
-// it's non-extractable, its raw bytes never exist in JS and can't be exported —
-// yet it survives reloads (CryptoKey objects are structured-cloneable into
-// IndexedDB). Honest threat model: this defends against passive inspection or
-// exfiltration of the database (a devtools dump, a profile backup) — those yield
-// ciphertext, not a usable key. It does NOT defend against code running on this
-// origin (which could ask the key to decrypt); no client-only scheme can, without
-// a passphrase we've deliberately chosen not to demand. It raises the floor from
+// generated once, marked non-extractable, and kept in the `keyring` store of the
+// ORIGINAL database — one device key for every home, so a credential connected
+// in two homes doesn't mint two keys. Because it's non-extractable, its raw
+// bytes never exist in JS and can't be exported — yet it survives reloads
+// (CryptoKey objects are structured-cloneable into IndexedDB). Honest threat
+// model: this defends against passive inspection or exfiltration of the
+// database (a devtools dump, a profile backup) — those yield ciphertext, not a
+// usable key. It does NOT defend against code running on this origin (which
+// could ask the key to decrypt); no client-only scheme can, without a
+// passphrase we've deliberately chosen not to demand. It raises the floor from
 // "plaintext key sitting in the DB" without adding friction.
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
@@ -22,6 +28,7 @@ import type { Automation } from "./automations";
 import type { Color } from "./connectors";
 
 export const DB_VERSION = 6;
+const KEYRING_DB = "aura"; // the one shared keyring lives in the original db
 
 // A user-made vibe: a named color mood you can apply like the built-in ones.
 export type CustomVibe = { id: string; label: string; rgb: Color; brightness: number; createdAt: number };
@@ -61,10 +68,11 @@ interface AuraDB extends DBSchema {
   deviceNames: { key: string; value: { id: string; name: string } };
 }
 
-let dbPromise: Promise<IDBPDatabase<AuraDB>> | null = null;
-function db() {
-  if (!dbPromise) {
-    dbPromise = openDB<AuraDB>("aura", DB_VERSION, {
+const dbPromises = new Map<string, Promise<IDBPDatabase<AuraDB>>>();
+function open(dbName: string) {
+  let p = dbPromises.get(dbName);
+  if (!p) {
+    p = openDB<AuraDB>(dbName, DB_VERSION, {
       upgrade(d, oldVersion) {
         if (oldVersion < 1) {
           d.createObjectStore("sources", { keyPath: "id" });
@@ -88,14 +96,15 @@ function db() {
         }
       },
     });
+    dbPromises.set(dbName, p);
   }
-  return dbPromise;
+  return p;
 }
 
 // ---- device key (for encrypting credentials at rest) ---------------------
 const KEYRING_ID = "device";
 async function deviceKey(): Promise<CryptoKey> {
-  const d = await db();
+  const d = await open(KEYRING_DB);
   const existing = await d.get("keyring", KEYRING_ID);
   if (existing) return existing.key;
   // Non-extractable: the raw bytes can never leave the browser, but the key still
@@ -123,113 +132,134 @@ async function decCred(enc: EncCred): Promise<string> {
   return new TextDecoder().decode(pt);
 }
 
-// ---- sources -------------------------------------------------------------
-export async function allSources(): Promise<StoredSource[]> {
-  const recs = await (await db()).getAll("sources");
-  const out: StoredSource[] = [];
-  for (const r of recs) {
-    let cred = "";
-    if (r.enc) {
-      try {
-        cred = await decCred(r.enc);
-      } catch {
-        cred = ""; // key gone or record tampered — treat as unusable, not a crash
+// One home's stores, bound to its database.
+export function forHome(dbName: string) {
+  const db = () => open(dbName);
+  return {
+    // ---- sources ---------------------------------------------------------
+    async allSources(): Promise<StoredSource[]> {
+      const recs = await (await db()).getAll("sources");
+      const out: StoredSource[] = [];
+      for (const r of recs) {
+        let cred = "";
+        if (r.enc) {
+          try {
+            cred = await decCred(r.enc);
+          } catch {
+            cred = ""; // key gone or record tampered — treat as unusable, not a crash
+          }
+        } else if (typeof r.cred === "string") {
+          cred = r.cred; // legacy plaintext; re-wrapped on next putSource
+        }
+        out.push({ id: r.id, cred, connectedAt: r.connectedAt });
       }
-    } else if (typeof r.cred === "string") {
-      cred = r.cred; // legacy plaintext; re-wrapped on next putSource
-    }
-    out.push({ id: r.id, cred, connectedAt: r.connectedAt });
+      return out;
+    },
+    async putSource(s: StoredSource): Promise<void> {
+      const rec: SourceRecord = { id: s.id, connectedAt: s.connectedAt, enc: await encCred(s.cred) };
+      await (await db()).put("sources", rec);
+    },
+    async deleteSource(id: string): Promise<void> {
+      await (await db()).delete("sources", id);
+    },
+
+    // ---- devices (cache) -------------------------------------------------
+    async allDevices(): Promise<Device[]> {
+      return (await db()).getAll("devices");
+    },
+    async replaceDevicesForSource(sourceId: string, devices: Device[]): Promise<void> {
+      const d = await db();
+      const tx = d.transaction("devices", "readwrite");
+      for (const existing of await tx.store.getAll()) {
+        if (existing.sourceId === sourceId) await tx.store.delete(existing.id);
+      }
+      for (const dev of devices) await tx.store.put(dev);
+      await tx.done;
+    },
+    async deleteDevicesForSource(sourceId: string): Promise<void> {
+      const d = await db();
+      const tx = d.transaction("devices", "readwrite");
+      for (const existing of await tx.store.getAll()) {
+        if (existing.sourceId === sourceId) await tx.store.delete(existing.id);
+      }
+      await tx.done;
+    },
+
+    // ---- scenes ----------------------------------------------------------
+    async allScenes(): Promise<StoredScene[]> {
+      return (await db()).getAll("scenes");
+    },
+    async putScene(s: StoredScene): Promise<void> {
+      await (await db()).put("scenes", s);
+    },
+    async deleteScene(id: string): Promise<void> {
+      await (await db()).delete("scenes", id);
+    },
+
+    // ---- rooms -----------------------------------------------------------
+    async allRooms(): Promise<Room[]> {
+      return (await db()).getAll("rooms");
+    },
+    async putRoom(r: Room): Promise<void> {
+      await (await db()).put("rooms", r);
+    },
+    async putRooms(rs: Room[]): Promise<void> {
+      const d = await db();
+      const tx = d.transaction("rooms", "readwrite");
+      for (const r of rs) await tx.store.put(r);
+      await tx.done;
+    },
+    async deleteRoom(id: string): Promise<void> {
+      await (await db()).delete("rooms", id);
+    },
+
+    // ---- automations -----------------------------------------------------
+    async allAutomations(): Promise<Automation[]> {
+      return (await db()).getAll("automations");
+    },
+    async putAutomation(a: Automation): Promise<void> {
+      await (await db()).put("automations", a);
+    },
+    async deleteAutomation(id: string): Promise<void> {
+      await (await db()).delete("automations", id);
+    },
+
+    // ---- custom vibes ----------------------------------------------------
+    async allCustomVibes(): Promise<CustomVibe[]> {
+      return (await db()).getAll("customVibes");
+    },
+    async putCustomVibe(v: CustomVibe): Promise<void> {
+      await (await db()).put("customVibes", v);
+    },
+    async deleteCustomVibe(id: string): Promise<void> {
+      await (await db()).delete("customVibes", id);
+    },
+
+    // ---- device names (your own name for a light) ------------------------
+    async allDeviceNames(): Promise<Record<string, string>> {
+      const recs = await (await db()).getAll("deviceNames");
+      return Object.fromEntries(recs.map((r) => [r.id, r.name]));
+    },
+    async putDeviceName(id: string, name: string): Promise<void> {
+      await (await db()).put("deviceNames", { id, name });
+    },
+    async deleteDeviceName(id: string): Promise<void> {
+      await (await db()).delete("deviceNames", id);
+    },
+  };
+}
+
+export type HomeDb = ReturnType<typeof forHome>;
+
+// Close (and forget) a home's cached connection — an open handle would block
+// indexedDB.deleteDatabase forever when a home is erased.
+export async function closeHome(dbName: string): Promise<void> {
+  const p = dbPromises.get(dbName);
+  if (!p) return;
+  dbPromises.delete(dbName);
+  try {
+    (await p).close();
+  } catch {
+    /* already closed */
   }
-  return out;
-}
-export async function putSource(s: StoredSource): Promise<void> {
-  const rec: SourceRecord = { id: s.id, connectedAt: s.connectedAt, enc: await encCred(s.cred) };
-  await (await db()).put("sources", rec);
-}
-export async function deleteSource(id: string): Promise<void> {
-  await (await db()).delete("sources", id);
-}
-
-// ---- devices (cache) -----------------------------------------------------
-export async function allDevices(): Promise<Device[]> {
-  return (await db()).getAll("devices");
-}
-export async function replaceDevicesForSource(sourceId: string, devices: Device[]): Promise<void> {
-  const d = await db();
-  const tx = d.transaction("devices", "readwrite");
-  for (const existing of await tx.store.getAll()) {
-    if (existing.sourceId === sourceId) await tx.store.delete(existing.id);
-  }
-  for (const dev of devices) await tx.store.put(dev);
-  await tx.done;
-}
-export async function deleteDevicesForSource(sourceId: string): Promise<void> {
-  const d = await db();
-  const tx = d.transaction("devices", "readwrite");
-  for (const existing of await tx.store.getAll()) {
-    if (existing.sourceId === sourceId) await tx.store.delete(existing.id);
-  }
-  await tx.done;
-}
-
-// ---- scenes --------------------------------------------------------------
-export async function allScenes(): Promise<StoredScene[]> {
-  return (await db()).getAll("scenes");
-}
-export async function putScene(s: StoredScene): Promise<void> {
-  await (await db()).put("scenes", s);
-}
-export async function deleteScene(id: string): Promise<void> {
-  await (await db()).delete("scenes", id);
-}
-
-// ---- rooms ---------------------------------------------------------------
-export async function allRooms(): Promise<Room[]> {
-  return (await db()).getAll("rooms");
-}
-export async function putRoom(r: Room): Promise<void> {
-  await (await db()).put("rooms", r);
-}
-export async function putRooms(rs: Room[]): Promise<void> {
-  const d = await db();
-  const tx = d.transaction("rooms", "readwrite");
-  for (const r of rs) await tx.store.put(r);
-  await tx.done;
-}
-export async function deleteRoom(id: string): Promise<void> {
-  await (await db()).delete("rooms", id);
-}
-
-// ---- automations ---------------------------------------------------------
-export async function allAutomations(): Promise<Automation[]> {
-  return (await db()).getAll("automations");
-}
-export async function putAutomation(a: Automation): Promise<void> {
-  await (await db()).put("automations", a);
-}
-export async function deleteAutomation(id: string): Promise<void> {
-  await (await db()).delete("automations", id);
-}
-
-// ---- custom vibes --------------------------------------------------------
-export async function allCustomVibes(): Promise<CustomVibe[]> {
-  return (await db()).getAll("customVibes");
-}
-export async function putCustomVibe(v: CustomVibe): Promise<void> {
-  await (await db()).put("customVibes", v);
-}
-export async function deleteCustomVibe(id: string): Promise<void> {
-  await (await db()).delete("customVibes", id);
-}
-
-// ---- device names (your own name for a light) -----------------------------
-export async function allDeviceNames(): Promise<Record<string, string>> {
-  const recs = await (await db()).getAll("deviceNames");
-  return Object.fromEntries(recs.map((r) => [r.id, r.name]));
-}
-export async function putDeviceName(id: string, name: string): Promise<void> {
-  await (await db()).put("deviceNames", { id, name });
-}
-export async function deleteDeviceName(id: string): Promise<void> {
-  await (await db()).delete("deviceNames", id);
 }
