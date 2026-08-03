@@ -1,3 +1,4 @@
+import { useRegisterSW } from "virtual:pwa-register/react";
 import { useEffect, useRef, useState } from "react";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useLedger } from "./hooks/useLedger";
@@ -15,7 +16,7 @@ import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { InstallHint } from "./components/InstallHint";
 import { Heart, Gear } from "./components/icons";
-import { InstallSheet, useTheme } from "@lantern/ui";
+import { InstallSheet, UpdateToast, useTheme } from "@lantern/ui";
 import type { SnapshotContent } from "./lib/ledger";
 import type { Transaction } from "./lib/spend";
 
@@ -61,6 +62,26 @@ export default function App() {
     setReceipt(await l.loadReceipt(mediaId));
   }
 
+  // A new deploy parks behind the service worker until the person says so —
+  // the shared UpdateToast (@lantern/ui) is the whole ceremony. Rendered in
+  // every return branch below, locked screens included: an update offer that
+  // hides behind the vault is one most people never see.
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => void registration.update(), 60 * 60_000);
+    },
+  });
+  const updateToast = needRefresh ? (
+    <UpdateToast
+      appName="Ballast"
+      onRefresh={() => void updateServiceWorker(true)}
+      onDismiss={() => setNeedRefresh(false)}
+    />
+  ) : null;
+
   if (l.status === "loading") return null;
 
   if (l.status === "setup") {
@@ -88,12 +109,14 @@ export default function App() {
             onApproveGuardianRequest={l.approveGuardianRequest}
           />
         ) : null}
+        {updateToast}
       </>
     );
   }
 
   if (l.status === "locked") {
     return (
+      <>
       <LockScreen
         onUnlock={l.unlock}
         onBiometric={l.unlockWithBiometric}
@@ -110,6 +133,8 @@ export default function App() {
         onCancelRecovery={l.cancelRecoveryRequest}
         onFinishRecovery={l.finishRecoveryRequest}
       />
+      {updateToast}
+      </>
     );
   }
 
@@ -350,6 +375,7 @@ export default function App() {
           onClose={() => setUpdating(null)}
         />
       ) : null}
+      {updateToast}
     </div>
   );
 }
