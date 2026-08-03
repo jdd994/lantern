@@ -11,6 +11,18 @@ import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Sync } from "./components/Sync";
 import { ShareSheet } from "./components/ShareSheet";
 import { Gear } from "./components/icons";
+import { type Profile } from "./lib/model";
+
+// The raw name this account chose (not the fallback) — what the input shows.
+function rawMyName(account: string | null, profiles: Profile[]): string {
+  if (!account) return "";
+  let best: Profile | undefined;
+  for (const p of profiles) {
+    if (p.who !== account) continue;
+    if (!best || p.updatedAt > best.updatedAt) best = p;
+  }
+  return best?.name ?? "";
+}
 
 // Almanac's moods, loosely mapped to the shared @lantern/core vibe vocabulary —
 // only for announcing a pick over the local relay so e.g. Aura's lights can
@@ -215,6 +227,7 @@ export default function App() {
           calendar={calendar}
           happenings={a.happenings}
           marks={a.marks}
+          profiles={a.profiles}
           shared={a.shared[calendar.id]}
           account={a.account}
           now={now}
@@ -238,6 +251,7 @@ export default function App() {
           calendars={a.calendars}
           happenings={a.happenings}
           marks={a.marks}
+          profiles={a.profiles}
           shared={a.shared}
           now={now}
           onOpen={setSelected}
@@ -259,6 +273,9 @@ export default function App() {
         <SettingsSheet
           mood={mood}
           onMood={handleMood}
+          account={a.account}
+          myName={rawMyName(a.account, a.profiles)}
+          onSetName={a.setMyName}
           onExport={a.exportMarkdown}
           onImport={a.importMarkdown}
           onImportICS={a.importICS}
@@ -273,6 +290,7 @@ export default function App() {
       {share && calendar ? (
         <ShareSheet
           calendar={calendar}
+          profiles={a.profiles}
           account={a.account}
           shared={a.shared[calendar.id]}
           sharedBusy={a.sharedBusy}

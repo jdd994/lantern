@@ -5,12 +5,13 @@
 
 import { useEffect, useState } from "react";
 import { Sheet } from "@lantern/ui";
-import type { Calendar } from "../lib/model";
+import { displayName, shortName, type Calendar, type Profile } from "../lib/model";
 import type { InviteInfo } from "../lib/api";
 import type { SharedCalendar } from "../hooks/useAlmanac";
 
 export function ShareSheet({
   calendar,
+  profiles,
   account,
   shared,
   sharedBusy,
@@ -27,6 +28,7 @@ export function ShareSheet({
   onClose,
 }: {
   calendar: Calendar;
+  profiles: Profile[];
   account: string | null;
   shared: SharedCalendar | undefined;
   sharedBusy: boolean;
@@ -179,7 +181,14 @@ export function ShareSheet({
               <h4 className="set-head">Who keeps it</h4>
               {shared.members.map((m) => (
                 <div key={m.userId} className="member-row">
-                  <span className="member-email">{m.email}</span>
+                  <span className="member-email">
+                    {displayName(m.email, profiles)}
+                    {displayName(m.email, profiles) !== shortName(m.email) ? (
+                      <span className="member-addr"> {m.email}</span>
+                    ) : (
+                      <span className="member-addr"> @{m.email.split("@")[1] ?? ""}</span>
+                    )}
+                  </span>
                   <span style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                     <span className="member-role">{m.role}</span>
                     {iAmOwner && m.email !== account ? (

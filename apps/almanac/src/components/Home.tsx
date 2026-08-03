@@ -4,17 +4,14 @@
 // never a "busy score", and an empty month is a month at peace, not a gap
 // to fill.
 
-import { allComing, formatWhen, groupByMonth, whoIsIn, type Calendar, type Happening, type Mark } from "../lib/model";
+import { allComing, displayName, formatWhen, groupByMonth, whoIsIn, type Calendar, type Happening, type Mark, type Profile } from "../lib/model";
 import type { SharedCalendar } from "../hooks/useAlmanac";
-
-function shortName(email: string): string {
-  return email.split("@")[0] || email;
-}
 
 export function Home({
   calendars,
   happenings,
   marks,
+  profiles,
   shared,
   now,
   onOpen,
@@ -24,6 +21,7 @@ export function Home({
   calendars: Calendar[];
   happenings: Happening[];
   marks: Mark[];
+  profiles: Profile[];
   shared: Record<string, SharedCalendar>;
   now: number;
   onOpen: (id: string) => void;
@@ -68,7 +66,7 @@ export function Home({
                       <span className="hap-title">{h.title || "Untitled"}</span>
                       <span className="hap-meta">
                         {calendars.length > 1 ? <span className="hap-cal">{calTitle.get(h.calendarId)}</span> : null}
-                        {who.length ? <span className="hap-who">{who.map(shortName).join(", ")}</span> : null}
+                        {who.length ? <span className="hap-who">{who.map((w) => displayName(w, profiles)).join(", ")}</span> : null}
                       </span>
                     </span>
                   </button>

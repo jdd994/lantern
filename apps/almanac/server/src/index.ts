@@ -59,7 +59,7 @@ async function deleteAlmanacAccount(c: ServerContext<Env>, userId: string): Prom
 }
 
 const app = createServer<Env>({
-  kinds: ["calendar", "happening", "mark"],
+  kinds: ["calendar", "happening", "mark", "profile"],
   service: "almanac-server",
   // /shared/*, /identity and /keys come from @lantern/server — a shared
   // calendar rides the same machinery as a shared strand, kitchen, list, or

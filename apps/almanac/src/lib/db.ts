@@ -13,7 +13,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob, WrappedKey } from "./crypto";
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export type VaultMeta = {
   id: "vault";
@@ -46,6 +46,8 @@ export type StoredCalendar = Syncable & { content: CipherBlob };
 export type StoredHappening = Syncable & { content: CipherBlob };
 // content encrypts an encodeMark payload (happeningId, who).
 export type StoredMark = Syncable & { content: CipherBlob };
+// content encrypts an encodeProfile payload (who, name).
+export type StoredProfile = Syncable & { content: CipherBlob };
 
 export type SyncState = { id: "state"; cursor: number; token?: string; accountEmail?: string };
 
@@ -71,6 +73,7 @@ interface AlmanacDB extends DBSchema {
   calendars: { key: string; value: StoredCalendar };
   happenings: { key: string; value: StoredHappening };
   marks: { key: string; value: StoredMark };
+  profiles: { key: string; value: StoredProfile };
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
   recoverySession: { key: string; value: RecoverySession };
@@ -90,6 +93,10 @@ function db() {
           database.createObjectStore("sync", { keyPath: "id" });
           database.createObjectStore("device", { keyPath: "id" });
           database.createObjectStore("recoverySession", { keyPath: "id" });
+        }
+        // v2: names arrive — "call me Jo" travels with the plans.
+        if (oldVersion < 2) {
+          database.createObjectStore("profiles", { keyPath: "id" });
         }
       },
     });
@@ -123,6 +130,12 @@ export async function allMarks(): Promise<StoredMark[]> {
 }
 export async function putMark(m: StoredMark): Promise<void> {
   await (await db()).put("marks", m);
+}
+export async function allProfiles(): Promise<StoredProfile[]> {
+  return (await db()).getAll("profiles");
+}
+export async function putProfile(p: StoredProfile): Promise<void> {
+  await (await db()).put("profiles", p);
 }
 
 // ---- sync + device -------------------------------------------------------
@@ -158,14 +171,15 @@ export async function clearRecoverySession(): Promise<void> {
 // These map a kind to its store and give get/put/clear-dirty/mark-all by
 // kind, so lib/sync.ts stays small.
 
-export type SyncKind = "calendar" | "happening" | "mark";
-export type AnyStored = StoredCalendar | StoredHappening | StoredMark;
-const KIND_STORE: Record<SyncKind, "calendars" | "happenings" | "marks"> = {
+export type SyncKind = "calendar" | "happening" | "mark" | "profile";
+export type AnyStored = StoredCalendar | StoredHappening | StoredMark | StoredProfile;
+const KIND_STORE: Record<SyncKind, "calendars" | "happenings" | "marks" | "profiles"> = {
   calendar: "calendars",
   happening: "happenings",
   mark: "marks",
+  profile: "profiles",
 };
-export const SYNC_KINDS: SyncKind[] = ["calendar", "happening", "mark"];
+export const SYNC_KINDS: SyncKind[] = ["calendar", "happening", "mark", "profile"];
 
 export async function getStoredByKind(kind: SyncKind, id: string): Promise<AnyStored | undefined> {
   return (await db()).get(KIND_STORE[kind], id);
@@ -202,7 +216,7 @@ export async function markAllDirty(): Promise<void> {
   }
 }
 
-const ALL_STORES = ["vault", "calendars", "happenings", "marks", "sync", "device", "recoverySession"] as const;
+const ALL_STORES = ["vault", "calendars", "happenings", "marks", "profiles", "sync", "device", "recoverySession"] as const;
 
 // Wipe everything (forget this device). Without the passphrase nothing
 // readable remains anywhere anyway.

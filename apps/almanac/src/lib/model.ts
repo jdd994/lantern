@@ -53,6 +53,21 @@ export type Mark = {
   author?: string;
 };
 
+// ---- Profiles --------------------------------------------------------------
+// "Call me Jo." A self-chosen display name, one record per person, authored
+// only by its owner — the same own-hand-only ethic as a Mark. It rides inside
+// the ciphertext to every calendar the person keeps, so friends see a name
+// instead of an email stem. Never required: with no profile, the email's
+// first half stands in.
+export type Profile = {
+  id: string;
+  who: string; // account email this name belongs to
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  author?: string;
+};
+
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -75,6 +90,11 @@ export function encodeHappening(h: Happening): string {
 export function encodeMark(m: Mark): string {
   const { id: _id, createdAt: _c, updatedAt: _u, ...body } = m;
   return JSON.stringify({ __almanac: 1, t: "mark", ...body });
+}
+
+export function encodeProfile(p: Profile): string {
+  const { id: _id, createdAt: _c, updatedAt: _u, ...body } = p;
+  return JSON.stringify({ __almanac: 1, t: "profile", ...body });
 }
 
 type Shell = { id: string; createdAt: number; updatedAt: number };
@@ -111,6 +131,16 @@ export function decodeMark(decrypted: string, shell: Shell): Mark {
     ...shell,
     happeningId: typeof o.happeningId === "string" ? o.happeningId : "",
     who: typeof o.who === "string" ? o.who : "",
+    author: typeof o.author === "string" ? o.author : undefined,
+  };
+}
+
+export function decodeProfile(decrypted: string, shell: Shell): Profile {
+  const o = parseAlmanac(decrypted, "profile");
+  return {
+    ...shell,
+    who: typeof o.who === "string" ? o.who : "",
+    name: typeof o.name === "string" ? o.name : "",
     author: typeof o.author === "string" ? o.author : undefined,
   };
 }
@@ -206,6 +236,24 @@ export function whoIsIn(happeningId: string, marks: Mark[]): string[] {
 // "actually, I can't make it".
 export function myMarks(happeningId: string, who: string, marks: Mark[]): Mark[] {
   return marks.filter((m) => m.happeningId === happeningId && m.who === who);
+}
+
+// ---- Names -----------------------------------------------------------------
+
+// them@example.com → "them" — the stand-in when no name was chosen.
+export function shortName(email: string): string {
+  return email.split("@")[0] || email;
+}
+
+// The name a person asked to be called: their freshest profile record, or the
+// email stem. Two devices may each hold a record — latest word wins.
+export function displayName(email: string, profiles: Profile[]): string {
+  let best: Profile | undefined;
+  for (const p of profiles) {
+    if (p.who !== email || !p.name.trim()) continue;
+    if (!best || p.updatedAt > best.updatedAt) best = p;
+  }
+  return best ? best.name.trim() : shortName(email);
 }
 
 // ---- Portability -----------------------------------------------------------

@@ -12,15 +12,11 @@
 // is made locally and handed over; no service is ever told.
 
 import { useEffect, useState } from "react";
-import { formatWhen, groupByMonth, splitAgenda, whoIsIn, type Calendar, type Happening, type Mark } from "../lib/model";
+import { displayName, formatWhen, groupByMonth, splitAgenda, whoIsIn, type Calendar, type Happening, type Mark, type Profile } from "../lib/model";
 import { toICS } from "../lib/ics";
 import type { SharedCalendar } from "../hooks/useAlmanac";
 import { CalendarDown, Pencil } from "./icons";
 import { HappeningForm, type HappeningDraft } from "./HappeningForm";
-
-function shortName(email: string): string {
-  return email.split("@")[0] || email;
-}
 
 // data: URL, not blob: — the CSP-safe download pattern shared with the siblings.
 function downloadICS(filename: string, text: string) {
@@ -33,6 +29,7 @@ function downloadICS(filename: string, text: string) {
 function HappeningRow({
   h,
   marks,
+  profiles,
   account,
   isShared,
   onSetMark,
@@ -41,6 +38,7 @@ function HappeningRow({
 }: {
   h: Happening;
   marks: Mark[];
+  profiles: Profile[];
   account: string | null;
   isShared: boolean;
   onSetMark: (h: Happening, mine: boolean) => void;
@@ -80,7 +78,7 @@ function HappeningRow({
       ) : null}
       {isShared ? (
         <div className="hap-marks">
-          {others.length ? <span className="hap-who">{others.map(shortName).join(", ")}{others.length === 1 ? " is" : " are"} in</span> : null}
+          {others.length ? <span className="hap-who">{others.map((w) => displayName(w, profiles)).join(", ")}{others.length === 1 ? " is" : " are"} in</span> : null}
           {account ? (
             mine ? (
               <button className="claim claim-mine" onClick={() => onSetMark(h, false)} title="Take your name off">
@@ -100,6 +98,7 @@ export function CalendarPage({
   calendar,
   happenings,
   marks,
+  profiles,
   shared,
   account,
   now,
@@ -115,6 +114,7 @@ export function CalendarPage({
   calendar: Calendar;
   happenings: Happening[];
   marks: Mark[];
+  profiles: Profile[];
   shared: SharedCalendar | undefined;
   account: string | null;
   now: number;
@@ -176,7 +176,7 @@ export function CalendarPage({
       </div>
       {calendar.note ? <p className="list-note">{calendar.note}</p> : null}
       {shared && others.length ? (
-        <p className="hint">Kept with {others.map((m) => shortName(m.email)).join(", ")}.</p>
+        <p className="hint">Kept with {others.map((m) => displayName(m.email, profiles)).join(", ")}.</p>
       ) : null}
 
       <div className="add-plan">
@@ -206,6 +206,7 @@ export function CalendarPage({
                 key={h.id}
                 h={h}
                 marks={marks}
+                profiles={profiles}
                 account={account}
                 isShared={!!shared}
                 onSetMark={onSetMark}
@@ -235,7 +236,7 @@ export function CalendarPage({
                       <button className="item-x" onClick={() => onRemoveHappening(h)} aria-label={`Remove ${h.title}`} title="Remove">×</button>
                     </div>
                     <div className="hap-card-title">{h.title || "Untitled"}</div>
-                    {who.length ? <div className="hap-who">{who.map(shortName).join(", ")} went</div> : null}
+                    {who.length ? <div className="hap-who">{who.map((w) => displayName(w, profiles)).join(", ")} went</div> : null}
                   </div>
                 );
               })

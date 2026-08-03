@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  allComing, decodeCalendar, decodeHappening, decodeMark,
-  effectiveEnd, encodeCalendar, encodeHappening, encodeMark,
-  formatStamp, fromMarkdown, groupByMonth, myMarks, splitAgenda,
-  toMarkdown, whoIsIn,
-  type Calendar, type Happening, type Mark,
+  allComing, decodeCalendar, decodeHappening, decodeMark, decodeProfile,
+  displayName, effectiveEnd, encodeCalendar, encodeHappening, encodeMark,
+  encodeProfile, formatStamp, fromMarkdown, groupByMonth, myMarks,
+  shortName, splitAgenda, toMarkdown, whoIsIn,
+  type Calendar, type Happening, type Mark, type Profile,
 } from "./model";
 
 const shell = { id: "x", createdAt: 1, updatedAt: 2 };
@@ -118,6 +118,34 @@ describe("whoIsIn / myMarks", () => {
     ];
     expect(whoIsIn("h1", marks)).toEqual(["sam@example.com", "ada@example.com"]);
     expect(myMarks("h1", "sam@example.com", marks).map((m) => m.id)).toEqual(["m1", "m3"]);
+  });
+});
+
+describe("profiles & names", () => {
+  const prof = (over: Partial<Profile>): Profile => ({
+    id: "p1", who: "sam@example.com", name: "Sam", createdAt: 1, updatedAt: 1, ...over,
+  });
+
+  it("round-trips a profile", () => {
+    const got = decodeProfile(encodeProfile(prof({})), shell);
+    expect(got.who).toBe("sam@example.com");
+    expect(got.name).toBe("Sam");
+  });
+
+  it("displayName prefers the freshest chosen name, falls back to the email stem", () => {
+    const profiles = [
+      prof({ id: "a", name: "Sam", updatedAt: 5 }),
+      prof({ id: "b", name: "Sammy", updatedAt: 9 }), // second device, newer
+      prof({ id: "c", who: "zoe@example.com", name: "  " }), // blank never counts
+    ];
+    expect(displayName("sam@example.com", profiles)).toBe("Sammy");
+    expect(displayName("zoe@example.com", profiles)).toBe("zoe");
+    expect(displayName("ada@example.com", [])).toBe("ada");
+    expect(shortName("ada@example.com")).toBe("ada");
+  });
+
+  it("a cleared name falls back rather than showing empty", () => {
+    expect(displayName("sam@example.com", [prof({ name: "" })])).toBe("sam");
   });
 });
 
