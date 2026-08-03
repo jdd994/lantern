@@ -4,12 +4,14 @@
 
 import { useEffect, useState } from "react";
 import { RecoveryFlow } from "./RecoveryFlow";
+import { RecoverWithCode } from "./RecoveryKit";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 export function LockScreen({
   onUnlock, onBiometric, hasBiometric, error, busy,
   account, syncError, guardianCircle,
   onRecoverySignIn, onLoadGuardianCircle, onStartRecovery, onPollRecovery, onCancelRecovery, onFinishRecovery,
+  onRecoverWithKit,
 }: {
   onUnlock: (p: string) => Promise<boolean>;
   onBiometric: () => Promise<boolean>;
@@ -26,9 +28,11 @@ export function LockScreen({
   onPollRecovery: (requestId: string) => Promise<RecoveryRequestPoll | null>;
   onCancelRecovery: (requestId: string) => Promise<string | null>;
   onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
+  onRecoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
 }) {
   const [pass, setPass] = useState("");
   const [showRecovery, setShowRecovery] = useState(false);
+  const [showKit, setShowKit] = useState(false);
 
   useEffect(() => {
     if (hasBiometric) void onBiometric();
@@ -38,6 +42,18 @@ export function LockScreen({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!(await onUnlock(pass))) setPass("");
+  }
+
+  if (showKit) {
+    return (
+      <div className="gate">
+        <div className="gate-card">
+          <h1 className="gate-brand">Hearth<span>.</span></h1>
+          <h2>The paper way back in.</h2>
+          <RecoverWithCode onRecover={onRecoverWithKit} onBack={() => setShowKit(false)} />
+        </div>
+      </div>
+    );
   }
 
   if (showRecovery) {
@@ -84,6 +100,14 @@ export function LockScreen({
             onClick={() => setShowRecovery(true)}
           >
             Forgot your passphrase? Ask your guardians
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ width: "100%", marginTop: 9 }}
+            onClick={() => setShowKit(true)}
+          >
+            Use a recovery code
           </button>
         </form>
       </div>

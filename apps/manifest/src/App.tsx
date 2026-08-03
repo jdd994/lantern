@@ -103,6 +103,9 @@ export default function App() {
       onDelete={m.deleteAccount}
       onSyncNow={m.syncNow}
       onChangePassphrase={m.changePassphrase}
+      recoveryKitAt={m.recoveryKitAt}
+      onCreateRecoveryKit={m.createRecoveryKit}
+      onRemoveRecoveryKit={m.removeRecoveryKit}
       onClose={() => setSync(false)}
       guardianCircle={m.guardianCircle}
       onSetupGuardians={m.setupGuardians}
@@ -140,6 +143,7 @@ export default function App() {
         onPollRecovery={m.pollRecoveryRequest}
         onCancelRecovery={m.cancelRecoveryRequest}
         onFinishRecovery={m.finishRecoveryRequest}
+        onRecoverWithKit={m.recoverWithKit}
       />
     );
   }

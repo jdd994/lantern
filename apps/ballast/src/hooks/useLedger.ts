@@ -30,6 +30,7 @@ import {
   createVault, openVault, rewrapVault, verifyDEK, setPassphraseFromDEK,
 } from "@lantern/core/vault";
 import { tagger } from "@lantern/core/connect";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
 import type { GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll } from "../lib/api";
 import * as db from "../lib/db";
 import {
@@ -99,6 +100,12 @@ export type Ledger = {
   deleteAccount: () => Promise<boolean>;
   // Change the vault passphrase (envelope re-wrap; no data re-encryption).
   changePassphrase: (current: string, next: string) => Promise<string | null>;
+  // Paper recovery kit (@lantern/core/kit): when this vault minted one, and
+  // the mint / retire / locked-out-door operations.
+  recoveryKitAt: number | null;
+  createRecoveryKit: () => Promise<{ code: string } | string>;
+  removeRecoveryKit: () => Promise<string | null>;
+  recoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
   // Sync now, on demand (pull others' changes, push ours).
   syncNow: () => Promise<void>;
 
@@ -230,6 +237,8 @@ export function useLedger(): Ledger {
   const [memory, setMemory] = useState<MerchantMemory>({});
 
   const [canBiometric, setCanBiometric] = useState(false);
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [hasBiometric, setHasBiometric] = useState(false);
 
   // Is there a vault on this device yet? Effects are idempotent so StrictMode's
@@ -244,6 +253,7 @@ export function useLedger(): Ledger {
       ]);
       setCanBiometric(supported);
       setHasBiometric(!!device);
+      setRecoveryKitAt(vault?.recoveryKit?.createdAt ?? null);
       if (sync?.token) {
         tokenRef.current = sync.token;
         setAccount(sync.accountEmail ?? null);
@@ -554,7 +564,9 @@ export function useLedger(): Ledger {
             iterations: dto.iterations ?? PBKDF2_ITERATIONS,
             currency: cur,
             identityPrivate: dto.identityPrivWrapped ?? undefined,
+            recoveryKit: dto.recoveryKit ?? undefined,
           });
+          setRecoveryKitAt(dto.recoveryKit?.createdAt ?? null);
           setCurrency(cur);
           setStatus("locked");
         }
@@ -641,6 +653,93 @@ export function useLedger(): Ledger {
       return null;
     },
     []
+  );
+
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock the vault first.";
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await db.saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device;
+        // the next passphrase change or kit action can retry.
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await db.saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper for this device
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the vault and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await db.getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const dto = await api.fetchVault(tokenRef.current);
+          if (dto.recoveryKit) {
+            vault = { ...vault, recoveryKit: dto.recoveryKit };
+            await db.saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This vault has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this vault. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated = { ...vault, ...fresh };
+      await db.saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server lags until next sync
+        }
+      }
+      setRecoveryKitAt(updated.recoveryKit?.createdAt ?? null);
+      await finishUnlock(dek, vault.currency);
+      return null;
+    },
+    [finishUnlock]
   );
 
   // ---- social recovery ------------------------------------------------------
@@ -1275,6 +1374,10 @@ export function useLedger(): Ledger {
     disconnect,
     deleteAccount,
     changePassphrase,
+    recoveryKitAt,
+    createRecoveryKit,
+    removeRecoveryKit,
+    recoverWithKit,
     syncNow: runSync,
     guardianCircle, loadGuardianCircle, setupGuardians,
     recoveryStatus, refreshRecoveryStatus, cancelPendingRecovery,

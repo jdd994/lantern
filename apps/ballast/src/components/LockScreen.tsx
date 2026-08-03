@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { RecoveryFlow } from "./RecoveryFlow";
+import { RecoverWithCode } from "./RecoveryKit";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 export function LockScreen({
@@ -22,6 +23,7 @@ export function LockScreen({
   onPollRecovery,
   onCancelRecovery,
   onFinishRecovery,
+  onRecoverWithKit,
 }: {
   onUnlock: (passphrase: string) => Promise<boolean>;
   onBiometric: () => Promise<boolean>;
@@ -38,9 +40,12 @@ export function LockScreen({
   onPollRecovery: (requestId: string) => Promise<RecoveryRequestPoll | null>;
   onCancelRecovery: (requestId: string) => Promise<string | null>;
   onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
+  // The paper door — a printed recovery-kit code. See RecoveryKit.tsx.
+  onRecoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
 }) {
   const [passphrase, setPassphrase] = useState("");
   const [showRecovery, setShowRecovery] = useState(false);
+  const [showKit, setShowKit] = useState(false);
 
   // If this device has quick unlock, offer it immediately rather than making the
   // user tap a button to be asked for their thumb.
@@ -55,6 +60,20 @@ export function LockScreen({
     e.preventDefault();
     const ok = await onUnlock(passphrase);
     if (!ok) setPassphrase("");
+  }
+
+  if (showKit) {
+    return (
+      <div className="gate">
+        <div className="gate-card">
+          <h1 className="gate-brand">
+            Ballast<span>.</span>
+          </h1>
+          <h2>The paper way back in.</h2>
+          <RecoverWithCode onRecover={onRecoverWithKit} onBack={() => setShowKit(false)} />
+        </div>
+      </div>
+    );
   }
 
   if (showRecovery) {
@@ -118,6 +137,14 @@ export function LockScreen({
             onClick={() => setShowRecovery(true)}
           >
             Forgot your passphrase? Ask your guardians
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ width: "100%", marginTop: 9 }}
+            onClick={() => setShowKit(true)}
+          >
+            Use a recovery code
           </button>
         </form>
       </div>

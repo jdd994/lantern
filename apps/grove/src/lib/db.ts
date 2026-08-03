@@ -35,6 +35,9 @@ export type VaultMeta = {
   // derived KEK. Changing the passphrase re-wraps this without re-encrypting
   // any data. Always present here — Grove has no pre-envelope legacy vaults.
   wrappedDEK?: CipherBlob;
+  // Paper recovery kit (@lantern/core/kit): DEK wrapped under a printed
+  // code's derived key. Rides with the envelope to the server.
+  recoveryKit?: { salt: number[]; wrapped: CipherBlob; createdAt: number };
 };
 
 // Sync bookkeeping shared by syncable records. Plaintext, never secret.

@@ -12,7 +12,7 @@ export type { SyncRecord } from "@lantern/core/sync";
 const API_BASE = "https://ballast-server.jdd994.workers.dev";
 const client = createApiClient(API_BASE);
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Ballast doesn't turn on family-strand sharing (`sharing: true`) — it's a
 // single-owner-feeling app on purpose. But /identity + /keys are always

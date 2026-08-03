@@ -12,7 +12,7 @@ export type { SyncRecord } from "@lantern/core/sync";
 const API_BASE = "https://hearth-server.jdd994.workers.dev";
 const client = createApiClient(API_BASE);
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Sharing (shared kitchens) speaks the same protocol as its siblings.
 export type { SharedRecord, SharedStrandInfo, StrandMember } from "@lantern/core/sharing-api";

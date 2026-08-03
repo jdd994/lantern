@@ -52,9 +52,10 @@ export function SettingsSheet({
         </p>
         <p className="hint">
           The trade: your passphrase never leaves this device, so there's no reset by email —
-          that button would mean someone else could read your data. If you forget it, Guardians
-          (in Sync) are the way back in: a few people you trust, jointly. Keep it somewhere
-          safe as well.
+          that button would mean someone else could read your data. Two ways back in if you
+          forget it: a printed recovery kit (in Sync — right for a vault that's yours alone), or
+          Guardians, a few people you trust acting jointly. Keep the passphrase somewhere safe
+          as well.
         </p>
       </section>
 

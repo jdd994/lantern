@@ -13,6 +13,7 @@ import {
 import {
   createVault, openVault, rewrapVault, verifyDEK, setPassphraseFromDEK,
 } from "@lantern/core/vault";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
 import type { GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll } from "../lib/api";
 import * as db from "../lib/db";
 import * as api from "../lib/api";
@@ -67,6 +68,10 @@ export type Hearth = {
   disconnect: () => Promise<void>;
   deleteAccount: () => Promise<boolean>;
   changePassphrase: (current: string, next: string) => Promise<string | null>;
+  recoveryKitAt: number | null;
+  createRecoveryKit: () => Promise<{ code: string } | string>;
+  removeRecoveryKit: () => Promise<string | null>;
+  recoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
   syncNow: () => Promise<void>;
 
   // Social recovery — guardians who can jointly help recover a forgotten
@@ -164,6 +169,8 @@ export function useHearth(): Hearth {
   const identityRef = useRef<CryptoKeyPair | null>(null);
   const kitchenKeys = useRef<Map<string, { dek: CryptoKey; dekEpoch: number }>>(new Map());
   const [canBiometric, setCanBiometric] = useState(false);
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [hasBiometric, setHasBiometric] = useState(false);
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [wearableBusy, setWearableBusy] = useState(false);
@@ -179,6 +186,7 @@ export function useHearth(): Hearth {
       ]);
       setCanBiometric(supported);
       setHasBiometric(!!device);
+      setRecoveryKitAt(vault?.recoveryKit?.createdAt ?? null);
       if (sync?.token) {
         tokenRef.current = sync.token;
         setAccount(sync.accountEmail ?? null);
@@ -557,7 +565,9 @@ export function useHearth(): Hearth {
           iterations: dto.iterations ?? PBKDF2_ITERATIONS,
           wrappedDEK: dto.wrappedDEK ?? undefined,
           identityPrivate: dto.identityPrivWrapped ?? undefined,
+          recoveryKit: dto.recoveryKit ?? undefined,
         });
+        setRecoveryKitAt(dto.recoveryKit?.createdAt ?? null);
         setStatus("locked");
       }
       await db.saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
@@ -607,6 +617,91 @@ export function useHearth(): Hearth {
   // instant and re-encrypts NOTHING — it only re-wraps the DEK under a key from
   // the new passphrase. Other devices keep reading their data with the unchanged
   // DEK, and biometric quick-unlock still works. Returns an error, or null.
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock first.";
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await db.saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await db.saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper here
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the vault and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await db.getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const dto = await api.fetchVault(tokenRef.current);
+          if (dto.recoveryKit) {
+            vault = { ...vault, recoveryKit: dto.recoveryKit };
+            await db.saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This vault has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this vault. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated = { ...vault, ...fresh };
+      await db.saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server lags until next sync
+        }
+      }
+      await finishUnlock(dek);
+      return null;
+    },
+    [finishUnlock]
+  );
+
   const changePassphrase = useCallback(async (current: string, next: string): Promise<string | null> => {
     const dek = keyRef.current;
     if (!dek) return "Unlock the log first.";
@@ -1220,6 +1315,7 @@ export function useHearth(): Hearth {
     status, error, busy, logs, goals, recipes, metrics, plans, pantry, today, progressFor,
     canBiometric, hasBiometric,
     account, syncing, syncError, connectCreate, connectSignIn, disconnect, deleteAccount, changePassphrase, syncNow: runSync,
+    recoveryKitAt, createRecoveryKit, removeRecoveryKit, recoverWithKit,
     setup, unlock, unlockWithBiometric, enableBiometric, lock,
     logFood, removeLog, addGoal, removeGoal,
     addRecipe, removeRecipe, logRecipeServing,

@@ -99,6 +99,9 @@ export default function App() {
             onDisconnect={l.disconnect}
             onDelete={l.deleteAccount}
             onChangePassphrase={l.changePassphrase}
+            recoveryKitAt={l.recoveryKitAt}
+            onCreateRecoveryKit={l.createRecoveryKit}
+            onRemoveRecoveryKit={l.removeRecoveryKit}
             onSyncNow={l.syncNow}
             onClose={() => setSync(false)}
             guardianCircle={l.guardianCircle}
@@ -131,6 +134,7 @@ export default function App() {
         onStartRecovery={l.startRecoveryRequest}
         onPollRecovery={l.pollRecoveryRequest}
         onCancelRecovery={l.cancelRecoveryRequest}
+        onRecoverWithKit={l.recoverWithKit}
         onFinishRecovery={l.finishRecoveryRequest}
       />
       {updateToast}
@@ -336,6 +340,9 @@ export default function App() {
           onDisconnect={l.disconnect}
           onDelete={l.deleteAccount}
           onChangePassphrase={l.changePassphrase}
+            recoveryKitAt={l.recoveryKitAt}
+            onCreateRecoveryKit={l.createRecoveryKit}
+            onRemoveRecoveryKit={l.removeRecoveryKit}
             onSyncNow={l.syncNow}
           onClose={() => setSync(false)}
           guardianCircle={l.guardianCircle}
