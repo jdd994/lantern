@@ -53,12 +53,13 @@ export function Welcome({ onBegin }: Props) {
         </ul>
 
         <p className="welcome-warn">
-          Next you'll choose a <strong>passphrase</strong>. It's the only key to
-          your journal — there's no reset and no back door. If you forget it, not
-          even we can recover what you wrote. That's the trade for real privacy:
-          pick a few words you'll remember, and keep them somewhere safe. If
-          you'd rather have a family safety net, you can also set up{" "}
-          <strong>guardians</strong> later, in Settings.
+          Next you'll choose a <strong>passphrase</strong> — the key to your
+          journal. If you ever forget it, the safety net is people, not a reset
+          email: set up <strong>guardians</strong> later (in Settings) and a few
+          people you trust can jointly let you back in. Nobody else — not even
+          we — can ever read or recover what you write; that's the trade for
+          real privacy. Pick a few words you'll remember, and keep them
+          somewhere safe too.
         </p>
 
         <IosSetupNote />

@@ -388,8 +388,9 @@ export function LockScreen({
               onKeyDown={(e) => e.key === "Enter" && continueToAccount()}
             />
             <p className="lock-warn">
-              There's no reset. If you forget it, the entries can't be recovered —
-              not by anyone. Keep it somewhere safe.
+              If you ever forget it, guardians (set up later, in Settings) are the
+              way back in — there's no reset by email, and nobody else can ever
+              read the entries. Keep it somewhere safe.
             </p>
             {error && <p className="lock-error">{error}</p>}
             <button className="save-btn lock-btn" disabled={busy} onClick={continueToAccount}>

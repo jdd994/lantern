@@ -180,8 +180,10 @@ export function SettingsSheet({
           as a .ics file their calendar opens, made on this device and handed straight to them.
         </p>
         <p className="hint">
-          The trade: your passphrase never leaves this device, so there's no reset. Forget it and
-          your plans can't be recovered by anyone, including us. Keep it somewhere safe.
+          The trade: your passphrase never leaves this device, so there's no reset by email —
+          that button would mean someone else could read your plans. If you forget it, Guardians
+          (in Sync) are the way back in: a few people you trust, jointly. Keep it somewhere
+          safe as well.
         </p>
       </section>
 
