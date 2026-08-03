@@ -218,6 +218,7 @@ export default function App() {
       {joinNote ? (
         <div className="hint banner">
           {joinNote}{" "}
+          <button className="linklike" onClick={() => setInstallHelp(true)}>Put Almanac on your home screen?</button>{" "}
           <button className="linklike" onClick={() => setJoinNote(null)}>Dismiss</button>
         </div>
       ) : null}

@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { displayName, formatWhen, groupByMonth, splitAgenda, whoIsIn, type Calendar, type Happening, type Mark, type Profile } from "../lib/model";
 import { toICS } from "../lib/ics";
 import type { SharedCalendar } from "../hooks/useAlmanac";
-import { CalendarDown, Pencil } from "./icons";
+import { Again, CalendarDown, Pencil, ShareOut } from "./icons";
 import { HappeningForm, type HappeningDraft } from "./HappeningForm";
 
 // data: URL, not blob: — the CSP-safe download pattern shared with the siblings.
@@ -26,6 +26,34 @@ function downloadICS(filename: string, text: string) {
   a.click();
 }
 
+// The plan as one line of plain text — for the group chat where it'll be
+// talked about anyway. Native share sheet when there is one, clipboard when
+// there isn't. Made on-device, like everything.
+function planAsText(h: Happening): string {
+  const bits = [h.title || "A plan", formatWhen(h)];
+  if (h.place) bits.push(h.place);
+  if (h.link) bits.push(h.link);
+  return bits.join(" — ");
+}
+
+async function sharePlanText(h: Happening): Promise<"shared" | "copied" | "no"> {
+  const text = planAsText(h);
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({ text });
+      return "shared";
+    } catch {
+      return "no"; // dismissed — not an error, not a fallback moment
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return "copied";
+  } catch {
+    return "no";
+  }
+}
+
 function HappeningRow({
   h,
   marks,
@@ -34,6 +62,7 @@ function HappeningRow({
   isShared,
   onSetMark,
   onEdit,
+  onSameAgain,
   onRemove,
 }: {
   h: Happening;
@@ -43,17 +72,32 @@ function HappeningRow({
   isShared: boolean;
   onSetMark: (h: Happening, mine: boolean) => void;
   onEdit: () => void;
+  onSameAgain: () => void;
   onRemove: () => void;
 }) {
   const who = whoIsIn(h.id, marks);
   const mine = !!account && who.includes(account);
   const others = account ? who.filter((w) => w !== account) : who;
+  const [confirming, setConfirming] = useState(false);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+
+  async function shareText() {
+    const res = await sharePlanText(h);
+    if (res === "copied") {
+      setShareNote("Copied");
+      setTimeout(() => setShareNote(null), 1500);
+    }
+  }
 
   return (
     <div className="hap-card">
       <div className="hap-card-head">
         <span className="hap-when">{formatWhen(h)}</span>
         <span className="hap-tools">
+          {shareNote ? <span className="hap-sharenote">{shareNote}</span> : null}
+          <button className="item-x" onClick={() => void shareText()} title="Share as text — for the group chat" aria-label={`Share ${h.title} as text`}>
+            <ShareOut />
+          </button>
           <button
             className="item-x"
             onClick={() => downloadICS(`${(h.title || "plan").replace(/[^\w-]+/g, "-").toLowerCase()}.ics`, toICS([h], Date.now()))}
@@ -62,12 +106,24 @@ function HappeningRow({
           >
             <CalendarDown />
           </button>
+          <button className="item-x" onClick={onSameAgain} title="Same again — a fresh copy for a new day" aria-label={`Plan ${h.title} again`}>
+            <Again />
+          </button>
           <button className="item-x" onClick={onEdit} aria-label={`Amend ${h.title}`} title="Amend">
             <Pencil />
           </button>
-          <button className="item-x" onClick={onRemove} aria-label={`Remove ${h.title}`} title="Remove">×</button>
+          <button className="item-x" onClick={() => setConfirming(true)} aria-label={`Remove ${h.title}`} title="Remove">×</button>
         </span>
       </div>
+      {confirming ? (
+        <div className="hap-confirm">
+          <span className="hint" style={{ margin: 0 }}>
+            {isShared ? "Remove this plan for everyone keeping the calendar?" : "Remove this plan?"}
+          </span>
+          <button className="linklike" onClick={() => setConfirming(false)}>keep it</button>
+          <button className="linklike danger" onClick={onRemove}>remove</button>
+        </div>
+      ) : null}
       <div className="hap-card-title">{h.title || "Untitled"}</div>
       {h.place ? <div className="hap-place">{h.place}</div> : null}
       {h.note ? <div className="hap-note">{h.note}</div> : null}
@@ -90,6 +146,51 @@ function HappeningRow({
           ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// A plan gone by: quieter, but not inert — the wake is exactly where "same
+// again" earns its keep (the annual fair, last month's trivia night).
+function WakeCard({
+  h,
+  marks,
+  profiles,
+  isShared,
+  onSameAgain,
+  onRemove,
+}: {
+  h: Happening;
+  marks: Mark[];
+  profiles: Profile[];
+  isShared: boolean;
+  onSameAgain: () => void;
+  onRemove: () => void;
+}) {
+  const who = whoIsIn(h.id, marks);
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className="hap-card hap-past">
+      <div className="hap-card-head">
+        <span className="hap-when">{formatWhen(h)}</span>
+        <span className="hap-tools">
+          <button className="item-x" onClick={onSameAgain} title="Same again — a fresh copy for a new day" aria-label={`Plan ${h.title} again`}>
+            <Again />
+          </button>
+          <button className="item-x" onClick={() => setConfirming(true)} aria-label={`Remove ${h.title}`} title="Remove">×</button>
+        </span>
+      </div>
+      {confirming ? (
+        <div className="hap-confirm">
+          <span className="hint" style={{ margin: 0 }}>
+            {isShared ? "Remove this from everyone's wake?" : "Remove this from the wake?"}
+          </span>
+          <button className="linklike" onClick={() => setConfirming(false)}>keep it</button>
+          <button className="linklike danger" onClick={onRemove}>remove</button>
+        </div>
+      ) : null}
+      <div className="hap-card-title">{h.title || "Untitled"}</div>
+      {who.length ? <div className="hap-who">{who.map((w) => displayName(w, profiles)).join(", ")} went</div> : null}
     </div>
   );
 }
@@ -133,6 +234,7 @@ export function CalendarPage({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Happening | null>(null);
+  const [again, setAgain] = useState<Happening | null>(null);
   const [showWake, setShowWake] = useState(false);
 
   useEffect(() => {
@@ -141,6 +243,7 @@ export function CalendarPage({
     setConfirmRemove(false);
     setAdding(false);
     setEditing(null);
+    setAgain(null);
     setShowWake(false);
   }, [calendar.id, calendar.title]);
 
@@ -211,6 +314,7 @@ export function CalendarPage({
                 isShared={!!shared}
                 onSetMark={onSetMark}
                 onEdit={() => setEditing(h)}
+                onSameAgain={() => setAgain(h)}
                 onRemove={() => onRemoveHappening(h)}
               />
             ))}
@@ -227,19 +331,17 @@ export function CalendarPage({
             </button>
           </div>
           {showWake
-            ? wake.map((h) => {
-                const who = whoIsIn(h.id, marks);
-                return (
-                  <div key={h.id} className="hap-card hap-past">
-                    <div className="hap-card-head">
-                      <span className="hap-when">{formatWhen(h)}</span>
-                      <button className="item-x" onClick={() => onRemoveHappening(h)} aria-label={`Remove ${h.title}`} title="Remove">×</button>
-                    </div>
-                    <div className="hap-card-title">{h.title || "Untitled"}</div>
-                    {who.length ? <div className="hap-who">{who.map((w) => displayName(w, profiles)).join(", ")} went</div> : null}
-                  </div>
-                );
-              })
+            ? wake.map((h) => (
+                <WakeCard
+                  key={h.id}
+                  h={h}
+                  marks={marks}
+                  profiles={profiles}
+                  isShared={!!shared}
+                  onSameAgain={() => setAgain(h)}
+                  onRemove={() => onRemoveHappening(h)}
+                />
+              ))
             : null}
         </section>
       ) : null}
@@ -281,6 +383,16 @@ export function CalendarPage({
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {again ? (
+        <HappeningForm
+          template={again}
+          onSave={(draft) => {
+            onAddHappening(draft);
+            setAgain(null);
+          }}
+          onClose={() => setAgain(null)}
         />
       ) : null}
     </>
