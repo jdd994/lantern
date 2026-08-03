@@ -8,6 +8,6 @@ database_name = "manifest"
 database_id = "590a0823-b4ca-4c62-a062-073a3498c23e"
 
 [vars]
-# Comma-separated allowed origins. Add the real domain if one is ever bought;
-# empty string reflects * (dev only).
-ALLOWED_ORIGIN = "https://manifest-8rk.pages.dev"
+# Comma-separated allowed origins. The pages.dev origin stays so installs from
+# before the domain keep syncing; empty string reflects * (dev only).
+ALLOWED_ORIGIN = "https://tripmanifest.app,https://www.tripmanifest.app,https://manifest-8rk.pages.dev"

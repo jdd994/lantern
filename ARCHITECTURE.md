@@ -27,6 +27,9 @@ apps/
   driftless   a quiet place to catch your thoughts   (journal · strands · sharing)
   ballast     steady footing with your money          (net worth · trust ladder)
   hearth      tending and nourishing yourself gently  (food log · body · recipes)
+  grove       a family tree written together          (hourglass tree · keepsakes · GEDCOM)
+  aura        your home's light, following your day   (day rhythm · vibes · automations)
+  manifest    the list of what you carry              (shared checklists · claims · clone)
 ```
 
 ## How an app is built on the core
@@ -44,7 +47,7 @@ Each app supplies **thin adapters + config**, then its own UI and domain logic:
   `kinds`, its `meta` extractors, store access, and network calls.
 - **Server** (`server/src/index.ts`) — `createServer({ kinds, service })`; Driftless
   passes a `deleteAccount` cascade hook and adds media/sharing routes on top.
-- **Hook** (`useJournal` / `useLedger` / `useHearth`) — the only place state, IO,
+- **Hook** (`useJournal` / `useLedger` / `useHearth` / `useGrove` / `useManifest`) — the only place state, IO,
   and the decrypted key meet. Its setup/unlock/change-passphrase delegate to
   `@lantern/core/vault`; the rest (CRUD, derived state, connect/sync flows) is the
   app's own.
@@ -70,9 +73,11 @@ They are frozen forever.**
   runSync). The apps diverge most here — boolean vs `string|null` returns, different
   reload steps, currency vs identity vs sharing state — so a shared hook would be a
   config-heavy abstraction that hurts more than it helps. Left per-app by choice.
-- **Driftless's sharing crypto** (ECIES / invite links) and its server extension
-  (media/R2, shared strands, invites, feedback). Only Driftless needs them today;
-  they move to the core if a second app ever does.
+- ~~Driftless's sharing crypto~~ — this one *did* move: the sharing crypto
+  (ECIES DEK wrapping, invite links) and the shared-strand/recovery server
+  routes now live in the core, exactly because a second app needed them. Each
+  app binds only its frozen HKDF invite labels, the same discipline as
+  `VERIFIER_TEXT`.
 
 ## Invariants (the whole point)
 
@@ -97,5 +102,6 @@ npx vitest run packages/core # the shared-core unit tests (vault, envelope)
 ```
 
 Each app builds and **deploys independently** to its own Cloudflare Pages project +
-Worker + D1 + custom domain (driftless.page · ballast.gold · hearth.garden). The
-monorepo is a source reorganization only; it does not change any deploy target.
+Worker + D1 + custom domain (driftless.page · ballast.gold · hearth.garden ·
+grove.page · auravibe.app · tripmanifest.app). The monorepo is a source
+reorganization only; it does not change any deploy target.
