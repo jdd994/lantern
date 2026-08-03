@@ -1,0 +1,15 @@
+name = "almanac-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "almanac"
+# Placeholder — created at deploy time with `wrangler d1 create almanac`,
+# then paste the real id here before the first `wrangler deploy`.
+database_id = "TBD-CREATE-AT-DEPLOY"
+
+[vars]
+# Comma-separated allowed origins. The pages.dev origin stays so installs from
+# before any custom domain keep syncing; empty string reflects * (dev only).
+ALLOWED_ORIGIN = "https://almanac-a4y.pages.dev"
