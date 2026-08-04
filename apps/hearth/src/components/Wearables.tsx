@@ -11,15 +11,11 @@
 
 import { useState } from "react";
 import { TradeOffCard } from "@lantern/ui";
+import { relativeLabel } from "@lantern/core/time";
 import { PROVIDERS, type ProviderId, type WearableConnection } from "../lib/wearable";
 
 function whenLabel(at: number): string {
-  const mins = Math.round((Date.now() - at) / 60_000);
-  if (mins < 2) return "just now";
-  if (mins < 60) return `${mins} minutes ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} ${hrs === 1 ? "hour" : "hours"} ago`;
-  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return relativeLabel(at, { maxDays: 1 });
 }
 
 export function ConnectWearable({

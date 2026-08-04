@@ -36,7 +36,7 @@ export function Recipes({
             <div className="recipe-main">
               <div className="recipe-name">{r.name}</div>
               <div className="recipe-meta">
-                {r.servings} serving{r.servings === 1 ? "" : "s"} · {Math.round(per.kcal)} kcal ·{" "}
+                {r.servings === 1 ? "1 serving" : `${r.servings} servings`} · {Math.round(per.kcal)} kcal ·{" "}
                 {per.protein.toFixed(1)}g protein per serving
               </div>
             </div>

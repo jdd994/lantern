@@ -20,6 +20,7 @@
     "./vibe": "./src/vibe.ts",
     "./vibe-relay": "./src/vibe-relay.ts",
     "./connect": "./src/connect.ts",
-    "./kit": "./src/kit.ts"
+    "./kit": "./src/kit.ts",
+    "./time": "./src/time.ts"
   }
 }

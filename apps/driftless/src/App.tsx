@@ -485,7 +485,7 @@ export default function App() {
       {reading && (
         <Reader
           title={reading.label}
-          subtitle={reading.entries.length + (reading.entries.length === 1 ? " thought" : " thoughts")}
+          subtitle={reading.entries.length === 1 ? "1 thought" : `${reading.entries.length} thoughts`}
           note={reading.note}
           entries={reading.entries}
           onClose={() => setReading(null)}
