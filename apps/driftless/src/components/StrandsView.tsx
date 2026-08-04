@@ -81,7 +81,7 @@ export function StrandsView(props: Props) {
                   <button className="strand-card" onClick={() => setSelectedId(s.id)}>
                     <span className="strand-card-title">{s.title || "Untitled"}</span>
                     <span className="strand-card-count">
-                      {count} {count === 1 ? "piece" : "pieces"}
+                      {count === 1 ? "1 piece" : `${count} pieces`}
                     </span>
                   </button>
                 </li>

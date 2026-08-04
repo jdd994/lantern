@@ -50,9 +50,9 @@ export function SettingsSheet({
       if (typeof result === "string") setImportError(result);
       else {
         setImportNote(
-          `Welcomed ${result.people} ${result.people === 1 ? "person" : "people"}, ` +
-            `${result.unions} ${result.unions === 1 ? "family" : "families"}, and ` +
-            `${result.keepsakes} ${result.keepsakes === 1 ? "keepsake" : "keepsakes"} into the grove.`
+          `Welcomed ${result.people === 1 ? "1 person" : `${result.people} people`}, ` +
+            `${result.unions === 1 ? "1 family" : `${result.unions} families`}, and ` +
+            `${result.keepsakes === 1 ? "1 keepsake" : `${result.keepsakes} keepsakes`} into the grove.`
         );
       }
     } finally {

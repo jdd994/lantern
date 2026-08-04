@@ -270,7 +270,7 @@ export function AddExpense({
         }
         setItems(rows);
         const n = draft.items.length;
-        let summary = `read ${n} item${n === 1 ? "" : "s"}`;
+        let summary = n === 1 ? "read 1 item" : `read ${n} items`;
         if (draft.soldCount && draft.soldCount !== n) {
           summary += ` — the receipt says ${draft.soldCount}`;
         }
