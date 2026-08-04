@@ -94,6 +94,7 @@ export function PersonPage({
   onAddKeepsake,
   onRemoveKeepsake,
   getMediaUrl,
+  authorHandle,
 }: {
   person: Person;
   people: Person[];
@@ -108,6 +109,9 @@ export function PersonPage({
   onAddKeepsake: (draft: KeepsakeDraft, file?: File) => void;
   onRemoveKeepsake: (k: Keepsake) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  // Whose hand last touched a record — null for your own, and outside a shared
+  // tree. A byline, never a score.
+  authorHandle: (author?: string) => string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [addingKeepsake, setAddingKeepsake] = useState(false);
@@ -117,6 +121,7 @@ export function PersonPage({
   const byId = new Map(people.map((p) => [p.id, p]));
   const span = lifespanLabel(person);
   const treasures = keepsakesFor(person.id, keepsakes);
+  const tendedBy = authorHandle(person.author);
 
   const saveRemembrance = () => {
     const next = remembrance.trim();
@@ -134,7 +139,13 @@ export function PersonPage({
           <button className="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
         </div>
       </div>
-      {span ? <p className="person-life">{span}</p> : null}
+      {span || tendedBy ? (
+        <p className="person-life">
+          {span}
+          {span && tendedBy ? " · " : ""}
+          {tendedBy ? <span className="byline">last tended by {tendedBy}</span> : null}
+        </p>
+      ) : null}
 
       <section className="section">
         <div className="section-head">
@@ -168,6 +179,9 @@ export function PersonPage({
                 <div>
                   <div className="keepsake-caption">{k.caption || "A keepsake"}</div>
                   {k.when ? <div className="keepsake-when">{whenLabel(k.when)}</div> : null}
+                  {authorHandle(k.author) ? (
+                    <div className="keepsake-when byline">kept by {authorHandle(k.author)}</div>
+                  ) : null}
                 </div>
                 <button
                   className="btn btn-ghost btn-sm"

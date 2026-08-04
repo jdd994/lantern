@@ -23,6 +23,8 @@ import {
   importPrivateKeyB64, unwrapPrivateKey, sealJSON, openJSON, PBKDF2_ITERATIONS,
   exportKeyRaw, importKeyRaw,
   createRecoveryCircle, approveAsGuardian, reconstructDEK,
+  randomLinkSecret, deriveInviteKeys, toBase64, b64url, fromB64url, sha256B64,
+  linkWrapDEK, linkUnwrapDEK,
 } from "../lib/crypto";
 import * as db from "../lib/db";
 import * as api from "../lib/api";
@@ -105,6 +107,10 @@ export function useGrove() {
   const identityRef = useRef<CryptoKeyPair | null>(null);
   const treeKeys = useRef<Map<string, { dek: CryptoKey; dekEpoch: number }>>(new Map());
   const treeRef = useRef<SharedTree | null>(null);
+  // The tree this device most recently joined or was viewing — keeps syncTree's
+  // pick stable when an account can see more than one strand (e.g. someone who
+  // planted their own tree, then joined the family's via an invite link).
+  const preferredTreeId = useRef<string | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTreeRef = useRef<(() => Promise<void>) | null>(null); // breaks the runSync↔syncTree declaration cycle
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → data: URL (decrypted, in-memory only)
@@ -273,8 +279,11 @@ export function useGrove() {
     setTreeError(null);
     try {
       const { strands } = await api.sharedMine(token);
-      // One family tree for now; further trees would need their own view.
-      const s = strands[0];
+      // One family tree for now; further trees would need their own view. When
+      // more than one is visible, stay with the joined/current one over an
+      // arbitrary pick.
+      const wanted = preferredTreeId.current ?? treeRef.current?.strandId;
+      const s = (wanted ? strands.find((x) => x.strandId === wanted) : undefined) ?? strands[0];
       if (!s) {
         setTree(null);
         return;
@@ -436,6 +445,80 @@ export function useGrove() {
     }
   }, [syncTree]);
 
+  // ---- invite links ----------------------------------------------------------
+
+  // Mint a shareable invite link for the tree: a random secret → HKDF wrapKey
+  // (encrypts the tree's DEK, opaque to the server) + joinProof (server stores
+  // only its hash). The secret rides in the URL fragment, never sent anywhere.
+  const createTreeInviteLink = useCallback(async (): Promise<{ link: string } | { error: string }> => {
+    const token = tokenRef.current;
+    const t = treeRef.current;
+    const entry = t ? treeKeys.current.get(t.strandId) : undefined;
+    if (!token || !t || !entry) return { error: "The tree isn't shared yet." };
+    try {
+      const linkSecret = randomLinkSecret();
+      const { wrapKey, joinProof } = await deriveInviteKeys(linkSecret);
+      const inviteId = uid();
+      const wrappedDEK = await linkWrapDEK(wrapKey, entry.dek);
+      const joinProofHash = await sha256B64(joinProof);
+      const expiresAt = Date.now() + 7 * 86_400_000; // 7 days
+      await api.createInviteLink(token, t.strandId, inviteId, wrappedDEK, joinProofHash, entry.dekEpoch, expiresAt, 20);
+      return { link: `${location.origin}/#join=${inviteId}.${b64url(linkSecret)}` };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Couldn't create a link." };
+    }
+  }, []);
+
+  const fetchTreeInvites = useCallback(async (): Promise<api.InviteInfo[]> => {
+    const token = tokenRef.current;
+    const t = treeRef.current;
+    if (!token || !t) return [];
+    try {
+      return (await api.listInvites(token, t.strandId)).invites;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const revokeTreeInvite = useCallback(async (inviteId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    const t = treeRef.current;
+    if (!token || !t) return "Not connected.";
+    try {
+      await api.revokeInvite(token, t.strandId, inviteId);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't revoke that link.";
+    }
+  }, []);
+
+  // Redeem an invite link: prove the joinProof → get the wrapped DEK → unwrap
+  // with the link's wrapKey → re-wrap to our own identity → register membership.
+  // The joined tree becomes this device's tree; syncTree merges it in.
+  const joinViaInvite = useCallback(
+    async (inviteId: string, linkSecretB64: string): Promise<{ joined: true } | { error: string }> => {
+      const token = tokenRef.current;
+      if (!token) return { error: "Connect an account to join." };
+      const kp = await ensureIdentity();
+      if (!kp) return { error: "Sharing isn't ready yet — try again in a moment." };
+      try {
+        const { wrapKey, joinProof } = await deriveInviteKeys(fromB64url(linkSecretB64));
+        const proofB64 = toBase64(joinProof);
+        const claim = await api.joinClaim(token, inviteId, proofB64);
+        const dek = await linkUnwrapDEK(wrapKey, claim.wrappedDEK);
+        const selfPub = await exportPublicKeyB64(kp.publicKey);
+        const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(selfPub, dek);
+        await api.joinFinish(token, inviteId, proofB64, ephemeralPub, wrappedDEK);
+        preferredTreeId.current = claim.strandId;
+        await syncTree();
+        return { joined: true };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Couldn't join with that link." };
+      }
+    },
+    [ensureIdentity, syncTree]
+  );
+
   const leaveTree = useCallback(async (): Promise<string | null> => {
     const token = tokenRef.current;
     const t = treeRef.current;
@@ -443,6 +526,7 @@ export function useGrove() {
     try {
       await api.sharedLeave(token, t.strandId);
       treeKeys.current.delete(t.strandId);
+      if (preferredTreeId.current === t.strandId) preferredTreeId.current = null;
       setTree(null);
       return null;
     } catch (e) {
@@ -1282,6 +1366,10 @@ export function useGrove() {
     treeError,
     createTree,
     inviteToTree,
+    createTreeInviteLink,
+    fetchTreeInvites,
+    revokeTreeInvite,
+    joinViaInvite,
     leaveTree,
     syncTree,
   };
