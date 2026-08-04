@@ -5,6 +5,7 @@
 // chart that scrolls if the family outgrows the screen.
 
 import { useEffect, useRef } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { hourglass } from "../lib/layout";
 import { displayName, lifespanLabel, type Person, type Union } from "../lib/model";
 
@@ -32,6 +33,7 @@ export function TreeView({
   onOpen: (id: string) => void;
   onBack: () => void;
 }) {
+  const { t } = useLingui();
   const byId = new Map(people.map((p) => [p.id, p]));
   const h = hourglass(focus.id, unions);
   // A union may reference someone whose record hasn't arrived yet (a shared
@@ -57,17 +59,19 @@ export function TreeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus.id]);
 
+  const focusName = displayName(focus);
+
   return (
     <>
       <div className="tree-head">
-        <button type="button" className="btn btn-ghost btn-sm back" onClick={onBack}>← Back</button>
-        <h2 className="tree-title">Around {displayName(focus)}</h2>
-        <button className="btn btn-sm" onClick={() => onOpen(focus.id)}>Open their page</button>
+        <button type="button" className="btn btn-ghost btn-sm back" onClick={onBack}><Trans>← Back</Trans></button>
+        <h2 className="tree-title"><Trans>Around {focusName}</Trans></h2>
+        <button className="btn btn-sm" onClick={() => onOpen(focus.id)}><Trans>Open their page</Trans></button>
       </div>
-      <p className="hint">Tap anyone to look at the tree from where they stand.</p>
+      <p className="hint"><Trans>Tap anyone to look at the tree from where they stand.</Trans></p>
 
       <div className="tree-scroll" ref={scrollRef}>
-        <svg width={width} height={height} role="group" aria-label={`Family tree around ${displayName(focus)}`}>
+        <svg width={width} height={height} role="group" aria-label={t`Family tree around ${focusName}`}>
           {edges.map((e) => {
             const a = pos.get(e.from)!;
             const b = pos.get(e.to)!;
@@ -101,7 +105,7 @@ export function TreeView({
                 className={`tnode${isFocus ? " tnode-focus" : ""}`}
                 role="button"
                 tabIndex={0}
-                aria-label={isFocus ? `Open ${displayName(p)}'s page` : `Center the tree on ${displayName(p)}`}
+                aria-label={isFocus ? t`Open ${displayName(p)}'s page` : t`Center the tree on ${displayName(p)}`}
                 onClick={() => (isFocus ? onOpen(p.id) : onFocus(p.id))}
                 onKeyDown={(e) => e.key === "Enter" && (isFocus ? onOpen(p.id) : onFocus(p.id))}
               >

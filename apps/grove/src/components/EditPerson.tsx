@@ -3,6 +3,7 @@
 // note when only its year changes.
 
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
 import { whenYear, withEventWhen, yearWhen, type Person, type When } from "../lib/model";
 import type { PersonDraft } from "../hooks/useGrove";
@@ -24,6 +25,7 @@ export function EditPerson({
   onRemove: () => void;
   onClose: () => void;
 }) {
+  const { t } = useLingui();
   const first = person.names[0] ?? {};
   const birth = eventWhen(person, "birth");
   const death = eventWhen(person, "death");
@@ -40,19 +42,19 @@ export function EditPerson({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!given.trim() && !family.trim()) return setError("A name — even just the one everyone used.");
-    const parse = (s: string, label: string): number | undefined | null => {
+    if (!given.trim() && !family.trim()) return setError(t`A name — even just the one everyone used.`);
+    const parse = (s: string, invalidMsg: string): number | undefined | null => {
       if (!s.trim()) return undefined;
       const n = Number(s.trim());
       if (!Number.isFinite(n)) {
-        setError(`The ${label} year didn't read as a number.`);
+        setError(invalidMsg);
         return null;
       }
       return n;
     };
-    const by = parse(birthYear, "birth");
+    const by = parse(birthYear, t`The birth year didn't read as a number.`);
     if (by === null) return;
-    const dy = living ? undefined : parse(deathYear, "death");
+    const dy = living ? undefined : parse(deathYear, t`The death year didn't read as a number.`);
     if (dy === null) return;
 
     let events = withEventWhen(person.events, "birth", yearWhen(by, birthQual || undefined));
@@ -68,57 +70,57 @@ export function EditPerson({
 
   const qualSelect = (value: Qual, set: (q: Qual) => void) => (
     <select value={value} onChange={(e) => set(e.target.value as Qual)}>
-      <option value="">Exactly</option>
-      <option value="about">About</option>
-      <option value="before">Before</option>
-      <option value="after">After</option>
+      <option value="">{t`Exactly`}</option>
+      <option value="about">{t`About`}</option>
+      <option value="before">{t`Before`}</option>
+      <option value="after">{t`After`}</option>
     </select>
   );
 
   return (
-    <Sheet onClose={onClose} ariaLabel="Edit person">
-      <h3>Edit</h3>
+    <Sheet onClose={onClose} ariaLabel={t`Edit person`}>
+      <h3><Trans>Edit</Trans></h3>
       <form onSubmit={submit}>
         {error ? <div className="error">{error}</div> : null}
         <div className="row">
           <label className="field">
-            <span className="label">Given name</span>
+            <span className="label"><Trans>Given name</Trans></span>
             <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus />
           </label>
           <label className="field">
-            <span className="label">Family name</span>
+            <span className="label"><Trans>Family name</Trans></span>
             <input type="text" value={family} onChange={(e) => setFamily(e.target.value)} />
           </label>
         </div>
         <div className="row">
           <label className="field">
-            <span className="label">Born (year)</span>
+            <span className="label"><Trans>Born (year)</Trans></span>
             <input type="number" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} />
           </label>
           <label className="field">
-            <span className="label">How sure?</span>
+            <span className="label"><Trans>How sure?</Trans></span>
             {qualSelect(birthQual, setBirthQual)}
           </label>
         </div>
         <label className="check">
           <input type="checkbox" checked={living} onChange={(e) => setLiving(e.target.checked)} />
-          <span>Still living</span>
+          <span><Trans>Still living</Trans></span>
         </label>
         {!living ? (
           <div className="row">
             <label className="field">
-              <span className="label">Died (year, if known)</span>
+              <span className="label"><Trans>Died (year, if known)</Trans></span>
               <input type="number" value={deathYear} onChange={(e) => setDeathYear(e.target.value)} />
             </label>
             <label className="field">
-              <span className="label">How sure?</span>
+              <span className="label"><Trans>How sure?</Trans></span>
               {qualSelect(deathQual, setDeathQual)}
             </label>
           </div>
         ) : null}
         <div className="sheet-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary">Save</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}><Trans>Cancel</Trans></button>
+          <button type="submit" className="btn btn-primary"><Trans>Save</Trans></button>
         </div>
         <div className="danger-zone">
           <button
@@ -127,7 +129,7 @@ export function EditPerson({
             onClick={() => {
               if (
                 window.confirm(
-                  "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
+                  t`Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them.`
                 )
               ) {
                 onRemove();
@@ -135,7 +137,7 @@ export function EditPerson({
               }
             }}
           >
-            Remove from the tree
+            <Trans>Remove from the tree</Trans>
           </button>
         </div>
       </form>
