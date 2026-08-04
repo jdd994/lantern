@@ -128,9 +128,9 @@ export function SettingsSheet({
         </p>
         <p className="hint">
           The trade: your passphrase never leaves this device, so there's no reset by email —
-          that button would mean someone else could read the tree. If you forget it, Guardians
-          (in Sync) are the way back in: a few people you trust, jointly. Keep it somewhere
-          safe as well.
+          that button would mean someone else could read the tree. Two ways back in live in
+          Sync: a printed recovery kit (a one-page code for a fire safe), or Guardians — a
+          few people you trust, jointly. Keep the passphrase somewhere safe as well.
         </p>
       </section>
 
