@@ -1,5 +1,6 @@
 // @lantern/ui — shared experience primitives, themed by each app's own tokens.
 export { useTheme } from "./useTheme";
+export { useLocale } from "./useLocale";
 export { useAccent } from "./useAccent";
 export { Sheet } from "./Sheet";
 export { InstallSheet } from "./InstallSheet";

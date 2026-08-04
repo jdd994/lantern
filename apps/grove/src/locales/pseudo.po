@@ -1,0 +1,133 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-08-04 09:13-0600\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: pseudo\n"
+
+#. placeholder {0}: result.unions
+#: src/components/SettingsSheet.tsx:75
+msgid "{0, plural, one {1 family} other {# families}}"
+msgstr ""
+
+#. placeholder {0}: result.keepsakes
+#: src/components/SettingsSheet.tsx:76
+msgid "{0, plural, one {1 keepsake} other {# keepsakes}}"
+msgstr ""
+
+#. placeholder {0}: result.people
+#: src/components/SettingsSheet.tsx:74
+msgid "{0, plural, one {1 person} other {# people}}"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:51
+msgid "Canopy"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:188
+msgid "Close"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:52
+msgid "Dimmer, deeper"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:127
+msgid "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:134
+msgid "Export .ged"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:115
+msgid "GEDCOM is genealogy's common tongue — the format Ancestry and every desktop tool speaks. Names, dates, bonds, and the words of your keepsakes travel; the scans themselves stay safe in Grove."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:154
+msgid "Grove can live on your home screen like any app — helpful to know when you're getting a relative set up. <0>How to install, step by step</0>"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:171
+msgid "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:162
+msgid "How Grove works"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:136
+msgid "Import a .ged"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:148
+msgid "Import adds to the grove — it never overwrites, and it won't try to merge duplicates."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:152
+msgid "Keep Grove close"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:123
+msgid "Keep living people private in the export"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:96
+#: src/components/SettingsSheet.tsx:104
+msgid "Language"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:53
+msgid "Meadow"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:53
+msgid "Open daylight"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:91
+msgid "Pick the look that feels right. Saved on this device."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:136
+msgid "Reading…"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:98
+msgid "Saved on this device. A language is downloaded only when you choose it — your device never holds one you don't use."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:86
+#: src/components/SettingsSheet.tsx:87
+msgid "Settings"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:178
+msgid "The trade: your passphrase never leaves this device, so there's no reset by email — that button would mean someone else could read the tree. Two ways back in live in Sync: a printed recovery kit (a one-page code for a fire safe), or Guardians — a few people you trust, jointly. Keep the passphrase somewhere safe as well."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:51
+msgid "Under the leaves"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:52
+msgid "Understory"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:90
+msgid "Vibe"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:77
+msgid "Welcomed {people}, {unions}, and {keepsakes} into the grove."
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:113
+msgid "Your family's history is portable"
+msgstr ""
+
+#: src/components/SettingsSheet.tsx:164
+msgid "Your family's story is nobody's business but your family's. Every person, bond, and keepsake is encrypted on this device before it's stored — a breach of any server would yield nothing but noise, and we couldn't read it if we wanted to."
+msgstr ""
