@@ -3,6 +3,7 @@
 // The remembrance sits above the dates on purpose — it's the point.
 
 import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   childrenOf,
   displayName,
@@ -36,7 +37,7 @@ function KeepsakeMedia({ mediaId, getMediaUrl }: { mediaId: string; getMediaUrl:
   if (url.startsWith("data:image")) return <img className="keepsake-img" src={url} alt="" />;
   return (
     <a className="linklike" href={url} download="keepsake.pdf">
-      Save the document to read it
+      <Trans>Save the document to read it</Trans>
     </a>
   );
 }
@@ -64,7 +65,7 @@ function KinSection({
         <button className="btn btn-ghost btn-sm" onClick={onAdd}>{addLabel}</button>
       </div>
       {known.length === 0 ? (
-        <p className="kin-none">None recorded yet.</p>
+        <p className="kin-none"><Trans>None recorded yet.</Trans></p>
       ) : (
         known.map((p) => {
           const span = lifespanLabel(p);
@@ -113,6 +114,7 @@ export function PersonPage({
   // tree. A byline, never a score.
   authorHandle: (author?: string) => string | null;
 }) {
+  const { t } = useLingui();
   const [editing, setEditing] = useState(false);
   const [addingKeepsake, setAddingKeepsake] = useState(false);
   const [remembrance, setRemembrance] = useState(person.remembrance ?? "");
@@ -130,64 +132,64 @@ export function PersonPage({
 
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm back" onClick={onBack}>← Everyone</button>
+      <button type="button" className="btn btn-ghost btn-sm back" onClick={onBack}><Trans>← Everyone</Trans></button>
 
       <div className="person-head">
         <h2 className="person-title">{displayName(person)}</h2>
         <div className="person-actions">
-          <button className="btn btn-ghost btn-sm" onClick={onTree}>In the tree</button>
-          <button className="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>
+          <button className="btn btn-ghost btn-sm" onClick={onTree}><Trans>In the tree</Trans></button>
+          <button className="btn btn-sm" onClick={() => setEditing(true)}><Trans>Edit</Trans></button>
         </div>
       </div>
       {span || tendedBy ? (
         <p className="person-life">
           {span}
           {span && tendedBy ? " · " : ""}
-          {tendedBy ? <span className="byline">last tended by {tendedBy}</span> : null}
+          {tendedBy ? <span className="byline"><Trans>last tended by {tendedBy}</Trans></span> : null}
         </p>
       ) : null}
 
       <section className="section">
         <div className="section-head">
-          <h2 className="section-title">As the family remembers</h2>
+          <h2 className="section-title"><Trans>As the family remembers</Trans></h2>
         </div>
         <textarea
           className="remembrance"
           value={remembrance}
           onChange={(e) => setRemembrance(e.target.value)}
           onBlur={saveRemembrance}
-          placeholder="Who were they? What did they love, what did they always say, what does the family still tell about them?"
+          placeholder={t`Who were they? What did they love, what did they always say, what does the family still tell about them?`}
         />
       </section>
 
-      <KinSection title="Parents" ids={parentsOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("parent")} addLabel="Add a parent" />
-      <KinSection title="Partners" ids={partnersOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("partner")} addLabel="Add a partner" />
-      <KinSection title="Children" ids={childrenOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("child")} addLabel="Add a child" />
-      <KinSection title="Siblings" ids={siblingsOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("sibling")} addLabel="Add a sibling" />
+      <KinSection title={t`Parents`} ids={parentsOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("parent")} addLabel={t`Add a parent`} />
+      <KinSection title={t`Partners`} ids={partnersOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("partner")} addLabel={t`Add a partner`} />
+      <KinSection title={t`Children`} ids={childrenOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("child")} addLabel={t`Add a child`} />
+      <KinSection title={t`Siblings`} ids={siblingsOf(person.id, unions)} people={byId} onOpen={onOpen} onAdd={() => onAddRelative("sibling")} addLabel={t`Add a sibling`} />
 
       <section className="section">
         <div className="section-head">
-          <h2 className="section-title">Keepsakes</h2>
-          <button className="btn btn-ghost btn-sm" onClick={() => setAddingKeepsake(true)}>Add a keepsake</button>
+          <h2 className="section-title"><Trans>Keepsakes</Trans></h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setAddingKeepsake(true)}><Trans>Add a keepsake</Trans></button>
         </div>
         {treasures.length === 0 ? (
-          <p className="kin-none">Nothing kept here yet — a photo, a letter, a story worth saving.</p>
+          <p className="kin-none"><Trans>Nothing kept here yet — a photo, a letter, a story worth saving.</Trans></p>
         ) : (
           treasures.map((k) => (
             <div key={k.id} className="keepsake">
               <div className="keepsake-head">
                 <div>
-                  <div className="keepsake-caption">{k.caption || "A keepsake"}</div>
+                  <div className="keepsake-caption">{k.caption || t`A keepsake`}</div>
                   {k.when ? <div className="keepsake-when">{whenLabel(k.when)}</div> : null}
                   {authorHandle(k.author) ? (
-                    <div className="keepsake-when byline">kept by {authorHandle(k.author)}</div>
+                    <div className="keepsake-when byline"><Trans>kept by {authorHandle(k.author)}</Trans></div>
                   ) : null}
                 </div>
                 <button
                   className="btn btn-ghost btn-sm"
-                  title="Remove this keepsake"
+                  title={t`Remove this keepsake`}
                   onClick={() => {
-                    if (window.confirm("Remove this keepsake? It will be gone from the tree.")) onRemoveKeepsake(k);
+                    if (window.confirm(t`Remove this keepsake? It will be gone from the tree.`)) onRemoveKeepsake(k);
                   }}
                 >
                   ×

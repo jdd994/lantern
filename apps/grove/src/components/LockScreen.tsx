@@ -5,6 +5,7 @@
 
 import { RecoverWithCode } from "@lantern/ui";
 import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { RecoveryFlow } from "./RecoveryFlow";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
@@ -42,6 +43,7 @@ export function LockScreen({
   onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
   onRecoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
 }) {
+  const { t } = useLingui();
   const [pass, setPass] = useState("");
   const [showRecovery, setShowRecovery] = useState(false);
   const [showKit, setShowKit] = useState(false);
@@ -62,7 +64,7 @@ export function LockScreen({
       <div className="gate">
         <div className="gate-card">
           <h1 className="gate-brand">Grove<span>.</span></h1>
-          <h2>The paper way back in.</h2>
+          <h2><Trans>The paper way back in.</Trans></h2>
           <RecoverWithCode onRecover={onRecoverWithKit} onBack={() => setShowKit(false)} />
         </div>
       </div>
@@ -90,20 +92,20 @@ export function LockScreen({
     <div className="gate">
       <div className="gate-card">
         <h1 className="gate-brand">Grove<span>.</span></h1>
-        <h2>Welcome back.</h2>
-        <p>Your passphrase unlocks the tree on this device.</p>
+        <h2><Trans>Welcome back.</Trans></h2>
+        <p><Trans>Your passphrase unlocks the tree on this device.</Trans></p>
         <form onSubmit={submit}>
           {error ? <div className="error">{error}</div> : null}
           <label className="field">
-            <span className="label">Passphrase</span>
+            <span className="label"><Trans>Passphrase</Trans></span>
             <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoFocus autoComplete="current-password" />
           </label>
           <button type="submit" className="btn btn-primary" style={{ width: "100%" }} disabled={busy || !pass}>
-            {busy ? "Unlocking…" : "Unlock"}
+            {busy ? t`Unlocking…` : t`Unlock`}
           </button>
           {hasBiometric ? (
             <button type="button" className="btn btn-ghost" style={{ width: "100%", marginTop: 9 }} onClick={() => void onBiometric()}>
-              Use biometrics instead
+              <Trans>Use biometrics instead</Trans>
             </button>
           ) : null}
           <button
@@ -112,7 +114,7 @@ export function LockScreen({
             style={{ width: "100%", marginTop: 9 }}
             onClick={() => setShowRecovery(true)}
           >
-            Forgot your passphrase? Ask your guardians
+            <Trans>Forgot your passphrase? Ask your guardians</Trans>
           </button>
           <button
             type="button"
@@ -120,7 +122,7 @@ export function LockScreen({
             style={{ width: "100%", marginTop: 9 }}
             onClick={() => setShowKit(true)}
           >
-            Use a recovery code
+            <Trans>Use a recovery code</Trans>
           </button>
         </form>
       </div>
