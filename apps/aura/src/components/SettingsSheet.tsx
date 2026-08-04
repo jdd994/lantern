@@ -217,7 +217,7 @@ export function SettingsSheet({
               tier: conn?.descriptor.tier ?? 0,
               tierLabel: conn ? tierWording(conn.descriptor.tier) : undefined,
               discloses: conn?.descriptor.discloses ?? "",
-              detail: `${count} ${count === 1 ? "light" : "lights"}`,
+              detail: count === 1 ? "1 light" : `${count} lights`,
               since: s.connectedAt,
             };
           })}

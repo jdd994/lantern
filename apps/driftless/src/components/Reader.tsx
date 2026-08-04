@@ -96,7 +96,7 @@ export function Reader({
                   ))}
                   {e.mediaIds && e.mediaIds.length > 0 ? (
                     <p className="reader-photo">
-                      {e.mediaIds.length === 1 ? "a photo" : `${e.mediaIds.length} photos`} here
+                      {e.mediaIds.length === 1 ? "a photo here" : `${e.mediaIds.length} photos here`}
                     </p>
                   ) : null}
                 </section>

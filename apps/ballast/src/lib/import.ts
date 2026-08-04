@@ -268,7 +268,7 @@ function parseCsvRows(text: string, currency: string): ImportResult {
       natural: n === 0 ? base : `${base}:${n}`,
     });
   }
-  if (skipped > 0) issues.push(`${skipped} row${skipped === 1 ? " was" : "s were"} unreadable and left out.`);
+  if (skipped > 0) issues.push(skipped === 1 ? "1 row was unreadable and left out." : `${skipped} rows were unreadable and left out.`);
 
   // A statement where nothing is negative usually means "positive = money out"
   // (card exports do this). We do NOT flip signs on a guess — we say it.
@@ -323,7 +323,7 @@ function parseOfx(text: string, currency: string): ImportResult {
     }
     rows.push({ at, amount: { minor, currency }, merchant: name.replace(/\s+/g, " ").trim(), natural });
   }
-  if (skipped > 0) issues.push(`${skipped} entr${skipped === 1 ? "y was" : "ies were"} unreadable and left out.`);
+  if (skipped > 0) issues.push(skipped === 1 ? "1 entry was unreadable and left out." : `${skipped} entries were unreadable and left out.`);
   return { kind: "ofx", rows, issues };
 }
 

@@ -126,7 +126,7 @@ export function SharedView(props: Props) {
                     <span className="share-badge">{s.role === "owner" ? "yours" : "shared with you"}</span>
                   </span>
                   <span className="strand-card-count">
-                    {count} {count === 1 ? "piece" : "pieces"}
+                    {count === 1 ? "1 piece" : `${count} pieces`}
                   </span>
                 </button>
               </li>
@@ -557,7 +557,7 @@ function SharedDetail({
               </button>
               {files.length > 0 && (
                 <span className="compose-photos">
-                  {files.length} photo{files.length === 1 ? "" : "s"} ready
+                  {files.length === 1 ? "1 photo ready" : `${files.length} photos ready`}
                   <button className="act" title="Clear photos" onClick={() => setFiles([])}>
                     ✕
                   </button>
