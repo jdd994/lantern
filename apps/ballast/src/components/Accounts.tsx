@@ -57,7 +57,9 @@ export function Accounts({
                       {truncate(
                         account.source.kind === "alpaca"
                           ? account.source.keyId
-                          : account.source.address
+                          : account.source.kind === "gemini"
+                            ? account.source.apiKey
+                            : account.source.address
                       )}
                     </span>
                   </>
