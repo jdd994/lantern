@@ -188,11 +188,12 @@ npm run preview  # serve the built app
    ciphertext; devices reconcile by `updatedAt` via `@lantern/core/sync`
    (`src/lib/sync.ts`), wired end-to-end through `useLedger.ts`'s `syncNow`.
    Deployed at ballast.gold.
-3. **Tier 2 connectors** — ✅ first one built: **Alpaca** (`sources/alpaca.ts`),
-   keys encrypted in the vault, browser → institution directly, consent sheet
+3. **Tier 2 connectors** — ✅ two built: **Alpaca** (`sources/alpaca.ts`) and
+   **Gemini** (`sources/gemini.ts`, re-probed + built 2026-08-04: HMAC-SHA384
+   signed notional-balances read, summed exactly, breakdown dropped). Keys
+   encrypted in the vault, browser → institution directly, consent sheet
    states takes/refuses (the shared contract from `@lantern/core/connect`).
-   CORS probe matrix (2026-07-17, re-probe before building): **Gemini** also
-   passes cleanly (echoes origin + approves its HMAC headers — natural next);
+   CORS probe matrix (2026-07-17, re-probe before building):
    Kraken/Binance.US send no CORS; Bitstamp allows origin but not its auth
    headers; Coinbase permits only OAuth Bearer and its token exchange wants a
    client secret. Those would all force a balance-seeing server — that's a
