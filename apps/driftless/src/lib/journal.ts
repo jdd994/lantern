@@ -3,6 +3,8 @@
 // after the vault is unlocked. No React, no IO here — easy to test and reason
 // about.
 
+import { namedDay } from "@lantern/core/time";
+
 // An optional anchor in *lived* time — when a thought actually happened — as
 // opposed to createdAt (when it was written). Memory is fuzzy, so an anchor is
 // either an approximate calendar point (with a precision) or a free-text era
@@ -211,13 +213,10 @@ export function dayKey(ts: number): string {
 }
 
 export function dayLabel(ts: number): string {
+  const named = namedDay(ts);
+  if (named) return named;
   const d = new Date(ts);
   const now = new Date();
-  const startOf = (x: Date) =>
-    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((startOf(now) - startOf(d)) / 86_400_000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
   const opts: Intl.DateTimeFormatOptions = {
     weekday: "short",
     month: "short",

@@ -8,6 +8,7 @@
 // fact, not a verdict. It says so, once, quietly, and then it tells them their
 // trajectory, because that is the part they can actually do something about.
 
+import { relativeLabel } from "@lantern/core/time";
 import { formatMoney, type Money, type NetWorth } from "../lib/money";
 import type { Account } from "../lib/ledger";
 
@@ -60,10 +61,18 @@ export function Waterline({
           plausible — the most dangerous kind of wrong. */}
       {net.unpriced.length > 0 ? (
         <div className="unpriced-note">
-          Not counted: {net.unpriced.map((a) => a.name).join(", ")} — we couldn't get{" "}
-          {net.unpriced.length === 1 ? "a price" : "prices"} just now, and a number we don't know
-          isn't the same as a zero. The total above is missing{" "}
-          {net.unpriced.length === 1 ? "it" : "them"}.
+          {net.unpriced.length === 1 ? (
+            <>
+              Not counted: {net.unpriced[0].name} — we couldn't get a price just now, and a
+              number we don't know isn't the same as a zero. The total above is missing it.
+            </>
+          ) : (
+            <>
+              Not counted: {net.unpriced.map((a) => a.name).join(", ")} — we couldn't get
+              prices just now, and a number we don't know isn't the same as a zero. The total
+              above is missing them.
+            </>
+          )}
         </div>
       ) : null}
 
@@ -75,15 +84,7 @@ export function Waterline({
 }
 
 export function relative(at: number): string {
-  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (secs < 60) return "just now";
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return relativeLabel(at, { style: "narrow" });
 }
 
 export function signedMoney(m: Money): string {

@@ -117,9 +117,13 @@ export function ImportSheet({
             <p className="import-result">
               {done.added === 0
                 ? "Nothing new — every row was already here."
-                : `Imported ${done.added} transaction${done.added === 1 ? "" : "s"}.`}
+                : done.added === 1
+                  ? "Imported 1 transaction."
+                  : `Imported ${done.added} transactions.`}
               {done.skipped > 0 && done.added > 0
-                ? ` ${done.skipped} ${done.skipped === 1 ? "was" : "were"} already here and left untouched.`
+                ? done.skipped === 1
+                  ? " 1 was already here and left untouched."
+                  : ` ${done.skipped} were already here and left untouched.`
                 : ""}
             </p>
             <div className="sheet-actions">
@@ -161,8 +165,9 @@ export function ImportSheet({
             ) : (
               <>
                 <p className="import-summary">
-                  <strong>{fileName}</strong> — {rows.length} transaction
-                  {rows.length === 1 ? "" : "s"}, {formatMoney(totals.out)} out
+                  <strong>{fileName}</strong> —{" "}
+                  {rows.length === 1 ? "1 transaction" : `${rows.length} transactions`},{" "}
+                  {formatMoney(totals.out)} out
                   {totals.inn.minor > 0 ? <>, {formatMoney(totals.inn)} in</> : null}.
                 </p>
 
