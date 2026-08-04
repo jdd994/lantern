@@ -19,11 +19,12 @@ export const { register, login, fetchVault, updateVault, updateRecoveryKit, dele
 
 // Sharing (the family's co-authored tree) speaks the same protocol as its
 // siblings' shared strands and kitchens.
-export type { SharedRecord, SharedStrandInfo, StrandMember } from "@lantern/core/sharing-api";
+export type { SharedRecord, SharedStrandInfo, StrandMember, InviteInfo } from "@lantern/core/sharing-api";
 export const {
   setIdentity, fetchMe, fetchKeys,
   createShared, inviteToStrand, sharedMembers, sharedMine,
   sharedPush, sharedPull, sharedLeave, sharedRemove,
+  createInviteLink, listInvites, revokeInvite, joinClaim, joinFinish,
 } = createSharingClient(client.req);
 
 // Social recovery speaks its own small protocol, same shared-wrapper pattern.
