@@ -27,6 +27,27 @@ const MOOD_TO_VIBE: Record<string, string> = {
 // What the add sheet needs to know: who we're anchored to, if anyone.
 type Adding = { anchorId?: string; relation?: Relation };
 
+const PENDING_INVITE_KEY = "grove-pending-invite";
+
+// If the app was opened via an invite link (`#join=<id>.<secret>`), capture it,
+// stash it (so it survives first-run setup / unlock), and strip the secret from
+// the URL so it isn't left in history or accidentally re-shared.
+function readPendingInvite(): { inviteId: string; secret: string } | null {
+  try {
+    const m = /^#join=([^.]+)\.(.+)$/.exec(location.hash);
+    if (m) {
+      const pi = { inviteId: m[1], secret: m[2] };
+      localStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(pi));
+      history.replaceState(null, "", location.pathname + location.search);
+      return pi;
+    }
+    const stored = localStorage.getItem(PENDING_INVITE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const g = useGrove();
   const [selected, setSelected] = useState<string | null>(null);
@@ -36,7 +57,30 @@ export default function App() {
   const [sync, setSync] = useState(false);
   const [family, setFamily] = useState(false);
   const [installHelp, setInstallHelp] = useState(false);
+  const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
+  const [joinNote, setJoinNote] = useState<string | null>(null);
+  const joiningRef = useRef(false);
   const { mood, setMood } = useTheme("grove-mood", MOODS.map((m) => m.id), "canopy");
+
+  // Once we're open and connected, redeem any pending invite link and land the
+  // person in the family tree. If they're set up but haven't connected an
+  // account, a banner (below) points them to Sync; the invite waits until then.
+  useEffect(() => {
+    if (!pendingInvite || g.status !== "unlocked" || !g.account || joiningRef.current) return;
+    joiningRef.current = true;
+    void (async () => {
+      const res = await g.joinViaInvite(pendingInvite.inviteId, pendingInvite.secret);
+      joiningRef.current = false;
+      localStorage.removeItem(PENDING_INVITE_KEY);
+      setPendingInvite(null);
+      if ("error" in res) {
+        setJoinNote(res.error);
+      } else {
+        setJoinNote("You're in — the family tree is now yours to tend too.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvite, g.status, g.account]);
 
   const relayRef = useRef<VibeRelayHandle | null>(null);
   useEffect(() => {
@@ -113,6 +157,15 @@ export default function App() {
   const focusPerson = treeFocus ? g.people.find((p) => p.id === treeFocus) : undefined;
   const anchor = adding?.anchorId ? g.people.find((p) => p.id === adding.anchorId) : undefined;
 
+  // "Whose hand last touched it" — a byline for the shared tree, never a score.
+  // Null for your own records, and when the tree isn't shared at all.
+  const myUserId = g.tree?.members.find((m) => m.email === g.account)?.userId ?? null;
+  const authorHandle = (author?: string): string | null => {
+    if (!g.tree || !author || author === myUserId) return null;
+    const member = g.tree.members.find((m) => m.userId === author);
+    return member ? member.email.split("@")[0] : "someone";
+  };
+
   return (
     <div className="wrap">
       <header className="top">
@@ -166,6 +219,19 @@ export default function App() {
         </div>
       ) : null}
 
+      {pendingInvite && !g.account ? (
+        <div className="hint banner">
+          You've been invited to a family tree. Connect Sync to join —{" "}
+          <button className="linklike" onClick={() => setSync(true)}>open Sync</button>.
+        </div>
+      ) : null}
+      {joinNote ? (
+        <div className="hint banner">
+          {joinNote}{" "}
+          <button className="linklike" onClick={() => setJoinNote(null)}>Dismiss</button>
+        </div>
+      ) : null}
+
       {focusPerson ? (
         <TreeView
           focus={focusPerson}
@@ -196,6 +262,7 @@ export default function App() {
           onAddKeepsake={(draft, file) => void g.addKeepsake(draft, file)}
           onRemoveKeepsake={g.removeKeepsake}
           getMediaUrl={g.getMediaUrl}
+          authorHandle={authorHandle}
         />
       ) : (
         <Home people={g.people} unions={g.unions} onOpen={setSelected} onAddFirst={() => setAdding({})} onTree={setTreeFocus} />
@@ -237,6 +304,9 @@ export default function App() {
           treeError={g.treeError}
           onCreate={g.createTree}
           onInvite={g.inviteToTree}
+          onCreateLink={g.createTreeInviteLink}
+          onFetchInvites={g.fetchTreeInvites}
+          onRevokeInvite={g.revokeTreeInvite}
           onLeave={g.leaveTree}
           onRefresh={g.syncTree}
           onOpenSync={() => setSync(true)}

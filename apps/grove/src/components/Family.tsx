@@ -3,8 +3,9 @@
 // Inviting is by an address you already know — there's no directory, no
 // suggestions, no graph. That's the point.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet } from "@lantern/ui";
+import type { InviteInfo } from "../lib/api";
 import type { SharedTree } from "../hooks/useGrove";
 
 export function Family({
@@ -14,6 +15,9 @@ export function Family({
   treeError,
   onCreate,
   onInvite,
+  onCreateLink,
+  onFetchInvites,
+  onRevokeInvite,
   onLeave,
   onRefresh,
   onOpenSync,
@@ -25,6 +29,9 @@ export function Family({
   treeError: string | null;
   onCreate: (title: string) => Promise<string | null>;
   onInvite: (email: string) => Promise<string | null>;
+  onCreateLink: () => Promise<{ link: string } | { error: string }>;
+  onFetchInvites: () => Promise<InviteInfo[]>;
+  onRevokeInvite: (inviteId: string) => Promise<string | null>;
   onLeave: () => Promise<string | null>;
   onRefresh: () => Promise<void>;
   onOpenSync: () => void;
@@ -35,6 +42,58 @@ export function Family({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [invites, setInvites] = useState<InviteInfo[]>([]);
+
+  const hasTree = !!tree;
+  useEffect(() => {
+    if (hasTree) void onFetchInvites().then(setInvites);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasTree]);
+
+  async function createLink() {
+    setLinkBusy(true);
+    setLinkErr(null);
+    const res = await onCreateLink();
+    setLinkBusy(false);
+    if ("error" in res) setLinkErr(res.error);
+    else {
+      setLink(res.link);
+      setInvites(await onFetchInvites());
+    }
+  }
+
+  async function copyLink() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the link is visible to copy by hand */
+    }
+  }
+
+  async function shareLink() {
+    if (!link) return;
+    try {
+      await navigator.share({ text: "Join our family tree on Grove:", url: link });
+    } catch {
+      /* dismissed */
+    }
+  }
+
+  async function revoke(inviteId: string) {
+    setLinkErr(null);
+    const err = await onRevokeInvite(inviteId);
+    if (err) setLinkErr(err);
+    setInvites(await onFetchInvites());
+  }
+
+  const openInvites = invites.filter((i) => !i.revoked && i.expiresAt > Date.now() && i.uses < i.maxUses);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -139,6 +198,43 @@ export function Family({
                 </button>
               </div>
             </form>
+          </section>
+
+          <section className="set-section">
+            <h4 className="set-head">Or share a link</h4>
+            <p className="hint">
+              Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The
+              tree's key rides inside the link itself — the server only ever holds a locked
+              envelope — so send it somewhere you'd trust with the family's story.
+            </p>
+            {link ? (
+              <>
+                <div className="invite-link">{link}</div>
+                <div className="sheet-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
+                  <button className="btn" onClick={() => void copyLink()}>{copied ? "Copied" : "Copy link"}</button>
+                  {typeof navigator.share === "function" ? (
+                    <button className="btn btn-ghost" onClick={() => void shareLink()}>Share…</button>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <button className="btn" disabled={linkBusy} onClick={() => void createLink()}>
+                {linkBusy ? "Making a link…" : "Make an invite link"}
+              </button>
+            )}
+            {linkErr ? <div className="error" style={{ marginTop: 10 }}>{linkErr}</div> : null}
+            {openInvites.length ? (
+              <div style={{ marginTop: 10 }}>
+                {openInvites.map((i) => (
+                  <div key={i.inviteId} className="member-row">
+                    <span className="hint" style={{ margin: 0 }}>
+                      Link from {new Date(i.createdAt).toLocaleDateString()} — used {i.uses} of {i.maxUses}
+                    </span>
+                    <button className="linklike danger" onClick={() => void revoke(i.inviteId)}>revoke</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <div className="sheet-actions">
