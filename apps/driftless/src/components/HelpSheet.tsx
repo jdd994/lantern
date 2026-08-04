@@ -244,8 +244,9 @@ export function HelpSheet({
             <p>
               Everything is end-to-end encrypted with your passphrase. It never leaves your device,
               and no one — not even us — can read your journal. There's no password reset by
-              email; instead, guardians (a few people you trust, set up in Settings) can jointly
-              let you back in if you ever forget it. Keep it somewhere safe as well.
+              email; instead there are two ways back in, both set up in Settings: a printed
+              recovery kit — a one-page code for a fire safe — or guardians, a few people you
+              trust acting jointly. Keep it somewhere safe as well.
             </p>
           </HelpItem>
 
@@ -253,8 +254,8 @@ export function HelpSheet({
             <p>
               There are two separate secrets: your <b>passphrase</b> unlocks your
               writing and never leaves your device — it has no email reset
-              (guardians are the way back in), so keep it in a password manager
-              and on paper somewhere safe. Your <b>account
+              (a recovery kit or your guardians are the way back in), so keep it
+              in a password manager and on paper somewhere safe. Your <b>account
               password</b> (for syncing) is a different thing; make it its own
               strong password, and turn on two-factor login on your email.
             </p>

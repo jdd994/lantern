@@ -53,9 +53,11 @@ export function Welcome({
           <p style={{ fontSize: 13.5, color: "var(--ink-faint)" }}>
             If you ever forget your passphrase, the people you trust can let you back in: set up{" "}
             <strong style={{ color: "var(--ink-soft)" }}>guardians</strong> (in Sync) and a few of
-            them together can restore your access — nobody else, including us. Until then it's the
-            only key: there's no reset by email, because a reset button would mean someone besides
-            you could read your plans. Keep it somewhere safe.
+            them together can restore your access — or print a{" "}
+            <strong style={{ color: "var(--ink-soft)" }}>recovery kit</strong>: a one-page code
+            for a fire safe. Nobody else can ever get in, including us — there's no reset by
+            email, because a reset button would mean someone besides you could read your plans.
+            Keep the passphrase somewhere safe too.
           </p>
 
           <button className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} onClick={() => setStep("pass")}>

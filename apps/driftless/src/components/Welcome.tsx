@@ -54,9 +54,10 @@ export function Welcome({ onBegin }: Props) {
 
         <p className="welcome-warn">
           Next you'll choose a <strong>passphrase</strong> — the key to your
-          journal. If you ever forget it, the safety net is people, not a reset
-          email: set up <strong>guardians</strong> later (in Settings) and a few
-          people you trust can jointly let you back in. Nobody else — not even
+          journal. If you ever forget it there's a safety net, and it isn't a
+          reset email: print a <strong>recovery kit</strong> (in Settings — a
+          one-page code for a fire safe), or set up <strong>guardians</strong>,
+          a few people you trust who can jointly let you back in. Nobody else — not even
           we — can ever read or recover what you write; that's the trade for
           real privacy. Pick a few words you'll remember, and keep them
           somewhere safe too.
