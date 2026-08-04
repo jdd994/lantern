@@ -38,12 +38,14 @@ export type Connector = {
 import { manual } from "./manual";
 import { bitcoin, ethereum } from "./chain";
 import { alpaca } from "./alpaca";
+import { gemini } from "./gemini";
 
 export const CONNECTORS: Record<SourceKind, Connector> = {
   manual: manual,
   bitcoin: bitcoin,
   ethereum: ethereum,
   alpaca: alpaca,
+  gemini: gemini,
 };
 
 export function connectorFor(ref: SourceRef): Connector {
