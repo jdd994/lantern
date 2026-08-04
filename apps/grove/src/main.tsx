@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useRegisterSW } from "virtual:pwa-register/react";
+import { I18nProvider } from "@lingui/react";
 import { UpdateToast } from "@lantern/ui";
+import { i18n } from "./lib/i18n";
 import App from "./App";
 import "@lantern/ui/styles.css";
 import "./styles.css";
@@ -32,7 +34,9 @@ function UpdateOffer() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
-    <UpdateOffer />
+    <I18nProvider i18n={i18n}>
+      <App />
+      <UpdateOffer />
+    </I18nProvider>
   </StrictMode>
 );
