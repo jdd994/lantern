@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
-import { InstallSheet, useTheme } from "@lantern/ui";
+import { InstallSheet, useTheme, useLocale } from "@lantern/ui";
+import { LOCALES, activateLocale } from "./lib/i18n";
 import { useGrove } from "./hooks/useGrove";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -61,6 +62,10 @@ export default function App() {
   const [joinNote, setJoinNote] = useState<string | null>(null);
   const joiningRef = useRef(false);
   const { mood, setMood } = useTheme("grove-mood", MOODS.map((m) => m.id), "canopy");
+  const { locale, setLocale } = useLocale("grove-locale", LOCALES.map((l) => l.id));
+  useEffect(() => {
+    void activateLocale(locale);
+  }, [locale]);
 
   // Once we're open and connected, redeem any pending invite link and land the
   // person in the family tree. If they're set up but haven't connected an
@@ -286,6 +291,9 @@ export default function App() {
         <SettingsSheet
           mood={mood}
           onMood={handleMood}
+          locale={locale}
+          locales={LOCALES}
+          onLocale={setLocale}
           onExport={g.exportGedcom}
           onImport={g.importGedcom}
           onInstallHelp={() => {

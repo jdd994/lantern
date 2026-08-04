@@ -4,9 +4,8 @@
 // not a name, not a date, not a word of a letter — and knows who a guardian
 // naturally is: the family itself.
 
-import { SyncSheet } from "@lantern/ui";
+import { SyncSheet, RecoveryKitSection } from "@lantern/ui";
 import type { ComponentProps } from "react";
-import { RecoveryKitSection } from "./RecoveryKit";
 
 type Props = Omit<ComponentProps<typeof SyncSheet>, "copy" | "guardianDefaults" | "recoveryKit"> & {
   recoveryKitAt: number | null;
