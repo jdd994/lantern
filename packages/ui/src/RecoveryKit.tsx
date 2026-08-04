@@ -1,11 +1,14 @@
-// RecoveryKit.tsx — the paper answer for a vault with no circle. Two pieces:
-// a small section for the Sync sheet (make / replace / remove), and the
-// printable page itself. The page is shown exactly once per minting — the code
-// exists on paper and inside the wrapped blob, nowhere else, and the copy says
-// out loud what the paper is: the deed to the house.
+// RecoveryKit.tsx — the paper answer for a vault with no circle. Three pieces:
+// a small section for the Sync sheet (make / replace / remove), the printable
+// page itself, and the lock-screen door that accepts the code. The page is
+// shown exactly once per minting — the code exists on paper and inside the
+// wrapped blob, nowhere else, and the copy says out loud what the paper is:
+// the deed to the house.
 //
-// Printing uses window.print() with a CSS veil (see styles.css): on paper,
-// only the kit page renders. Nothing leaves the device.
+// Family-shared: five apps carried this file byte-for-byte, so it lives here
+// once now (Driftless keeps its own variant — different markup system).
+// Printing uses window.print() with a CSS veil (each app's styles.css): on
+// paper, only the kit page renders. Nothing leaves the device.
 
 import { useState } from "react";
 
