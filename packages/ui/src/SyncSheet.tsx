@@ -44,6 +44,8 @@ export type SyncCopy = {
   // Extra sentence(s) appended to the guardians pitch.
   guardiansPitchExtra?: string;
   helpHeading?: string;
+  // The sign-in hint, when "you'll open it" doesn't agree with the noun.
+  signinHint?: string;
 };
 
 // How the guardian setup form starts out. Apps with more at stake default
@@ -491,8 +493,8 @@ export function SyncSheet({
 
               {mode === "signin" && !canCreate ? (
                 <p className="hint">
-                  Signing in downloads your {copy.noun} to this device. You'll open it with the same
-                  passphrase you set on the first one.
+                  {copy.signinHint ??
+                    `Signing in downloads your ${copy.noun} to this device. You'll open it with the same passphrase you set on the first one.`}
                 </p>
               ) : null}
 

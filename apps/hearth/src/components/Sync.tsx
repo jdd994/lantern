@@ -2,9 +2,8 @@
 // The structure, the two-secrets explanation, and the guardian flow live there;
 // Hearth only says what syncs: the log.
 
-import { SyncSheet } from "@lantern/ui";
+import { SyncSheet, RecoveryKitSection } from "@lantern/ui";
 import type { ComponentProps } from "react";
-import { RecoveryKitSection } from "./RecoveryKit";
 
 type Props = Omit<ComponentProps<typeof SyncSheet>, "copy" | "guardianDefaults" | "recoveryKit"> & {
   recoveryKitAt: number | null;

@@ -3,9 +3,9 @@
 // about this person's money until the passphrase (or a biometric shortcut to the
 // same key) opens it.
 
+import { RecoverWithCode } from "@lantern/ui";
 import { useEffect, useState } from "react";
 import { RecoveryFlow } from "./RecoveryFlow";
-import { RecoverWithCode } from "./RecoveryKit";
 import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 export function LockScreen({

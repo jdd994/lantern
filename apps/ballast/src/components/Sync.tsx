@@ -4,10 +4,9 @@
 // here (money, not journal entries) — defaults the guardian setup stricter
 // than its siblings: 5 rows, 3 to approve, a 4-day wait.
 
-import { SyncSheet, DELAY_OPTIONS } from "@lantern/ui";
+import { SyncSheet, DELAY_OPTIONS, RecoveryKitSection } from "@lantern/ui";
 import type { ComponentProps } from "react";
 import { TrustBadge } from "./TrustBadge";
-import { RecoveryKitSection } from "./RecoveryKit";
 
 type Props = Omit<ComponentProps<typeof SyncSheet>, "copy" | "guardianDefaults" | "recoveryKit"> & {
   recoveryKitAt: number | null;
