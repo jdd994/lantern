@@ -3,6 +3,7 @@
 // never-silently-dropped promise visible: added but not yet linked still means
 // fully here.
 
+import { Trans } from "@lingui/react/macro";
 import { displayName, lifespanLabel, unplaced, type Person, type Union } from "../lib/model";
 
 function PersonRow({ person, onOpen }: { person: Person; onOpen: (id: string) => void }) {
@@ -32,10 +33,12 @@ export function Home({
     return (
       <div className="empty">
         <p>
-          The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone
-          tells stories about. One name is enough; the rest grows from it.
+          <Trans>
+            The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone
+            tells stories about. One name is enough; the rest grows from it.
+          </Trans>
         </p>
-        <button className="btn btn-primary" onClick={onAddFirst}>Add the first person</button>
+        <button className="btn btn-primary" onClick={onAddFirst}><Trans>Add the first person</Trans></button>
       </div>
     );
   }
@@ -50,8 +53,8 @@ export function Home({
       {placed.length ? (
         <section className="section">
           <div className="section-head">
-            <h2 className="section-title">Family</h2>
-            <button className="btn btn-ghost btn-sm" onClick={() => onTree(placed[0].id)}>See the tree</button>
+            <h2 className="section-title"><Trans>Family</Trans></h2>
+            <button className="btn btn-ghost btn-sm" onClick={() => onTree(placed[0].id)}><Trans>See the tree</Trans></button>
           </div>
           {placed.map((p) => <PersonRow key={p.id} person={p} onOpen={onOpen} />)}
         </section>
@@ -59,9 +62,9 @@ export function Home({
       {loose.length ? (
         <section className="section">
           <div className="section-head">
-            <h2 className="section-title">Not yet placed</h2>
+            <h2 className="section-title"><Trans>Not yet placed</Trans></h2>
           </div>
-          <p className="hint">Added but not linked to anyone yet — they still belong.</p>
+          <p className="hint"><Trans>Added but not linked to anyone yet — they still belong.</Trans></p>
           {loose.sort(byName).map((p) => <PersonRow key={p.id} person={p} onOpen={onOpen} />)}
         </section>
       ) : null}

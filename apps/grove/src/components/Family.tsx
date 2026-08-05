@@ -4,6 +4,7 @@
 // suggestions, no graph. That's the point.
 
 import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
 import type { InviteInfo } from "../lib/api";
 import type { SharedTree } from "../hooks/useGrove";
@@ -37,6 +38,7 @@ export function Family({
   onOpenSync: () => void;
   onClose: () => void;
 }) {
+  const { t } = useLingui();
   const [title, setTitle] = useState("");
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function Family({
   async function shareLink() {
     if (!link) return;
     try {
-      await navigator.share({ text: "Join our family tree on Grove:", url: link });
+      await navigator.share({ text: t`Join our family tree on Grove:`, url: link });
     } catch {
       /* dismissed */
     }
@@ -111,48 +113,54 @@ export function Family({
     const err = await onInvite(em);
     if (err) setError(err);
     else {
-      setNotice(`Invited ${em} — the tree will be there next time they open Grove.`);
+      setNotice(t`Invited ${em} — the tree will be there next time they open Grove.`);
       setEmail("");
     }
   }
 
   return (
-    <Sheet onClose={onClose} ariaLabel="Family tree">
-      <h3>The family tree</h3>
+    <Sheet onClose={onClose} ariaLabel={t`Family tree`}>
+      <h3><Trans>The family tree</Trans></h3>
 
       {!account ? (
         <>
           <p>
-            A shared tree travels through your account — the server relays encrypted records it
-            can't read, wrapped keys it can't open.
+            <Trans>
+              A shared tree travels through your account — the server relays encrypted records it
+              can't read, wrapped keys it can't open.
+            </Trans>
           </p>
-          <p className="hint">Connect Sync first, then come back here to plant it.</p>
+          <p className="hint"><Trans>Connect Sync first, then come back here to plant it.</Trans></p>
           <div className="sheet-actions">
-            <button className="btn btn-ghost" onClick={onClose}>Close</button>
-            <button className="btn btn-primary" onClick={() => { onClose(); onOpenSync(); }}>Open Sync</button>
+            <button className="btn btn-ghost" onClick={onClose}><Trans>Close</Trans></button>
+            <button className="btn btn-primary" onClick={() => { onClose(); onOpenSync(); }}><Trans>Open Sync</Trans></button>
           </div>
         </>
       ) : !tree ? (
         <>
           <p>
-            One tree, written together. Everyone you invite reads and writes every person, bond,
-            and keepsake — the way a family actually remembers. Your whole tree here becomes the
-            starting point.
+            <Trans>
+              One tree, written together. Everyone you invite reads and writes every person, bond,
+              and keepsake — the way a family actually remembers. Your whole tree here becomes the
+              starting point.
+            </Trans>
           </p>
           <p className="hint">
-            Each record carries whose hand last touched it — a byline for stories, never a score.
+            <Trans>
+              Each record carries whose hand last touched it — a byline for stories, never a score.
+            </Trans>
           </p>
           <form onSubmit={create}>
             {error ? <div className="error">{error}</div> : null}
             {treeError ? <div className="error">{treeError}</div> : null}
             <label className="field">
-              <span className="label">What should it be called?</span>
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="The Hale tree" autoFocus />
+              <span className="label"><Trans>What should it be called?</Trans></span>
+              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t`The Hale tree`} autoFocus />
             </label>
             <div className="sheet-actions">
-              <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn btn-ghost" onClick={onClose}><Trans>Cancel</Trans></button>
               <button type="submit" className="btn btn-primary" disabled={treeBusy}>
-                {treeBusy ? "Planting…" : "Plant the shared tree"}
+                {treeBusy ? t`Planting…` : t`Plant the shared tree`}
               </button>
             </div>
           </form>
@@ -160,13 +168,15 @@ export function Family({
       ) : (
         <>
           <p>
-            <strong>{tree.title}</strong> — shared with the family. What anyone adds, everyone
-            keeps: family records also back up under your own account, encrypted.
+            <Trans>
+              <strong>{tree.title}</strong> — shared with the family. What anyone adds, everyone
+              keeps: family records also back up under your own account, encrypted.
+            </Trans>
           </p>
 
           {tree.members.length ? (
             <section className="set-section">
-              <h4 className="set-head">Who's in it</h4>
+              <h4 className="set-head"><Trans>Who's in it</Trans></h4>
               {tree.members.map((m) => (
                 <div key={m.userId} className="member-row">
                   <span className="member-email">{m.email}</span>
@@ -177,10 +187,12 @@ export function Family({
           ) : null}
 
           <section className="set-section">
-            <h4 className="set-head">Invite family</h4>
+            <h4 className="set-head"><Trans>Invite family</Trans></h4>
             <p className="hint">
-              By an address you already know. Their copy of the tree's key is wrapped so only they
-              can open it — the server just carries the envelope.
+              <Trans>
+                By an address you already know. Their copy of the tree's key is wrapped so only they
+                can open it — the server just carries the envelope.
+              </Trans>
             </p>
             <form onSubmit={invite}>
               {notice ? <p className="hint">{notice}</p> : null}
@@ -191,35 +203,37 @@ export function Family({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="them@example.com"
+                  placeholder={t`them@example.com`}
                 />
                 <button type="submit" className="btn" disabled={treeBusy || !email.trim()}>
-                  {treeBusy ? "Inviting…" : "Invite"}
+                  {treeBusy ? t`Inviting…` : t`Invite`}
                 </button>
               </div>
             </form>
           </section>
 
           <section className="set-section">
-            <h4 className="set-head">Or share a link</h4>
+            <h4 className="set-head"><Trans>Or share a link</Trans></h4>
             <p className="hint">
-              Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The
-              tree's key rides inside the link itself — the server only ever holds a locked
-              envelope — so send it somewhere you'd trust with the family's story.
+              <Trans>
+                Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The
+                tree's key rides inside the link itself — the server only ever holds a locked
+                envelope — so send it somewhere you'd trust with the family's story.
+              </Trans>
             </p>
             {link ? (
               <>
                 <div className="invite-link">{link}</div>
                 <div className="sheet-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
-                  <button className="btn" onClick={() => void copyLink()}>{copied ? "Copied" : "Copy link"}</button>
+                  <button className="btn" onClick={() => void copyLink()}>{copied ? t`Copied` : t`Copy link`}</button>
                   {typeof navigator.share === "function" ? (
-                    <button className="btn btn-ghost" onClick={() => void shareLink()}>Share…</button>
+                    <button className="btn btn-ghost" onClick={() => void shareLink()}><Trans>Share…</Trans></button>
                   ) : null}
                 </div>
               </>
             ) : (
               <button className="btn" disabled={linkBusy} onClick={() => void createLink()}>
-                {linkBusy ? "Making a link…" : "Make an invite link"}
+                {linkBusy ? t`Making a link…` : t`Make an invite link`}
               </button>
             )}
             {linkErr ? <div className="error" style={{ marginTop: 10 }}>{linkErr}</div> : null}
@@ -228,9 +242,11 @@ export function Family({
                 {openInvites.map((i) => (
                   <div key={i.inviteId} className="member-row">
                     <span className="hint" style={{ margin: 0 }}>
-                      Link from {new Date(i.createdAt).toLocaleDateString()} — used {i.uses} of {i.maxUses}
+                      <Trans>
+                        Link from {new Date(i.createdAt).toLocaleDateString()} — used {i.uses} of {i.maxUses}
+                      </Trans>
                     </span>
-                    <button className="linklike danger" onClick={() => void revoke(i.inviteId)}>revoke</button>
+                    <button className="linklike danger" onClick={() => void revoke(i.inviteId)}><Trans>revoke</Trans></button>
                   </div>
                 ))}
               </div>
@@ -239,20 +255,22 @@ export function Family({
 
           <div className="sheet-actions">
             <button className="btn btn-ghost" onClick={() => void onRefresh()} disabled={treeBusy}>
-              {treeBusy ? "Refreshing…" : "Refresh"}
+              {treeBusy ? t`Refreshing…` : t`Refresh`}
             </button>
-            <button className="btn btn-primary" onClick={onClose}>Close</button>
+            <button className="btn btn-primary" onClick={onClose}><Trans>Close</Trans></button>
           </div>
 
           <div className="danger-zone">
             {confirmLeave ? (
               <>
                 <p className="hint">
-                  Leaving stops sharing from this account. Everything already on this device stays
-                  — the family's copy stays with the family.
+                  <Trans>
+                    Leaving stops sharing from this account. Everything already on this device stays
+                    — the family's copy stays with the family.
+                  </Trans>
                 </p>
                 <div className="sheet-actions">
-                  <button className="btn btn-ghost" onClick={() => setConfirmLeave(false)}>Stay</button>
+                  <button className="btn btn-ghost" onClick={() => setConfirmLeave(false)}><Trans>Stay</Trans></button>
                   <button
                     className="btn btn-danger"
                     onClick={async () => {
@@ -261,13 +279,13 @@ export function Family({
                       else setConfirmLeave(false);
                     }}
                   >
-                    Leave the shared tree
+                    <Trans>Leave the shared tree</Trans>
                   </button>
                 </div>
               </>
             ) : (
               <button className="linklike danger" onClick={() => setConfirmLeave(true)}>
-                Leave the shared tree
+                <Trans>Leave the shared tree</Trans>
               </button>
             )}
           </div>
