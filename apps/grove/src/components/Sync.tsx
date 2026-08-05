@@ -4,6 +4,7 @@
 // not a name, not a date, not a word of a letter — and knows who a guardian
 // naturally is: the family itself.
 
+import { Trans, useLingui } from "@lingui/react/macro";
 import { SyncSheet, RecoveryKitSection } from "@lantern/ui";
 import type { ComponentProps } from "react";
 
@@ -14,20 +15,23 @@ type Props = Omit<ComponentProps<typeof SyncSheet>, "copy" | "guardianDefaults" 
 };
 
 export function Sync({ recoveryKitAt, onCreateRecoveryKit, onRemoveRecoveryKit, ...props }: Props) {
+  const { t } = useLingui();
   return (
     <SyncSheet
       {...props}
       copy={{
-        noun: "tree",
+        noun: t`tree`,
         privacyNote: (
           <p className="hint">
-            Only encrypted blobs leave this device. Your passphrase, and the key made from it,
-            never do — so the server stores noise it can't read: not a name, not a date, not a
-            word of a letter.
+            <Trans>
+              Only encrypted blobs leave this device. Your passphrase, and the key made from it,
+              never do — so the server stores noise it can't read: not a name, not a date, not a
+              word of a letter.
+            </Trans>
           </p>
         ),
-        guardiansPitchExtra: "For a family tree, the natural guardians are the family.",
-        helpHeading: "Help a family member",
+        guardiansPitchExtra: t`For a family tree, the natural guardians are the family.`,
+        helpHeading: t`Help a family member`,
       }}
       recoveryKit={
         <RecoveryKitSection

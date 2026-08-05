@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { InstallSheet, useTheme, useLocale } from "@lantern/ui";
 import { LOCALES, activateLocale } from "./lib/i18n";
@@ -50,6 +51,7 @@ function readPendingInvite(): { inviteId: string; secret: string } | null {
 }
 
 export default function App() {
+  const { t } = useLingui();
   const g = useGrove();
   const [selected, setSelected] = useState<string | null>(null);
   const [treeFocus, setTreeFocus] = useState<string | null>(null);
@@ -81,7 +83,7 @@ export default function App() {
       if ("error" in res) {
         setJoinNote(res.error);
       } else {
-        setJoinNote("You're in — the family tree is now yours to tend too.");
+        setJoinNote(t`You're in — the family tree is now yours to tend too.`);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,7 +170,7 @@ export default function App() {
   const authorHandle = (author?: string): string | null => {
     if (!g.tree || !author || author === myUserId) return null;
     const member = g.tree.members.find((m) => m.userId === author);
-    return member ? member.email.split("@")[0] : "someone";
+    return member ? member.email.split("@")[0] : t`someone`;
   };
 
   return (
@@ -177,7 +179,7 @@ export default function App() {
         <h1 className="brand">Grove<span>.</span></h1>
         <div className="top-actions">
           {g.canBiometric && !g.hasBiometric ? (
-            <button className="btn btn-sm" onClick={() => void g.enableBiometric()}>Quick unlock</button>
+            <button className="btn btn-sm" onClick={() => void g.enableBiometric()}><Trans>Quick unlock</Trans></button>
           ) : null}
           <button
             className="btn btn-sm"
@@ -185,22 +187,22 @@ export default function App() {
               setFamily(true);
               void g.syncTree();
             }}
-            title={g.tree ? `Shared: ${g.tree.title}` : "Share the tree with family"}
+            title={g.tree ? t`Shared: ${g.tree.title}` : t`Share the tree with family`}
           >
-            {g.tree ? "Family" : "Share"}
+            {g.tree ? t`Family` : t`Share`}
           </button>
           <button
             className="btn btn-sm"
             onClick={() => setSync(true)}
-            title={g.account ? `Syncing as ${g.account}` : "Sync across devices"}
+            title={g.account ? t`Syncing as ${g.account}` : t`Sync across devices`}
           >
-            {g.syncing ? "Syncing…" : g.account ? "Synced" : "Sync"}
+            {g.syncing ? t`Syncing…` : g.account ? t`Synced` : t`Sync`}
           </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => setSettings(true)}
-            title="Settings & vibe"
-            aria-label="Settings and vibe"
+            title={t`Settings & vibe`}
+            aria-label={t`Settings and vibe`}
           >
             <Gear />
           </button>
@@ -210,9 +212,9 @@ export default function App() {
               setSelected(null);
               g.lock();
             }}
-            title="Lock the vault"
+            title={t`Lock the vault`}
           >
-            Lock
+            <Trans>Lock</Trans>
           </button>
         </div>
       </header>
@@ -220,20 +222,22 @@ export default function App() {
       {g.saveError ? (
         <div className="error">
           {g.saveError.message}{" "}
-          <button className="linklike" onClick={g.saveError.retry}>Try again</button>
+          <button className="linklike" onClick={g.saveError.retry}><Trans>Try again</Trans></button>
         </div>
       ) : null}
 
       {pendingInvite && !g.account ? (
         <div className="hint banner">
-          You've been invited to a family tree. Connect Sync to join —{" "}
-          <button className="linklike" onClick={() => setSync(true)}>open Sync</button>.
+          <Trans>
+            You've been invited to a family tree. Connect Sync to join —{" "}
+            <button className="linklike" onClick={() => setSync(true)}>open Sync</button>.
+          </Trans>
         </div>
       ) : null}
       {joinNote ? (
         <div className="hint banner">
           {joinNote}{" "}
-          <button className="linklike" onClick={() => setJoinNote(null)}>Dismiss</button>
+          <button className="linklike" onClick={() => setJoinNote(null)}><Trans>Dismiss</Trans></button>
         </div>
       ) : null}
 
