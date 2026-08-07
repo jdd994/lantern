@@ -161,7 +161,10 @@ export function toGedcom(tree: GedcomTree, opts: ExportOptions = {}): string {
     } else {
       const names = p.names.length ? p.names : [{}];
       names.forEach((n: Name, idx) => {
-        put(1, "NAME", `${n.given ?? ""} /${n.family ?? ""}/`.trim());
+        put(1, "NAME", nameValue(n));
+        // A full name whose family part can't be found inside it still says
+        // which name is the family one, in the subtag made for exactly that.
+        if (n.full && n.family && !n.full.includes(n.family)) put(2, "SURN", n.family);
         const type = n.kind === "married" ? "married" : n.kind === "aka" ? "aka" : idx > 0 ? "aka" : undefined;
         if (type) put(2, "TYPE", type);
       });
@@ -277,15 +280,37 @@ function textOf(node: GNode): string {
   return s;
 }
 
+// The whole name, with the surname slash-marked where it actually stands —
+// so an order that isn't fore-names-then-surname survives the trip out.
+function nameValue(n: Name): string {
+  if (n.full) return n.family && n.full.includes(n.family) ? n.full.replace(n.family, `/${n.family}/`) : n.full;
+  return `${n.given ?? ""} /${n.family ?? ""}/`.trim();
+}
+
 function child(node: GNode, tag: string): GNode | undefined {
   return node.children.find((c) => c.tag === tag);
 }
 
-function parseName(value: string): Name {
-  const m = value.match(/^([^/]*)(?:\/([^/]*)\/)?\s*$/);
-  const given = (m?.[1] ?? value).trim();
-  const family = (m?.[2] ??"").trim();
-  return { ...(given ? { given } : {}), ...(family ? { family } : {}) };
+// GEDCOM writes the whole name in its own order and marks the surname inside
+// it with slashes, wherever it falls: "Mary Jane /Poole/", but equally
+// "/Wang/ Wei" or "Martin Luther /King/ Jr.". So the surname is read where it
+// stands and everything around it keeps its place. A name that is plainly
+// fore-names-then-surname stays in the given/family pair the rest of the app
+// grew up on; only a name that pair can't hold reaches for `full`.
+function parseName(value: string, surn?: string): Name {
+  const m = value.match(/^([^/]*)\/([^/]*)\/(.*)$/);
+  if (!m) {
+    const given = value.trim();
+    const family = surn?.trim();
+    return { ...(given ? { given } : {}), ...(family ? { family } : {}) };
+  }
+  const [, before, family, after] = m;
+  if (!after.trim()) {
+    const given = before.trim();
+    return { ...(given ? { given } : {}), ...(family.trim() ? { family: family.trim() } : {}) };
+  }
+  const full = `${before}${family}${after}`.replace(/\s+/g, " ").trim();
+  return { ...(full ? { full } : {}), ...(family.trim() ? { family: family.trim() } : {}) };
 }
 
 function parseEvent(node: GNode, kind: LifeEvent["kind"]): LifeEvent | null {
@@ -322,7 +347,8 @@ export function fromGedcom(text: string, idgen: () => string = uid, now: number 
 
     for (const n of rec.children) {
       if (n.tag === "NAME") {
-        const name = parseName(textOf(n));
+        const surn = child(n, "SURN");
+        const name = parseName(textOf(n), surn ? textOf(surn) : undefined);
         const type = child(n, "TYPE") ? textOf(child(n, "TYPE")!).trim().toLowerCase() : undefined;
         if (type === "married" || type === "aka" || type === "birth") name.kind = type;
         if (Object.keys(name).length) names.push(name);

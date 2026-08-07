@@ -5,16 +5,9 @@
 import { useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
-import {
-  birthFamilyName,
-  whenYear,
-  withBirthFamilyName,
-  withEventWhen,
-  yearWhen,
-  type Person,
-  type When,
-} from "../lib/model";
+import { whenYear, withEventWhen, yearWhen, type Person, type When } from "../lib/model";
 import type { PersonDraft } from "../hooks/useGrove";
+import { NameFields, useNameFields } from "./NameFields";
 
 type Qual = "" | NonNullable<When["qualifier"]>;
 
@@ -34,13 +27,10 @@ export function EditPerson({
   onClose: () => void;
 }) {
   const { t } = useLingui();
-  const first = person.names[0] ?? {};
   const birth = eventWhen(person, "birth");
   const death = eventWhen(person, "death");
 
-  const [given, setGiven] = useState(first.given ?? "");
-  const [family, setFamily] = useState(first.family ?? "");
-  const [born, setBorn] = useState(birthFamilyName(person) ?? "");
+  const nameFields = useNameFields(person.names);
   const [living, setLiving] = useState(person.living !== false);
   const [birthYear, setBirthYear] = useState(whenYear(birth)?.toString() ?? "");
   const [birthQual, setBirthQual] = useState<Qual>(birth?.qualifier ?? "");
@@ -51,7 +41,7 @@ export function EditPerson({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!given.trim() && !family.trim()) return setError(t`A name — even just the one everyone used.`);
+    if (nameFields.empty) return setError(t`A name — even just the one everyone used.`);
     const parse = (s: string, invalidMsg: string): number | undefined | null => {
       if (!s.trim()) return undefined;
       const n = Number(s.trim());
@@ -69,12 +59,7 @@ export function EditPerson({
     let events = withEventWhen(person.events, "birth", yearWhen(by, birthQual || undefined));
     events = withEventWhen(events, "death", living ? undefined : yearWhen(dy, deathQual || undefined));
 
-    const shown = { ...first, given: given.trim() || undefined, family: family.trim() || undefined };
-    onSave({
-      names: withBirthFamilyName([shown, ...person.names.slice(1)], born),
-      living,
-      events,
-    });
+    onSave({ names: nameFields.names(person.names.slice(1)), living, events });
     onClose();
   }
 
@@ -92,23 +77,7 @@ export function EditPerson({
       <h3><Trans>Edit</Trans></h3>
       <form onSubmit={submit}>
         {error ? <div className="error">{error}</div> : null}
-        <div className="row">
-          <label className="field">
-            <span className="label"><Trans>Given name</Trans></span>
-            <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus />
-          </label>
-          <label className="field">
-            <span className="label"><Trans>Family name</Trans></span>
-            <input type="text" value={family} onChange={(e) => setFamily(e.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span className="label"><Trans>Family name at birth</Trans></span>
-          <input type="text" value={born} onChange={(e) => setBorn(e.target.value)} />
-          <span className="hint">
-            <Trans>A maiden name, or any family name that changed later. Leave it empty if it never did.</Trans>
-          </span>
-        </label>
+        <NameFields fields={nameFields} />
         <div className="row">
           <label className="field">
             <span className="label"><Trans>Born (year)</Trans></span>

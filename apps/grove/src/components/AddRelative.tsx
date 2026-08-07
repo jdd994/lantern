@@ -9,16 +9,9 @@
 import { useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
-import {
-  displayName,
-  withBirthFamilyName,
-  yearWhen,
-  type ChildLink,
-  type Person,
-  type Relation,
-  type When,
-} from "../lib/model";
+import { displayName, yearWhen, type ChildLink, type Person, type Relation, type When } from "../lib/model";
 import type { PersonDraft } from "../hooks/useGrove";
+import { NameFields, useNameFields } from "./NameFields";
 
 const LINK_KINDS: NonNullable<ChildLink["kind"]>[] = ["birth", "adoptive", "step", "foster", "guardian"];
 
@@ -34,9 +27,7 @@ export function AddRelative({
   onClose: () => void;
 }) {
   const { t } = useLingui();
-  const [given, setGiven] = useState("");
-  const [family, setFamily] = useState("");
-  const [born, setBorn] = useState("");
+  const nameFields = useNameFields();
   const [living, setLiving] = useState(true);
   const [birthYear, setBirthYear] = useState("");
   const [qualifier, setQualifier] = useState<"" | NonNullable<When["qualifier"]>>("");
@@ -63,12 +54,12 @@ export function AddRelative({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!given.trim() && !family.trim()) return setError(t`A name — even just the one everyone used.`);
+    if (nameFields.empty) return setError(t`A name — even just the one everyone used.`);
     const year = birthYear.trim() ? Number(birthYear.trim()) : undefined;
     if (birthYear.trim() && !Number.isFinite(year)) return setError(t`The birth year didn't read as a number.`);
     const when = yearWhen(year, qualifier || undefined);
     const draft: PersonDraft = {
-      names: withBirthFamilyName([{ given: given.trim() || undefined, family: family.trim() || undefined }], born),
+      names: nameFields.names(),
       living,
       events: when ? [{ kind: "birth", when }] : [],
     };
@@ -81,20 +72,7 @@ export function AddRelative({
       <h3>{anchor && relation ? t`Add ${relLabel[relation]} ${displayName(anchor)}` : t`Add the first person`}</h3>
       <form onSubmit={submit}>
         {error ? <div className="error">{error}</div> : null}
-        <div className="row">
-          <label className="field">
-            <span className="label"><Trans>Given name</Trans></span>
-            <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus />
-          </label>
-          <label className="field">
-            <span className="label"><Trans>Family name</Trans></span>
-            <input type="text" value={family} onChange={(e) => setFamily(e.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span className="label"><Trans>Family name at birth (if it changed)</Trans></span>
-          <input type="text" value={born} onChange={(e) => setBorn(e.target.value)} placeholder={t`a maiden name, say`} />
-        </label>
+        <NameFields fields={nameFields} />
         <div className="row">
           <label className="field">
             <span className="label"><Trans>Born (year, if known)</Trans></span>
