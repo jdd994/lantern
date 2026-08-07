@@ -413,7 +413,12 @@ msgstr ""
 
 #: src/components/AddRelative.tsx:86
 #: src/components/EditPerson.tsx:97
-msgid "Given name"
+#~ msgid "Given name"
+#~ msgstr ""
+
+#: src/components/AddRelative.tsx:86
+#: src/components/EditPerson.tsx:97
+msgid "Given names"
 msgstr ""
 
 #: src/components/SettingsSheet.tsx:154
@@ -555,6 +560,10 @@ msgstr ""
 
 #: src/components/Welcome.tsx:116
 msgid "Making your vault…"
+msgstr ""
+
+#: src/components/AddRelative.tsx:87
+msgid "Mary Jane"
 msgstr ""
 
 #: src/components/SettingsSheet.tsx:53

@@ -83,8 +83,8 @@ export function AddRelative({
         {error ? <div className="error">{error}</div> : null}
         <div className="row">
           <label className="field">
-            <span className="label"><Trans>Given name</Trans></span>
-            <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus />
+            <span className="label"><Trans>Given names</Trans></span>
+            <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus placeholder={t`Mary Jane`} />
           </label>
           <label className="field">
             <span className="label"><Trans>Family name</Trans></span>
