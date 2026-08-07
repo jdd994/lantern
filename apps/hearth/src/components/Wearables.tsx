@@ -1,10 +1,10 @@
 // Wearables.tsx
 // Connecting a device you already wear, and the honest cost of doing it.
 //
-// The consent step is the point, not paperwork. It reuses the same `.trade` box
-// the Welcome screen uses to state the no-reset trade up front, and the same
-// `.tier-badge` that discloses Open Food Facts in Log food — because this is the
-// same promise being kept in a third place, not a new pattern.
+// The consent step is the point, not paperwork. It renders the family-shared
+// TradeOffCard from @lantern/ui — the same card Aura shows before a brand of
+// lights and Ballast shows before a brokerage key — because this is the same
+// promise being kept in a third place, not a new pattern.
 //
 // Two shapes of provider live here (see `mode` in lib/wearable):
 //   grant    connect once, hold a sealed token, refresh history — Fitbit.
@@ -15,18 +15,15 @@
 // frightening. It says what happens, calmly, and lets you decide.
 
 import { useEffect, useRef, useState } from "react";
+import { TradeOffCard } from "@lantern/ui";
+import { relativeLabel } from "@lantern/core/time";
 import {
   PROVIDERS, type ProviderId, type Reading, type WearableConnection,
 } from "../lib/wearable";
 import * as live from "../lib/wearable/live";
 
 function whenLabel(at: number): string {
-  const mins = Math.round((Date.now() - at) / 60_000);
-  if (mins < 2) return "just now";
-  if (mins < 60) return `${mins} minutes ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs} ${hrs === 1 ? "hour" : "hours"} ago`;
-  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return relativeLabel(at, { maxDays: 1 });
 }
 
 export function ConnectWearable({
@@ -42,21 +39,16 @@ export function ConnectWearable({
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h3>Connect {p.label}</h3>
 
-        <div className="trade">
-          <strong>Tier {p.tier} — direct.</strong> {p.discloses}
-        </div>
-
-        <div className="set-section">
-          <div className="set-head">What Hearth takes</div>
-          <div className="chips">
-            {p.takes.map((t) => <span className="chip" key={t}>{t}</span>)}
-          </div>
-        </div>
-
-        <div className="set-section">
-          <div className="set-head">What Hearth won't take</div>
-          {p.refuses.map((r) => <p key={r}>{r}</p>)}
-        </div>
+        <TradeOffCard
+          tier={p.tier}
+          tierLabel={`Tier ${p.tier} · direct`}
+          label={p.label}
+          discloses={p.discloses}
+          takes={p.takes}
+          refuses={p.refuses}
+          takesHead="What Hearth takes"
+          refusesHead="What Hearth won't take"
+        />
 
         <div className="sheet-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Not now</button>

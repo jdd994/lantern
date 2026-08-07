@@ -124,8 +124,14 @@ export function formatQuantity(q: Quantity, maxFractionDigits = 8): string {
   const digits = (negative ? q.base.slice(1) : q.base).padStart(q.decimals + 1, "0");
   const whole = digits.slice(0, digits.length - q.decimals);
   const frac = digits.slice(digits.length - q.decimals).slice(0, maxFractionDigits).replace(/0+$/, "");
-  const wholeGrouped = Number(whole).toLocaleString();
-  return `${negative ? "-" : ""}${wholeGrouped}${frac ? "." + frac : ""} ${q.symbol}`;
+  // BigInt keeps the no-float promise past 2^53 where Number would corrupt the
+  // digits; toLocaleString gives the locale's grouping. The decimal separator
+  // must come from the same locale — a hardcoded "." next to locale grouping
+  // reads as another thousands mark in comma-decimal locales.
+  const wholeGrouped = BigInt(whole).toLocaleString();
+  const decimalSep =
+    new Intl.NumberFormat().formatToParts(1.1).find((p) => p.type === "decimal")?.value ?? ".";
+  return `${negative ? "-" : ""}${wholeGrouped}${frac ? decimalSep + frac : ""} ${q.symbol}`;
 }
 
 // Convert a base-unit quantity to a float for pricing ONLY.

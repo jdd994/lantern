@@ -80,10 +80,12 @@ with `sudo dpkg -i aura_*.deb`.
   device only — nothing is recorded or sent. (Simulate mode lets you try it without
   a mic.)
 - **Automations (⏱)** — "when sunset, apply Evening", "at 11pm, all off", or "when
-  the hall sensor sees motion, …". Note: the desktop app must be running for these
-  to fire.
+  the hall sensor sees motion, …". Closing the window doesn't stop them: Aura keeps
+  running in the tray, so automations and the day rhythm fire with the window
+  closed. **Quit** (in the tray menu) is what actually stops them.
 - **Menu bar / tray** — Aura sits in your menu bar: click it for **All lights off**
-  or to bring the window back, without opening the app.
+  or to bring the window back. In **Settings → Desktop** you can have Aura start
+  quietly in the tray when you log in, so the schedule survives a reboot too.
 
 ---
 

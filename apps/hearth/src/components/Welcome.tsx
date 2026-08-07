@@ -39,10 +39,13 @@ export function Welcome({ onSetup, busy, onSignIn }: { onSetup: (p: string) => P
           </div>
 
           <p style={{ fontSize: 13.5, color: "var(--ink-faint)" }}>
-            Because the key is made from your passphrase and never leaves this device, there's{" "}
-            <strong style={{ color: "var(--ink-soft)" }}>no reset</strong>. Forget it and the data
-            can't be recovered by anyone — including us. Keep it somewhere safe. That's the price of
-            it being truly private.
+            If you ever forget your passphrase, the people you trust can let you back in: set up{" "}
+            <strong style={{ color: "var(--ink-soft)" }}>guardians</strong> (in Sync) and a few of
+            them together can restore your access — or print a{" "}
+            <strong style={{ color: "var(--ink-soft)" }}>recovery kit</strong>: a one-page code
+            for a fire safe. Nobody else can ever get in, including us — there's no reset by
+            email, because a reset button would mean someone besides you could read your days.
+            Keep the passphrase somewhere safe too.
           </p>
 
           <button className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} onClick={() => setStep("pass")}>

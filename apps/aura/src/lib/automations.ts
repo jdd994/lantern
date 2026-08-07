@@ -4,9 +4,10 @@
 // so the scheduler in the hook stays a thin timer around it.
 //
 // Honest limitation baked into the design: firing only happens while something is
-// running the scheduler (the app open, or later a Tauri background process). So we
-// fire inside a short GRACE window after the trigger time rather than "catching up"
-// hours later when you reopen the app — a light shouldn't lurch at a random moment.
+// running the scheduler (the tab open in a browser; the app running — window or
+// tray — on desktop). So we fire inside a short GRACE window after the trigger
+// time rather than "catching up" hours later when you reopen the app — a light
+// shouldn't lurch at a random moment.
 import { sunTime } from "./sun";
 
 export type Coords = { lat: number; lon: number };
@@ -20,6 +21,9 @@ export type Trigger =
 
 export type Action =
   | { kind: "scene"; sceneId: string }
+  // Set a vibe (built-in @lantern/core vocabulary or a custom one) — the same
+  // thing tapping it in the vibe row does. roomId omitted means the whole home.
+  | { kind: "vibe"; vibeId: string; roomId?: string }
   | { kind: "roomPower"; roomId: string; on: boolean }
   | { kind: "allOff" }
   // Gently ramp brightness to a target over some minutes (wake-up = fade up;

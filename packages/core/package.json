@@ -13,6 +13,14 @@
     "./vault": "./src/vault.ts",
     "./sharing": "./src/sharing.ts",
     "./sharing-api": "./src/sharing-api.ts",
-    "./vibe": "./src/vibe.ts"
+    "./recovery": "./src/recovery.ts",
+    "./recovery-api": "./src/recovery-api.ts",
+    "./pairing": "./src/pairing.ts",
+    "./pairing-api": "./src/pairing-api.ts",
+    "./vibe": "./src/vibe.ts",
+    "./vibe-relay": "./src/vibe-relay.ts",
+    "./connect": "./src/connect.ts",
+    "./kit": "./src/kit.ts",
+    "./time": "./src/time.ts"
   }
 }

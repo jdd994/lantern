@@ -20,32 +20,34 @@
 //    deficit, and deficit maths is the exact harm the guardrail forbids. There
 //    is no toggle for this. It just isn't imported.
 
-import { exportKeyRaw } from "../crypto";
+import {
+  tagger as coreTagger,
+  stableId as coreStableId,
+  type ProviderDescriptor,
+  type Tier,
+} from "@lantern/core/connect";
 import type { MetricContent, MetricKind } from "../metrics";
 import type { FitbitTokens } from "./fitbit";
 
-export type Tier = 0 | 1 | 2 | 3;
+export type { Tier };
 export type ProviderId = "fitbit" | "strap" | "ring";
 
-export type Provider = {
+// The shared consent contract (@lantern/core/connect), with the id narrowed to
+// the providers Hearth actually ships. `discloses` is who learns precisely what,
+// shown before anyone connects — written as if the reader is about to hand you
+// their body, because they are. `takes`/`refuses` both render in the consent
+// sheet, so the refusals are a promise made in public rather than a comment in
+// a file.
+//
+// `mode` is Hearth's own addition, not a core concern: how readings arrive.
+// "grant" is the Fitbit shape — connect once, hold a token, refresh history on
+// demand. "session" is the strap shape — nothing is held at all; each reading
+// is a live sit with the device, and the only thing that persists is what you
+// chose to save. No other lantern app has a session-mode provider yet, so it
+// stays here until a second one earns the move into core.
+export type Provider = ProviderDescriptor & {
   id: ProviderId;
-  label: string;
-  tier: Tier;
-
-  // How readings arrive. "grant" is the Fitbit shape: connect once, hold a
-  // token, refresh history on demand. "session" is the strap shape: nothing is
-  // held at all — each reading is a live sit with the device, and the only
-  // thing that persists is what you chose to save.
   mode: "grant" | "session";
-
-  // Precisely who learns precisely what, shown before anyone connects. Write it
-  // as if the person reading it is about to hand you their body, because they are.
-  discloses: string;
-
-  // What we take, and what we refuse — both rendered in the consent sheet, so the
-  // refusals are a promise made in public rather than a comment in a file.
-  takes: string[];
-  refuses: string[];
 };
 
 export const PROVIDERS: Record<ProviderId, Provider> = {
@@ -122,32 +124,19 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
 // it's pinned by a golden vector in wearable.test.ts.
 const ID_INFO = "hearth-wearable-id-v1";
 
-const utf8 = (s: string) => new TextEncoder().encode(s);
-
 /**
- * Derive the tagging function once, then tag many readings with it. An import
- * mints a few hundred ids, and doing the whole derivation per reading would
- * export the raw vault key a few hundred times — wasteful, and needless handling
- * of key material. Take the tagger once per import; hand it each natural key.
+ * Derive the tagging function once, then tag many readings with it — the shared
+ * derivation lives in @lantern/core/connect; this binds Hearth's frozen info
+ * string. (Its golden vector is asserted twice: here in fitbit.test.ts and in
+ * core's own connect.test.ts, so neither side can drift alone.)
  */
 export async function tagger(dek: CryptoKey): Promise<(natural: string) => Promise<string>> {
-  const raw = new Uint8Array(await exportKeyRaw(dek));
-  const hkdf = await crypto.subtle.importKey("raw", raw, "HKDF", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: utf8(ID_INFO) },
-    hkdf,
-    256
-  );
-  const mac = await crypto.subtle.importKey("raw", bits, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return async (natural: string) => {
-    const sig = await crypto.subtle.sign("HMAC", mac, utf8(natural));
-    return [...new Uint8Array(sig).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  };
+  return coreTagger(dek, ID_INFO);
 }
 
 /** One id, for when you only need one (and for the golden vector). */
 export async function stableId(dek: CryptoKey, natural: string): Promise<string> {
-  return (await tagger(dek))(natural);
+  return coreStableId(dek, ID_INFO, natural);
 }
 
 // ---- readings ------------------------------------------------------------

@@ -5,11 +5,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
+import { dbNameFor, homeKey } from "../lib/homes";
+import { rhythmStep, vibePatches, type RhythmMemory } from "../lib/apply";
 import { vibeById } from "@lantern/core";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
 import { simulateDemoMotion } from "../lib/connectors/demo";
-import { assign, type Room } from "../lib/rooms";
-import { adaptiveKelvin } from "../lib/adaptive";
+import { assign, effectiveDeviceIds, type Room } from "../lib/rooms";
+import { startCadence } from "../lib/cadence";
+import { RHYTHM_PRESETS, rhythmPresetById, rhythmTarget } from "../lib/rhythm";
 import {
   actionsOf,
   dueAutomations,
@@ -24,20 +28,52 @@ import type { Color } from "../lib/connectors";
 import type { CustomVibe, StoredScene, StoredSource } from "../lib/db";
 
 const GEO_KEY = "aura-geo";
-const readGeo = (): Coords | null => {
+const RHYTHM_KEY = "aura-rhythm";
+
+// The day rhythm's settings: on/off plus which preset shape the day follows.
+export type RhythmSettings = { enabled: boolean; presetId: string };
+
+// Geo and rhythm are per-home (the cabin's sunset isn't yours); the first home
+// keeps the original un-namespaced keys via homeKey.
+export const readGeo = (homeId: string): Coords | null => {
   try {
-    const raw = localStorage.getItem(GEO_KEY);
+    const raw = localStorage.getItem(homeKey(GEO_KEY, homeId));
     return raw ? (JSON.parse(raw) as Coords) : null;
   } catch {
     return null;
   }
 };
 
+export const readRhythm = (homeId: string): RhythmSettings => {
+  try {
+    const raw = localStorage.getItem(homeKey(RHYTHM_KEY, homeId));
+    if (raw) {
+      const parsed = JSON.parse(raw) as RhythmSettings;
+      if (typeof parsed?.enabled === "boolean" && typeof parsed?.presetId === "string") return parsed;
+    }
+    // Migration (first home only): "Adaptive white" was the rhythm before it had
+    // a name. Carry that choice over as the whites-only preset — exactly what
+    // the old toggle did — rather than surprising anyone with brightness or
+    // color changes they never asked for.
+    if (homeKey(RHYTHM_KEY, homeId) === RHYTHM_KEY && localStorage.getItem("aura-adaptive") === "1") {
+      const migrated: RhythmSettings = { enabled: true, presetId: "whites" };
+      localStorage.setItem(RHYTHM_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+  } catch {
+    /* private mode */
+  }
+  return { enabled: false, presetId: "sun" };
+};
 const uid = () => crypto.randomUUID();
 
 // Recalling a scene or vibe should feel like a room easing, not a light switch.
 // Brands that fade natively (Hue) honor this; others simply snap.
 const SCENE_TRANSITION_MS = 800;
+// The day rhythm's steps are small and frequent — a longer native fade makes each
+// one imperceptible on brands that honor it (Hue, Home Assistant); the rest snap
+// through steps small enough not to be noticed anyway.
+const RHYTHM_TRANSITION_MS = 4000;
 
 // Merge two lists by id; items in `next` overwrite matching ones in `prev`.
 function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
@@ -46,7 +82,13 @@ function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
   return [...m.values()];
 }
 
-export function useAura() {
+export function useAura(homeId: string) {
+  // This home's own database. A ref (kept current every render) rather than a
+  // dependency in every callback below: the callbacks stay stable across a
+  // home switch, yet always write to the world that's actually on screen.
+  const hdb = useMemo(() => db.forHome(dbNameFor(homeId)), [homeId]);
+  const hdbRef = useRef(hdb);
+  hdbRef.current = hdb;
   const [sources, setSources] = useState<StoredSource[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [sensors, setSensors] = useState<Sensor[]>([]);
@@ -54,10 +96,17 @@ export function useAura() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [customVibes, setCustomVibes] = useState<CustomVibe[]>([]);
-  const [coords, setCoords] = useState<Coords | null>(readGeo);
-  const [adaptive, setAdaptiveState] = useState<boolean>(() => {
+  // Your own name for a light, keyed by device id — a display override only; it
+  // never touches the brand's own name and survives a refresh/reconnect since it
+  // lives apart from the (fully-replaced-on-refresh) device cache.
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
+  const [coords, setCoords] = useState<Coords | null>(() => readGeo(homeId));
+  const [rhythm, setRhythmState] = useState<RhythmSettings>(() => readRhythm(homeId));
+  // Mirror vibes with other lantern apps on this machine (the vibe relay). Off by
+  // default: this only ever starts talking to localhost after an explicit choice.
+  const [mirrorVibes, setMirrorVibesState] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("aura-adaptive") === "1";
+      return localStorage.getItem("aura-vibe-mirror") === "1";
     } catch {
       return false;
     }
@@ -74,6 +123,7 @@ export function useAura() {
   // Fetch live state for a set of devices, best-effort (one dead device or a
   // non-retrievable model never blocks the rest).
   const loadStates = useCallback(async (devs: Device[], srcs: StoredSource[]) => {
+    const startedAt = Date.now();
     const results = await Promise.allSettled(
       devs.map(async (d) => {
         const cred = srcs.find((s) => s.id === d.sourceId)?.cred;
@@ -84,7 +134,14 @@ export function useAura() {
     );
     setStates((prev) => {
       const next = { ...prev };
-      for (const r of results) if (r.status === "fulfilled" && r.value) next[r.value[0]] = r.value[1];
+      for (const r of results) {
+        if (r.status !== "fulfilled" || !r.value) continue;
+        const [id, fetched] = r.value;
+        // A local edit (a slider drag, a vibe) that landed after this fetch
+        // started wins — this fetch's answer is already stale for that device.
+        if ((lastLocalEdit.current[id] ?? 0) >= startedAt) continue;
+        next[id] = fetched;
+      }
       return next;
     });
   }, []);
@@ -106,14 +163,35 @@ export function useAura() {
   }, []);
 
   useEffect(() => {
+    // Entering a home (first load, or a switch): the previous world leaves the
+    // stage completely before this one loads — stale devices briefly wearing
+    // another home's states would be worse than a moment of empty.
+    setSources([]);
+    setDevices([]);
+    setSensors([]);
+    setScenes([]);
+    setRooms([]);
+    setAutomations([]);
+    setCustomVibes([]);
+    setDeviceNames({});
+    setStates({});
+    setError(null);
+    setCoords(readGeo(homeId));
+    setRhythmState(readRhythm(homeId));
+    lastLocalEdit.current = {};
+    prevMotion.current = {};
+    rhythmMem.current = {};
+    activeFades.current.forEach((stop) => stop());
+    activeFades.current = [];
     (async () => {
-      const [srcs, devs, scns, rms, autos, cvibes] = await Promise.all([
-        db.allSources(),
-        db.allDevices(),
-        db.allScenes(),
-        db.allRooms(),
-        db.allAutomations(),
-        db.allCustomVibes(),
+      const [srcs, devs, scns, rms, autos, cvibes, dnames] = await Promise.all([
+        hdbRef.current.allSources(),
+        hdbRef.current.allDevices(),
+        hdbRef.current.allScenes(),
+        hdbRef.current.allRooms(),
+        hdbRef.current.allAutomations(),
+        hdbRef.current.allCustomVibes(),
+        hdbRef.current.allDeviceNames(),
       ]);
       setSources(srcs);
       setDevices(devs);
@@ -121,10 +199,11 @@ export function useAura() {
       setRooms(rms);
       setAutomations(autos.sort((a, b) => a.name.localeCompare(b.name)));
       setCustomVibes(cvibes.sort((a, b) => a.createdAt - b.createdAt));
+      setDeviceNames(dnames);
       if (devs.length) void loadStates(devs, srcs);
       if (srcs.length) void loadSensors(srcs);
     })();
-  }, [loadStates, loadSensors]);
+  }, [homeId, hdb, loadStates, loadSensors]);
 
   // Connect a brand by validating its credential (a successful device list = valid).
   const connect = useCallback(
@@ -136,8 +215,8 @@ export function useAura() {
       try {
         const devs = await conn.listDevices(cred.trim());
         const source: StoredSource = { id: sourceId, cred: cred.trim(), connectedAt: Date.now() };
-        await db.putSource(source);
-        await db.replaceDevicesForSource(sourceId, devs);
+        await hdbRef.current.putSource(source);
+        await hdbRef.current.replaceDevicesForSource(sourceId, devs);
         const nextSources = [...sources.filter((s) => s.id !== sourceId), source];
         const nextDevices = [...devices.filter((d) => d.sourceId !== sourceId), ...devs];
         setSources(nextSources);
@@ -155,8 +234,8 @@ export function useAura() {
   );
 
   const disconnect = useCallback(async (sourceId: string) => {
-    await db.deleteSource(sourceId);
-    await db.deleteDevicesForSource(sourceId);
+    await hdbRef.current.deleteSource(sourceId);
+    await hdbRef.current.deleteDevicesForSource(sourceId);
     setSources((prev) => prev.filter((s) => s.id !== sourceId));
     setDevices((prev) => prev.filter((d) => d.sourceId !== sourceId));
     setSensors((prev) => prev.filter((s) => s.sourceId !== sourceId));
@@ -172,7 +251,7 @@ export function useAura() {
         if (!conn) continue;
         try {
           const devs = await conn.listDevices(s.cred);
-          await db.replaceDevicesForSource(s.id, devs);
+          await hdbRef.current.replaceDevicesForSource(s.id, devs);
           merged = [...merged.filter((d) => d.sourceId !== s.id), ...devs];
         } catch (e) {
           setError(e instanceof Error ? e.message : `Couldn't refresh ${s.id}.`);
@@ -193,6 +272,10 @@ export function useAura() {
   // (and scene apply) push immediately — those are single, deliberate taps.
   const pushTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pushPending = useRef<Record<string, { patch: Partial<LightState>; transitionMs?: number }>>({});
+  // When a device was last changed locally (setDevice). A fetch (loadStates) can
+  // resolve after a local edit it raced against — without this, the stale fetched
+  // value would silently overwrite what the user just set (or a vibe just applied).
+  const lastLocalEdit = useRef<Record<string, number>>({});
 
   const flushPush = useCallback(
     async (deviceId: string) => {
@@ -222,6 +305,7 @@ export function useAura() {
   // patch) pushes now; continuous changes (brightness/color) debounce.
   const setDevice = useCallback(
     (deviceId: string, patch: Partial<LightState>, immediate = false, transitionMs?: number) => {
+      lastLocalEdit.current[deviceId] = Date.now();
       setStates((prev) => {
         const merged: LightState = { ...(prev[deviceId] ?? { on: true }), ...patch };
         // color and kelvin are mutually exclusive on a bulb — the last one set wins.
@@ -255,8 +339,11 @@ export function useAura() {
   // only that room's lights; otherwise it captures the whole home.
   const saveScene = useCallback(
     async (name: string, roomId?: string) => {
+      const targetRoom = roomId ? rooms.find((r) => r.id === roomId) : undefined;
       const targetIds = roomId
-        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
+        ? targetRoom
+          ? effectiveDeviceIds(targetRoom, rooms)
+          : []
         : devices.map((d) => d.id);
       const snapshot: Record<string, LightState> = {};
       for (const id of targetIds) if (states[id]) snapshot[id] = states[id];
@@ -267,7 +354,7 @@ export function useAura() {
         states: snapshot,
         ...(roomId ? { roomId } : {}),
       };
-      await db.putScene(scene);
+      await hdbRef.current.putScene(scene);
       setScenes((prev) => [...prev, scene]);
     },
     [devices, rooms, states]
@@ -287,7 +374,7 @@ export function useAura() {
   );
 
   const removeScene = useCallback(async (id: string) => {
-    await db.deleteScene(id);
+    await hdbRef.current.deleteScene(id);
     setScenes((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
@@ -295,7 +382,7 @@ export function useAura() {
     setScenes((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, name: name.trim() || s.name } : s));
       const changed = next.find((s) => s.id === id);
-      if (changed) void db.putScene(changed);
+      if (changed) void hdbRef.current.putScene(changed);
       return next;
     });
   }, []);
@@ -303,7 +390,7 @@ export function useAura() {
   // ---- rooms: named groups of devices in one physical place ---------------
   const createRoom = useCallback(async (name: string) => {
     const room: Room = { id: uid(), name: name.trim() || "Room", deviceIds: [], createdAt: Date.now() };
-    await db.putRoom(room);
+    await hdbRef.current.putRoom(room);
     setRooms((prev) => [...prev, room]);
   }, []);
 
@@ -311,14 +398,30 @@ export function useAura() {
     setRooms((prev) => {
       const next = prev.map((r) => (r.id === id ? { ...r, name: name.trim() || r.name } : r));
       const room = next.find((r) => r.id === id);
-      if (room) void db.putRoom(room);
+      if (room) void hdbRef.current.putRoom(room);
       return next;
     });
   }, []);
 
   const removeRoom = useCallback(async (id: string) => {
-    await db.deleteRoom(id); // devices in it simply become unassigned
+    await hdbRef.current.deleteRoom(id); // a literal room's devices simply become unassigned;
+    // a combo room holds no devices of its own, so its member rooms are untouched.
     setRooms((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  // A combo room shares other rooms' lights instead of holding its own — see
+  // lib/rooms.ts. Its deviceIds stay empty; effectiveDeviceIds resolves the
+  // live union wherever this room is actually used.
+  const createComboRoom = useCallback(async (name: string, memberRoomIds: string[]) => {
+    const room: Room = {
+      id: uid(),
+      name: name.trim() || "Combo",
+      deviceIds: [],
+      createdAt: Date.now(),
+      memberRoomIds,
+    };
+    await hdbRef.current.putRoom(room);
+    setRooms((prev) => [...prev, room]);
   }, []);
 
   // Move a device into a room (or out, roomId null). Persists every room the move
@@ -328,7 +431,7 @@ export function useAura() {
       const next = assign(prev, deviceId, roomId);
       // Persist only rooms whose membership actually changed.
       const changed = next.filter((r, i) => r.deviceIds.join() !== prev[i].deviceIds.join());
-      if (changed.length) void db.putRooms(changed);
+      if (changed.length) void hdbRef.current.putRooms(changed);
       return next;
     });
   }, []);
@@ -341,46 +444,95 @@ export function useAura() {
     [setDevice]
   );
 
-  // Apply a shared vibe (from @lantern/core) to the lights — the local end of the
-  // cross-app vibe layer. Each device takes what it can of the vibe's target
-  // (brightness / color); the vibe stays medium-agnostic, Aura renders it in light.
-  const applyVibe = useCallback(
-    (vibeId: string, roomId?: string) => {
-      // Resolve the light target from either a built-in (@lantern/core) or a
-      // user-made custom vibe.
-      const builtin = vibeById(vibeId);
-      const custom = customVibes.find((c) => c.id === vibeId);
-      const target: { brightness: number; rgb: Color; kelvin?: number } | null = builtin
-        ? { brightness: builtin.light.brightness, rgb: builtin.light.rgb, kelvin: builtin.light.kelvin }
-        : custom
-          ? { brightness: custom.brightness, rgb: custom.rgb }
-          : null;
-      if (!target) return;
-      const targetIds = roomId
-        ? (rooms.find((r) => r.id === roomId)?.deviceIds ?? [])
-        : devices.map((d) => d.id);
-      for (const id of targetIds) {
-        const device = devices.find((d) => d.id === id);
-        if (!device) continue;
-        const patch: Partial<LightState> = { on: true };
-        if (device.canBrightness) patch.brightness = target.brightness;
-        // Color bulbs take the vibe's hue; white-only bulbs take its temperature.
-        if (device.canColor) patch.color = target.rgb;
-        else if (device.canColorTemp && target.kelvin) patch.kelvin = target.kelvin;
-        setDevice(id, patch, true, SCENE_TRANSITION_MS);
+  // Master brightness for a room: a mixing-desk fader, not a flattener. Scales
+  // every currently-on, dimmable light in the room by the same ratio, so a lamp
+  // that was already dimmer than the others stays relatively dimmer — it moves
+  // the room's existing character up or down rather than erasing it. Lights
+  // that are off are left off; a brightness slider isn't "All on" in disguise.
+  const setRoomBrightness = useCallback(
+    (deviceIds: string[], target: number) => {
+      const clamped = Math.max(1, Math.min(100, Math.round(target)));
+      const on = deviceIds
+        .map((id) => devices.find((d) => d.id === id))
+        .filter((d): d is Device => !!d && d.canBrightness && !!states[d.id]?.on);
+      if (!on.length) return;
+      const avg = on.reduce((sum, d) => sum + (states[d.id]?.brightness ?? 100), 0) / on.length;
+      for (const d of on) {
+        const cur = states[d.id]?.brightness ?? 100;
+        const next = avg > 0 ? Math.max(1, Math.min(100, Math.round(cur * (clamped / avg)))) : clamped;
+        setDevice(d.id, { brightness: next });
+      }
+    },
+    [devices, states, setDevice]
+  );
+
+  // Apply a shared vibe (from @lantern/core) to the lights. Each device takes what
+  // it can of the vibe's target (brightness / color); the vibe stays medium-agnostic,
+  // Aura renders it in light. Internal: no relay publish, so the relay subscription
+  // below can call this directly without echoing a vibe right back out.
+  const applyVibeInternal = useCallback(
+    // brightnessScale: an optional multiplier on the vibe's own base
+    // brightness (1 = unchanged) — how "read the room, tracking" nudges
+    // brightness within a vibe over a live show's arc, below, without
+    // changing which named vibe is active.
+    (vibeId: string, roomId?: string, brightnessScale = 1) => {
+      // The per-device math (built-in or custom vibe, palette variation, color
+      // vs temperature routing) is pure and shared with the background keeper —
+      // see lib/apply.ts. This side just pushes the patches through setDevice.
+      for (const { deviceId, patch } of vibePatches(vibeId, roomId, devices, rooms, customVibes, brightnessScale)) {
+        setDevice(deviceId, patch, true, SCENE_TRANSITION_MS);
       }
     },
     [devices, rooms, customVibes, setDevice]
   );
 
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+
+  // The local end of the cross-app vibe layer: apply here, and — if mirroring is
+  // on — tell the relay too. Only built-in vibes travel (other apps only know the
+  // shared @lantern/core vocabulary, not Aura's custom ones). A non-1
+  // brightnessScale means this is a "read the room, tracking" nudge within
+  // an already-picked vibe (see AmbientSheet's mic-mode tracking), not a new
+  // vibe choice — those stay local-only and never hit the relay, or every
+  // few-second nudge would spam other apps with the same vibe repeatedly.
+  const applyVibe = useCallback(
+    (vibeId: string, roomId?: string, brightnessScale = 1) => {
+      applyVibeInternal(vibeId, roomId, brightnessScale);
+      if (brightnessScale === 1 && mirrorVibes && vibeById(vibeId)) relayRef.current?.publish({ vibeId, roomId });
+    },
+    [applyVibeInternal, mirrorVibes]
+  );
+
+  const setMirrorVibes = useCallback((on: boolean) => {
+    setMirrorVibesState(on);
+    try {
+      localStorage.setItem("aura-vibe-mirror", on ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  // Connect to the local relay only while mirroring is on; disconnect the moment
+  // it's turned off. Incoming vibes apply whole-home — other apps don't know
+  // Aura's room ids, so a foreign roomId wouldn't map to anything useful here.
+  useEffect(() => {
+    if (!mirrorVibes) return;
+    const handle = connectVibeRelay("aura", (event) => applyVibeInternal(event.vibeId));
+    relayRef.current = handle;
+    return () => {
+      handle.close();
+      relayRef.current = null;
+    };
+  }, [mirrorVibes, applyVibeInternal]);
+
   const createCustomVibe = useCallback(async (label: string, rgb: Color, brightness: number) => {
     const v: CustomVibe = { id: uid(), label: label.trim() || "My vibe", rgb, brightness, createdAt: Date.now() };
-    await db.putCustomVibe(v);
+    await hdbRef.current.putCustomVibe(v);
     setCustomVibes((prev) => [...prev, v]);
   }, []);
 
   const removeCustomVibe = useCallback(async (id: string) => {
-    await db.deleteCustomVibe(id);
+    await hdbRef.current.deleteCustomVibe(id);
     setCustomVibes((prev) => prev.filter((v) => v.id !== id));
   }, []);
 
@@ -391,7 +543,7 @@ export function useAura() {
           v.id === id ? { ...v, label: label.trim() || v.label, rgb, brightness } : v
         );
         const changed = next.find((v) => v.id === id);
-        if (changed) void db.putCustomVibe(changed);
+        if (changed) void hdbRef.current.putCustomVibe(changed);
         return next;
       });
     },
@@ -411,7 +563,7 @@ export function useAura() {
         (pos) => {
           const c = { lat: pos.coords.latitude, lon: pos.coords.longitude };
           try {
-            localStorage.setItem(GEO_KEY, JSON.stringify(c));
+            localStorage.setItem(homeKey(GEO_KEY, homeId), JSON.stringify(c));
           } catch {
             /* private mode */
           }
@@ -422,18 +574,22 @@ export function useAura() {
         { maximumAge: 6 * 3600_000, timeout: 10_000 }
       );
     });
-  }, []);
+  }, [homeId]);
 
-  // A gentle brightness ramp over minutes (wake-up / wind-down). Runs while the app
-  // is open, stepping every 20s; fading to 0 turns the lights off at the end.
+  // A gentle brightness ramp over minutes (wake-up / wind-down). Steps every 20s;
+  // fading to 0 turns the lights off at the end. Progress rides the wall clock,
+  // not a step counter, so a throttled or delayed timer can't stretch a
+  // 20-minute fade into an hour — a late tick just lands wherever the fade
+  // should be by now.
   const statesRef = useRef(states);
   statesRef.current = states;
-  const activeFades = useRef<ReturnType<typeof setInterval>[]>([]);
+  const activeFades = useRef<(() => void)[]>([]);
   const startFade = useCallback(
     (action: Extract<Action, { kind: "fade" }>) => {
-      const ids = (action.roomId ? (rooms.find((r) => r.id === action.roomId)?.deviceIds ?? []) : devices.map((d) => d.id)).filter(
-        (id) => devices.find((d) => d.id === id)?.canBrightness
-      );
+      const fadeRoom = action.roomId ? rooms.find((r) => r.id === action.roomId) : undefined;
+      const ids = (
+        action.roomId ? (fadeRoom ? effectiveDeviceIds(fadeRoom, rooms) : []) : devices.map((d) => d.id)
+      ).filter((id) => devices.find((d) => d.id === id)?.canBrightness);
       if (!ids.length) return;
       const to = Math.max(0, Math.min(100, action.toBrightness));
       const cur = statesRef.current;
@@ -442,39 +598,98 @@ export function useAura() {
         starts[id] = cur[id]?.on ? (cur[id]?.brightness ?? 100) : 0;
         if (to > 0) setDevice(id, { on: true, brightness: Math.max(1, Math.round(starts[id] || 1)) }, true);
       }
-      const stepMs = 20_000;
-      const steps = Math.max(1, Math.min(120, Math.round((action.minutes * 60_000) / stepMs)));
-      let i = 0;
-      const timer = setInterval(() => {
-        i++;
-        const done = i >= steps;
+      const startedAt = Date.now();
+      const totalMs = Math.max(1, action.minutes) * 60_000;
+      const holder: { stop?: () => void } = {};
+      const step = () => {
+        const frac = Math.min(1, (Date.now() - startedAt) / totalMs);
+        const done = frac >= 1;
         for (const id of ids) {
-          const b = Math.round(starts[id] + (to - starts[id]) * (i / steps));
+          const b = Math.round(starts[id] + (to - starts[id]) * frac);
           if (done && to <= 0) setDevice(id, { on: false }, true);
           else setDevice(id, { brightness: Math.max(1, Math.min(100, b)) }, true);
         }
-        if (done) {
-          clearInterval(timer);
-          activeFades.current = activeFades.current.filter((t) => t !== timer);
+        if (done && holder.stop) {
+          holder.stop();
+          activeFades.current = activeFades.current.filter((s) => s !== holder.stop);
         }
-      }, stepMs);
-      activeFades.current.push(timer);
+      };
+      holder.stop = startCadence(20_000, step);
+      activeFades.current.push(holder.stop);
     },
     [devices, rooms, setDevice]
   );
-  useEffect(() => () => activeFades.current.forEach(clearInterval), []);
+  useEffect(() => () => activeFades.current.forEach((stop) => stop()), []);
+
+  // "Which one is this?" — a few quick bright/dim pulses (or on/off, for a
+  // fixture with no brightness control), then back to exactly whatever it was
+  // showing before. Works identically for every brand: it's just setDevice
+  // calls any connector already understands, no brand-specific "identify" API
+  // required. One at a time — a device id already mid-pulse is left alone.
+  const [identifying, setIdentifying] = useState<string | null>(null);
+  const identifyDevice = useCallback(
+    async (deviceId: string) => {
+      if (identifying) return;
+      const device = devices.find((d) => d.id === deviceId);
+      if (!device) return;
+      setIdentifying(deviceId);
+      const original = statesRef.current[deviceId] ?? { on: false };
+      const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      try {
+        for (let i = 0; i < 3; i++) {
+          if (device.canBrightness) {
+            setDevice(deviceId, { on: true, brightness: 100 }, true);
+            await wait(450);
+            setDevice(deviceId, { on: true, brightness: 8 }, true);
+            await wait(450);
+          } else {
+            setDevice(deviceId, { on: true }, true);
+            await wait(400);
+            setDevice(deviceId, { on: false }, true);
+            await wait(400);
+          }
+        }
+      } finally {
+        setDevice(deviceId, original, true);
+        setIdentifying(null);
+      }
+    },
+    [devices, setDevice, identifying]
+  );
+
+  // Your own name for a light — a display-only override, never pushed to the
+  // brand (Govee/HA don't reliably support renaming anyway, and Aura isn't the
+  // source of truth for your devices). An empty name resets back to the brand's
+  // own name rather than storing an empty string.
+  const renameDevice = useCallback(async (deviceId: string, name: string) => {
+    const trimmed = name.trim();
+    if (trimmed) {
+      await hdbRef.current.putDeviceName(deviceId, trimmed);
+      setDeviceNames((prev) => ({ ...prev, [deviceId]: trimmed }));
+    } else {
+      await hdbRef.current.deleteDeviceName(deviceId);
+      setDeviceNames((prev) => {
+        const next = { ...prev };
+        delete next[deviceId];
+        return next;
+      });
+    }
+  }, []);
 
   const runAction = useCallback(
     (action: Action) => {
       if (action.kind === "scene") applyScene(action.sceneId);
+      // A scheduled vibe is a real vibe change — same path as tapping it, so it
+      // mirrors to other apps too when mirroring is on.
+      else if (action.kind === "vibe") applyVibe(action.vibeId, action.roomId);
       else if (action.kind === "allOff") setRoomPower(devices.map((d) => d.id), false);
       else if (action.kind === "fade") startFade(action);
       else if (action.kind === "roomPower") {
         const room = rooms.find((r) => r.id === action.roomId);
-        if (room) setRoomPower(room.deviceIds, action.on);
+        if (room) setRoomPower(effectiveDeviceIds(room, rooms), action.on);
       }
     },
-    [applyScene, setRoomPower, startFade, devices, rooms]
+    [applyScene, applyVibe, setRoomPower, startFade, devices, rooms]
   );
 
   const addAutomation = useCallback(
@@ -487,8 +702,29 @@ export function useAura() {
         actions,
         ...(days && days.length ? { days } : {}),
       };
-      await db.putAutomation(a);
+      await hdbRef.current.putAutomation(a);
       setAutomations((prev) => [...prev, a].sort((x, y) => x.name.localeCompare(y.name)));
+    },
+    []
+  );
+
+  // Rework an existing automation in place — trigger, actions, and days replaced
+  // wholesale (the sheet edits the whole thing as one form). Keeps enabled/lastRun.
+  const updateAutomation = useCallback(
+    async (id: string, name: string, trigger: Trigger, actions: Action[], days?: number[]) => {
+      setAutomations((prev) => {
+        const next = prev.map((a) => {
+          if (a.id !== id) return a;
+          const updated: Automation = { ...a, name: name.trim() || a.name, trigger, actions };
+          delete updated.action; // the legacy single-action shape is superseded
+          if (days && days.length) updated.days = days;
+          else delete updated.days;
+          return updated;
+        });
+        const changed = next.find((a) => a.id === id);
+        if (changed) void hdbRef.current.putAutomation(changed);
+        return [...next].sort((x, y) => x.name.localeCompare(y.name));
+      });
     },
     []
   );
@@ -497,20 +733,21 @@ export function useAura() {
     setAutomations((prev) => {
       const next = prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a));
       const changed = next.find((a) => a.id === id);
-      if (changed) void db.putAutomation(changed);
+      if (changed) void hdbRef.current.putAutomation(changed);
       return next;
     });
   }, []);
 
   const removeAutomation = useCallback(async (id: string) => {
-    await db.deleteAutomation(id);
+    await hdbRef.current.deleteAutomation(id);
     setAutomations((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  // The scheduler. A pure PWA can only fire while it's running, so this is a plain
-  // interval over the pure `dueAutomations` check; a Tauri background process can
-  // later drive the same check while the window is closed. Refs keep the ticker
-  // stable while reading the latest automations/coords/action-runner each tick.
+  // The scheduler: a steady cadence over the pure `dueAutomations` check. In the
+  // browser it runs while the tab is open; in the Tauri shell the window closes
+  // to the tray and the native heartbeat keeps this ticking (see lib/cadence.ts).
+  // Refs keep the ticker stable while reading the latest automations/coords/
+  // action-runner each tick.
   const autoRef = useRef(automations);
   autoRef.current = automations;
   const coordsRef = useRef(coords);
@@ -527,57 +764,111 @@ export function useAura() {
       for (const a of due) {
         for (const act of actionsOf(a)) runRef.current(act);
         const updated = { ...a, lastRun: stamp };
-        void db.putAutomation(updated);
+        void hdbRef.current.putAutomation(updated);
         setAutomations((prev) => prev.map((x) => (x.id === a.id ? updated : x)));
       }
     };
     tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    return startCadence(30_000, tick);
   }, []);
 
   // ---- portability: move your setup between devices (no account) ----------
-  // Exports rooms/scenes/vibes/automations — but NOT credentials. Device ids are
-  // stable per physical light/bridge, so on a new device you re-pair your lights and
-  // your rooms and scenes line right back up.
+  // Exports rooms/scenes/vibes/automations/your renamed lights. Credentials are
+  // included only when `includeAccounts` is explicitly true (the QR "set up from
+  // phone" flow asks first, in plain words, before doing that) — the default,
+  // file-based export still holds no keys: device ids are stable per physical
+  // light/bridge, so on a new device you re-pair your lights and everything else
+  // lines back up. `compact` drops the pretty-printing so a QR code has the best
+  // chance of fitting the whole payload.
   const exportSetup = useCallback(
-    () =>
+    (includeAccounts = false, compact = false) =>
       JSON.stringify(
-        { app: "aura", version: 1, exportedAt: new Date().toISOString(), rooms, scenes, customVibes, automations },
+        {
+          app: "aura",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          rooms,
+          scenes,
+          customVibes,
+          automations,
+          deviceNames,
+          ...(includeAccounts ? { sources } : {}),
+        },
         null,
-        2
+        compact ? undefined : 2
       ),
-    [rooms, scenes, customVibes, automations]
+    [rooms, scenes, customVibes, automations, deviceNames, sources]
   );
 
-  const importSetup = useCallback(async (text: string): Promise<{ ok: boolean; error?: string }> => {
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return { ok: false, error: "That file isn't valid JSON." };
-    }
-    if (data?.app !== "aura" || !data.version) {
-      return { ok: false, error: "That doesn't look like an Aura setup file." };
-    }
-    try {
-      const rms: Room[] = Array.isArray(data.rooms) ? data.rooms : [];
-      const scns: StoredScene[] = Array.isArray(data.scenes) ? data.scenes : [];
-      const cvs: CustomVibe[] = Array.isArray(data.customVibes) ? data.customVibes : [];
-      const autos: Automation[] = Array.isArray(data.automations) ? data.automations : [];
-      await db.putRooms(rms);
-      for (const s of scns) await db.putScene(s);
-      for (const v of cvs) await db.putCustomVibe(v);
-      for (const a of autos) await db.putAutomation(a);
-      setRooms((prev) => mergeById(prev, rms));
-      setScenes((prev) => mergeById(prev, scns).sort((a, b) => a.createdAt - b.createdAt));
-      setCustomVibes((prev) => mergeById(prev, cvs).sort((a, b) => a.createdAt - b.createdAt));
-      setAutomations((prev) => mergeById(prev, autos).sort((a, b) => a.name.localeCompare(b.name)));
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
-    }
-  }, []);
+  const importSetup = useCallback(
+    async (text: string): Promise<{ ok: boolean; error?: string; summary?: string }> => {
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        return { ok: false, error: "That doesn't look like a setup file or code." };
+      }
+      if (data?.app !== "aura" || !data.version) {
+        return { ok: false, error: "That doesn't look like an Aura setup file or code." };
+      }
+      try {
+        const rms: Room[] = Array.isArray(data.rooms) ? data.rooms : [];
+        const scns: StoredScene[] = Array.isArray(data.scenes) ? data.scenes : [];
+        const cvs: CustomVibe[] = Array.isArray(data.customVibes) ? data.customVibes : [];
+        const autos: Automation[] = Array.isArray(data.automations) ? data.automations : [];
+        const names: Record<string, string> =
+          data.deviceNames && typeof data.deviceNames === "object" ? data.deviceNames : {};
+        await hdbRef.current.putRooms(rms);
+        for (const s of scns) await hdbRef.current.putScene(s);
+        for (const v of cvs) await hdbRef.current.putCustomVibe(v);
+        for (const a of autos) await hdbRef.current.putAutomation(a);
+        for (const [id, name] of Object.entries(names)) await hdbRef.current.putDeviceName(id, name);
+        setRooms((prev) => mergeById(prev, rms));
+        setScenes((prev) => mergeById(prev, scns).sort((a, b) => a.createdAt - b.createdAt));
+        setCustomVibes((prev) => mergeById(prev, cvs).sort((a, b) => a.createdAt - b.createdAt));
+        setAutomations((prev) => mergeById(prev, autos).sort((a, b) => a.name.localeCompare(b.name)));
+        if (Object.keys(names).length) setDeviceNames((prev) => ({ ...prev, ...names }));
+
+        // A transferred account (only present when the sender chose to include
+        // it) is re-validated the same way a fresh connect is — never trusted
+        // blindly — which also repopulates that source's devices and states.
+        const hadSources = Array.isArray(data.sources) && data.sources.length > 0;
+        const sourceErrors: string[] = [];
+        if (Array.isArray(data.sources)) {
+          for (const s of data.sources) {
+            if (!s?.id || typeof s.cred !== "string") continue;
+            const err = await connect(s.id, s.cred);
+            if (err) sourceErrors.push(`${s.id}: ${err}`);
+          }
+        }
+
+        // "Setup imported." on its own says nothing about what actually
+        // happened — this spells out counts and account status so an empty
+        // or partial file (a common case: not everyone has custom rooms or
+        // scenes to begin with) doesn't read as a silent no-op.
+        const parts: string[] = [];
+        if (rms.length) parts.push(`${rms.length} room${rms.length === 1 ? "" : "s"}`);
+        if (scns.length) parts.push(`${scns.length} scene${scns.length === 1 ? "" : "s"}`);
+        if (cvs.length) parts.push(`${cvs.length} custom vibe${cvs.length === 1 ? "" : "s"}`);
+        if (autos.length) parts.push(`${autos.length} automation${autos.length === 1 ? "" : "s"}`);
+        const nameCount = Object.keys(names).length;
+        if (nameCount) parts.push(`${nameCount} renamed light${nameCount === 1 ? "" : "s"}`);
+        let summary = parts.length
+          ? `Imported ${parts.join(", ")}.`
+          : "That file had no rooms, scenes, vibes, or automations to import.";
+        summary += hadSources
+          ? sourceErrors.length
+            ? ` Couldn't reconnect: ${sourceErrors.join("; ")}.`
+            : " Connected account reconnected — your lights should show up now."
+          : " No connected account was in this file — use Connect lights, or re-export with accounts included.";
+
+        return { ok: true, summary };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Import failed." };
+      }
+    },
+    [connect]
+  );
 
   // Sensor poller: watch each motion sensor and fire on the *edge* — the moment
   // motion starts — not for as long as it keeps seeing you. Sensor automations use a
@@ -608,59 +899,76 @@ export function useAura() {
         for (const a of sensorDue(autoRef.current, sensor.id, now)) {
           for (const act of actionsOf(a)) runRef.current(act);
           const updated = { ...a, lastFiredAt: now.getTime() };
-          void db.putAutomation(updated);
+          void hdbRef.current.putAutomation(updated);
           setAutomations((prev) => prev.map((x) => (x.id === a.id ? updated : x)));
         }
       }
     };
-    const id = setInterval(() => void tick(), 5_000);
-    return () => clearInterval(id);
+    return startCadence(5_000, () => void tick());
   }, []);
 
   // Make the demo sensor "see" motion, so sensor automations can be felt with no
   // hardware.
   const simulateMotion = useCallback(() => simulateDemoMotion(), []);
 
-  // Adaptive (circadian) white: nudge tunable-white bulbs toward the day's natural
-  // temperature every few minutes. Leaves color bulbs showing a color alone, and
-  // never turns a light on — it just shapes the whites already in use.
-  const setAdaptive = useCallback((on: boolean) => {
-    setAdaptiveState(on);
-    try {
-      localStorage.setItem("aura-adaptive", on ? "1" : "0");
-    } catch {
-      /* private mode */
-    }
-  }, []);
+  // The day rhythm (grown from the old "adaptive white"): every couple of minutes,
+  // nudge each lit fixture toward where the rhythm's curve sits right now — cool
+  // whites at midday, warm at the edges, and (preset permitting) brightness along
+  // with it and ember red past dusk on color bulbs. Two promises, kept here:
+  // it never turns a light on, and it never paints over a color you chose —
+  // the only colors it touches are the ember ones it set itself.
+  const setRhythm = useCallback(
+    (next: RhythmSettings) => {
+      setRhythmState(next);
+      try {
+        localStorage.setItem(homeKey(RHYTHM_KEY, homeId), JSON.stringify(next));
+      } catch {
+        /* private mode */
+      }
+    },
+    [homeId]
+  );
 
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
+  // What the rhythm itself last set, per device — see RhythmMemory in lib/apply.ts.
+  const rhythmMem = useRef<Record<string, RhythmMemory>>({});
   useEffect(() => {
-    if (!adaptive) return;
+    if (!rhythm.enabled) return;
     const apply = () => {
-      const k = adaptiveKelvin(new Date(), coordsRef.current);
+      const preset = rhythmPresetById(rhythm.presetId) ?? RHYTHM_PRESETS[0];
+      const target = rhythmTarget(new Date(), coordsRef.current, preset);
       for (const d of devicesRef.current) {
-        if (!d.canColorTemp) continue;
         const st = statesRef.current[d.id];
-        if (!st?.on) continue;
-        if (d.canColor && st.kelvin === undefined) continue; // in color mode — leave it
-        if (st.kelvin !== undefined && Math.abs(st.kelvin - k) < 60) continue; // already close
-        setDevice(d.id, { kelvin: k }, true);
+        if (!st) continue;
+        const patch = rhythmStep(d, st, target, (rhythmMem.current[d.id] ??= {}));
+        if (patch) setDevice(d.id, patch, true, RHYTHM_TRANSITION_MS);
       }
     };
     apply();
-    const id = setInterval(apply, 5 * 60_000);
-    return () => clearInterval(id);
-  }, [adaptive, setDevice]);
+    return startCadence(2 * 60_000, apply);
+  }, [rhythm, setDevice]);
 
   const connected = useMemo(() => sources.length > 0, [sources]);
 
+  // Everything downstream (DeviceList, Rooms, automations, the vibe engine) reads
+  // devices through here, so a rename shows up everywhere at once without having
+  // to thread deviceNames through every consumer individually. Internal logic
+  // above (applyVibe, identify, palette variation, …) intentionally still closes
+  // over the raw `devices` state — names are a display concern only, never part
+  // of any control decision.
+  const displayDevices = useMemo(
+    () => (Object.keys(deviceNames).length ? devices.map((d) => (deviceNames[d.id] ? { ...d, name: deviceNames[d.id] } : d)) : devices),
+    [devices, deviceNames]
+  );
+
   return {
-    sources, devices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
+    sources, devices: displayDevices, sensors, scenes, rooms, automations, customVibes, coords, states, busy, error, connected,
     connect, disconnect, refresh, setDevice, saveScene, applyScene, removeScene,
-    createRoom, renameRoom, removeRoom, assignDevice, setRoomPower,
-    requestLocation, addAutomation, toggleAutomation, removeAutomation,
+    createRoom, renameRoom, removeRoom, createComboRoom, assignDevice, setRoomPower, setRoomBrightness, renameDevice,
+    requestLocation, addAutomation, updateAutomation, toggleAutomation, removeAutomation,
     applyVibe, createCustomVibe, removeCustomVibe, updateCustomVibe, renameScene,
-    exportSetup, importSetup, adaptive, setAdaptive, simulateMotion,
+    exportSetup, importSetup, rhythm, setRhythm, simulateMotion,
+    mirrorVibes, setMirrorVibes, identifyDevice, identifying,
   };
 }

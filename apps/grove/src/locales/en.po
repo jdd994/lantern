@@ -1,0 +1,937 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-08-04 09:13-0600\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: en\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
+
+#: src/components/RecoveryFlow.tsx:194
+msgid "‹ Back"
+msgstr "‹ Back"
+
+#. placeholder {0}: result.unions
+#: src/components/SettingsSheet.tsx:75
+msgid "{0, plural, one {1 family} other {# families}}"
+msgstr "{0, plural, one {1 family} other {# families}}"
+
+#. placeholder {0}: result.keepsakes
+#: src/components/SettingsSheet.tsx:76
+msgid "{0, plural, one {1 keepsake} other {# keepsakes}}"
+msgstr "{0, plural, one {1 keepsake} other {# keepsakes}}"
+
+#. placeholder {0}: result.people
+#: src/components/SettingsSheet.tsx:74
+msgid "{0, plural, one {1 person} other {# people}}"
+msgstr "{0, plural, one {1 person} other {# people}}"
+
+#. placeholder {0}: guardianCircle.k
+#. placeholder {1}: guardianCircle.n
+#: src/components/RecoveryFlow.tsx:153
+msgid "{0} of your {1} guardians need to approve before you can set a new passphrase: {guardianList}."
+msgstr "{0} of your {1} guardians need to approve before you can set a new passphrase: {guardianList}."
+
+#: src/components/TreeView.tsx:67
+msgid "← Back"
+msgstr "← Back"
+
+#: src/components/PersonPage.tsx:135
+msgid "← Everyone"
+msgstr "← Everyone"
+
+#. placeholder {0}: tree.title
+#: src/components/Family.tsx:171
+msgid "<0>{0}</0> — shared with the family. What anyone adds, everyone keeps: family records also back up under your own account, encrypted."
+msgstr "<0>{0}</0> — shared with the family. What anyone adds, everyone keeps: family records also back up under your own account, encrypted."
+
+#: src/components/Welcome.tsx:49
+msgid "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
+msgstr "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
+
+#: src/components/AddRelative.tsx:88
+msgid "1885"
+msgstr "1885"
+
+#: src/components/AddKeepsake.tsx:76
+msgid "1944"
+msgstr "1944"
+
+#: src/components/AddRelative.tsx:40
+msgid "a child of"
+msgstr "a child of"
+
+#: src/components/Welcome.tsx:39
+msgid "A family tree the family writes together."
+msgstr "A family tree the family writes together."
+
+#: src/components/PersonPage.tsx:182
+msgid "A keepsake"
+msgstr "A keepsake"
+
+#. placeholder {0}: displayName(person)
+#: src/components/AddKeepsake.tsx:51
+msgid "A keepsake of {0}"
+msgstr "A keepsake of {0}"
+
+#: src/components/AddRelative.tsx:57
+#: src/components/EditPerson.tsx:45
+msgid "A name — even just the one everyone used."
+msgstr "A name — even just the one everyone used."
+
+#: src/components/AddRelative.tsx:38
+msgid "a parent of"
+msgstr "a parent of"
+
+#: src/components/AddRelative.tsx:39
+msgid "a partner of"
+msgstr "a partner of"
+
+#: src/components/AddKeepsake.tsx:53
+msgid "A photo, a scanned letter, a document — kept as itself, encrypted like everything else."
+msgstr "A photo, a scanned letter, a document — kept as itself, encrypted like everything else."
+
+#: src/components/Family.tsx:128
+msgid "A shared tree travels through your account — the server relays encrypted records it can't read, wrapped keys it can't open."
+msgstr "A shared tree travels through your account — the server relays encrypted records it can't read, wrapped keys it can't open."
+
+#: src/components/AddRelative.tsx:41
+msgid "a sibling of"
+msgstr "a sibling of"
+
+#: src/components/AddKeepsake.tsx:82
+#: src/components/AddRelative.tsx:94
+#: src/components/EditPerson.tsx:74
+msgid "About"
+msgstr "About"
+
+#: src/components/RecoveryFlow.tsx:72
+msgid "about {h}h {m}m"
+msgstr "about {h}h {m}m"
+
+#: src/components/RecoveryFlow.tsx:72
+msgid "about {m}m"
+msgstr "about {m}m"
+
+#: src/components/RecoveryFlow.tsx:132
+msgid "Account email"
+msgstr "Account email"
+
+#: src/components/RecoveryFlow.tsx:136
+msgid "Account password"
+msgstr "Account password"
+
+#: src/components/AddRelative.tsx:122
+msgid "Add"
+msgstr "Add"
+
+#. placeholder {0}: relLabel[relation]
+#. placeholder {1}: displayName(anchor)
+#: src/components/AddRelative.tsx:72
+msgid "Add {0} {1}"
+msgstr "Add {0} {1}"
+
+#: src/components/PersonPage.tsx:167
+msgid "Add a child"
+msgstr "Add a child"
+
+#: src/components/AddKeepsake.tsx:50
+#: src/components/PersonPage.tsx:173
+msgid "Add a keepsake"
+msgstr "Add a keepsake"
+
+#: src/components/PersonPage.tsx:165
+msgid "Add a parent"
+msgstr "Add a parent"
+
+#: src/components/PersonPage.tsx:166
+msgid "Add a partner"
+msgstr "Add a partner"
+
+#: src/components/AddRelative.tsx:71
+msgid "Add a person"
+msgstr "Add a person"
+
+#: src/components/AddKeepsake.tsx:33
+msgid "Add a photo or scan, or say something about it — a keepsake needs one or the other."
+msgstr "Add a photo or scan, or say something about it — a keepsake needs one or the other."
+
+#: src/components/PersonPage.tsx:168
+msgid "Add a sibling"
+msgstr "Add a sibling"
+
+#: src/components/AddRelative.tsx:72
+#: src/components/Home.tsx:41
+msgid "Add the first person"
+msgstr "Add the first person"
+
+#: src/components/Home.tsx:67
+msgid "Added but not linked to anyone yet — they still belong."
+msgstr "Added but not linked to anyone yet — they still belong."
+
+#: src/components/AddRelative.tsx:45
+msgid "adoptive"
+msgstr "adoptive"
+
+#: src/components/AddKeepsake.tsx:84
+#: src/components/AddRelative.tsx:96
+#: src/components/EditPerson.tsx:76
+msgid "After"
+msgstr "After"
+
+#: src/components/Welcome.tsx:111
+msgid "Again, to be sure"
+msgstr "Again, to be sure"
+
+#: src/components/Welcome.tsx:75
+msgid "Already keeping a tree on another device? <0>Sign in to sync</0>"
+msgstr "Already keeping a tree on another device? <0>Sign in to sync</0>"
+
+#: src/components/RecoveryFlow.tsx:69
+msgid "any moment now"
+msgstr "any moment now"
+
+#: src/components/Family.tsx:218
+msgid "Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The tree's key rides inside the link itself — the server only ever holds a locked envelope — so send it somewhere you'd trust with the family's story."
+msgstr "Anyone with the link can join, for 7 days or 20 uses, whichever comes first. The tree's key rides inside the link itself — the server only ever holds a locked envelope — so send it somewhere you'd trust with the family's story."
+
+#: src/components/TreeView.tsx:68
+msgid "Around {focusName}"
+msgstr "Around {focusName}"
+
+#: src/components/PersonPage.tsx:154
+msgid "As the family remembers"
+msgstr "As the family remembers"
+
+#: src/components/RecoveryFlow.tsx:125
+msgid "Ask your guardians"
+msgstr "Ask your guardians"
+
+#: src/components/Welcome.tsx:108
+msgid "at least 10 characters"
+msgstr "at least 10 characters"
+
+#: src/components/Welcome.tsx:115
+msgid "Back"
+msgstr "Back"
+
+#: src/components/AddKeepsake.tsx:83
+#: src/components/AddRelative.tsx:95
+#: src/components/EditPerson.tsx:75
+msgid "Before"
+msgstr "Before"
+
+#: src/components/AddRelative.tsx:44
+msgid "birth"
+msgstr "birth"
+
+#: src/components/AddRelative.tsx:87
+msgid "Born (year, if known)"
+msgstr "Born (year, if known)"
+
+#: src/components/EditPerson.tsx:97
+msgid "Born (year)"
+msgstr "Born (year)"
+
+#: src/components/Family.tsx:192
+msgid "By an address you already know. Their copy of the tree's key is wrapped so only they can open it — the server just carries the envelope."
+msgstr "By an address you already know. Their copy of the tree's key is wrapped so only they can open it — the server just carries the envelope."
+
+#: src/components/AddKeepsake.tsx:89
+#: src/components/AddRelative.tsx:121
+#: src/components/EditPerson.tsx:122
+#: src/components/Family.tsx:161
+msgid "Cancel"
+msgstr "Cancel"
+
+#: src/components/RecoveryFlow.tsx:171
+msgid "Cancel this request"
+msgstr "Cancel this request"
+
+#: src/components/SettingsSheet.tsx:51
+msgid "Canopy"
+msgstr "Canopy"
+
+#. placeholder {0}: displayName(p)
+#: src/components/TreeView.tsx:108
+msgid "Center the tree on {0}"
+msgstr "Center the tree on {0}"
+
+#: src/components/PersonPage.tsx:167
+msgid "Children"
+msgstr "Children"
+
+#: src/components/Welcome.tsx:102
+msgid "Choose a passphrase"
+msgstr "Choose a passphrase"
+
+#: src/components/Family.tsx:135
+#: src/components/Family.tsx:260
+#: src/components/SettingsSheet.tsx:188
+msgid "Close"
+msgstr "Close"
+
+#: src/components/Family.tsx:133
+msgid "Connect Sync first, then come back here to plant it."
+msgstr "Connect Sync first, then come back here to plant it."
+
+#: src/components/Family.tsx:228
+msgid "Copied"
+msgstr "Copied"
+
+#: src/components/Family.tsx:228
+msgid "Copy link"
+msgstr "Copy link"
+
+#: src/components/RecoveryFlow.tsx:82
+msgid "Couldn't sign in."
+msgstr "Couldn't sign in."
+
+#: src/components/Welcome.tsx:116
+msgid "Create vault"
+msgstr "Create vault"
+
+#: src/components/AddKeepsake.tsx:71
+msgid "Dear June…"
+msgstr "Dear June…"
+
+#: src/components/EditPerson.tsx:112
+msgid "Died (year, if known)"
+msgstr "Died (year, if known)"
+
+#: src/components/SettingsSheet.tsx:52
+msgid "Dimmer, deeper"
+msgstr "Dimmer, deeper"
+
+#: src/App.tsx:240
+msgid "Dismiss"
+msgstr "Dismiss"
+
+#: src/components/Family.tsx:149
+msgid "Each record carries whose hand last touched it — a byline for stories, never a score."
+msgstr "Each record carries whose hand last touched it — a byline for stories, never a score."
+
+#: src/components/EditPerson.tsx:82
+#: src/components/PersonPage.tsx:141
+msgid "Edit"
+msgstr "Edit"
+
+#: src/components/EditPerson.tsx:81
+msgid "Edit person"
+msgstr "Edit person"
+
+#. placeholder {0}: fmtCountdown(poll.readyAt - Date.now())
+#: src/components/RecoveryFlow.tsx:167
+msgid "Enough guardians have approved. Waiting out the safety window — ready in {0}."
+msgstr "Enough guardians have approved. Waiting out the safety window — ready in {0}."
+
+#: src/components/RecoveryFlow.tsx:78
+msgid "Enter your account email and password."
+msgstr "Enter your account email and password."
+
+#: src/components/SettingsSheet.tsx:127
+msgid "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
+msgstr "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
+
+#: src/components/AddKeepsake.tsx:81
+#: src/components/AddRelative.tsx:93
+#: src/components/EditPerson.tsx:73
+msgid "Exactly"
+msgstr "Exactly"
+
+#: src/components/SettingsSheet.tsx:134
+msgid "Export .ged"
+msgstr "Export .ged"
+
+#: src/App.tsx:192
+#: src/components/Home.tsx:56
+msgid "Family"
+msgstr "Family"
+
+#: src/components/AddRelative.tsx:81
+#: src/components/EditPerson.tsx:91
+msgid "Family name"
+msgstr "Family name"
+
+#: src/components/Family.tsx:122
+msgid "Family tree"
+msgstr "Family tree"
+
+#: src/components/TreeView.tsx:74
+msgid "Family tree around {focusName}"
+msgstr "Family tree around {focusName}"
+
+#: src/components/RecoveryFlow.tsx:187
+msgid "Finishing…"
+msgstr "Finishing…"
+
+#: src/components/Sync.tsx:33
+msgid "For a family tree, the natural guardians are the family."
+msgstr "For a family tree, the natural guardians are the family."
+
+#: src/components/LockScreen.tsx:117
+msgid "Forgot your passphrase? Ask your guardians"
+msgstr "Forgot your passphrase? Ask your guardians"
+
+#: src/components/AddRelative.tsx:47
+msgid "foster"
+msgstr "foster"
+
+#: src/components/AddKeepsake.tsx:75
+msgid "From (year, if known)"
+msgstr "From (year, if known)"
+
+#: src/components/SettingsSheet.tsx:115
+msgid "GEDCOM is genealogy's common tongue — the format Ancestry and every desktop tool speaks. Names, dates, bonds, and the words of your keepsakes travel; the scans themselves stay safe in Grove."
+msgstr "GEDCOM is genealogy's common tongue — the format Ancestry and every desktop tool speaks. Names, dates, bonds, and the words of your keepsakes travel; the scans themselves stay safe in Grove."
+
+#: src/components/AddRelative.tsx:77
+#: src/components/EditPerson.tsx:87
+msgid "Given name"
+msgstr "Given name"
+
+#: src/components/SettingsSheet.tsx:154
+msgid "Grove can live on your home screen like any app — helpful to know when you're getting a relative set up. <0>How to install, step by step</0>"
+msgstr "Grove can live on your home screen like any app — helpful to know when you're getting a relative set up. <0>How to install, step by step</0>"
+
+#: src/components/SettingsSheet.tsx:171
+msgid "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
+msgstr "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
+
+#: src/components/AddRelative.tsx:48
+msgid "guardian"
+msgstr "guardian"
+
+#: src/components/Sync.tsx:34
+msgid "Help a family member"
+msgstr "Help a family member"
+
+#: src/components/SettingsSheet.tsx:162
+msgid "How Grove works"
+msgstr "How Grove works"
+
+#: src/components/AddKeepsake.tsx:79
+#: src/components/AddRelative.tsx:91
+#: src/components/EditPerson.tsx:101
+#: src/components/EditPerson.tsx:116
+msgid "How sure?"
+msgstr "How sure?"
+
+#: src/components/AddRelative.tsx:102
+msgid "How they're linked"
+msgstr "How they're linked"
+
+#: src/components/Welcome.tsx:58
+msgid "If you ever forget your passphrase, the people you trust can let you back in: set up <0>guardians</0> (in Sync) and a few of them together can restore your access — or print a <1>recovery kit</1>: a one-page code for a fire safe. Nobody else can ever get in, including us — there's no reset by email, because a reset button would mean someone besides you could read the tree. Keep the passphrase somewhere safe too."
+msgstr "If you ever forget your passphrase, the people you trust can let you back in: set up <0>guardians</0> (in Sync) and a few of them together can restore your access — or print a <1>recovery kit</1>: a one-page code for a fire safe. Nobody else can ever get in, including us — there's no reset by email, because a reset button would mean someone besides you could read the tree. Keep the passphrase somewhere safe too."
+
+#: src/components/SettingsSheet.tsx:136
+msgid "Import a .ged"
+msgstr "Import a .ged"
+
+#: src/components/SettingsSheet.tsx:148
+msgid "Import adds to the grove — it never overwrites, and it won't try to merge duplicates."
+msgstr "Import adds to the grove — it never overwrites, and it won't try to merge duplicates."
+
+#: src/components/PersonPage.tsx:140
+msgid "In the tree"
+msgstr "In the tree"
+
+#: src/components/Family.tsx:209
+msgid "Invite"
+msgstr "Invite"
+
+#: src/components/Family.tsx:190
+msgid "Invite family"
+msgstr "Invite family"
+
+#: src/components/Family.tsx:116
+msgid "Invited {em} — the tree will be there next time they open Grove."
+msgstr "Invited {em} — the tree will be there next time they open Grove."
+
+#: src/components/Family.tsx:209
+msgid "Inviting…"
+msgstr "Inviting…"
+
+#: src/components/Family.tsx:85
+msgid "Join our family tree on Grove:"
+msgstr "Join our family tree on Grove:"
+
+#: src/components/SettingsSheet.tsx:152
+msgid "Keep Grove close"
+msgstr "Keep Grove close"
+
+#: src/components/AddKeepsake.tsx:90
+msgid "Keep it"
+msgstr "Keep it"
+
+#: src/components/SettingsSheet.tsx:123
+msgid "Keep living people private in the export"
+msgstr "Keep living people private in the export"
+
+#: src/components/PersonPage.tsx:172
+msgid "Keepsakes"
+msgstr "Keepsakes"
+
+#. placeholder {0}: authorHandle(k.author)
+#: src/components/PersonPage.tsx:185
+msgid "kept by {0}"
+msgstr "kept by {0}"
+
+#: src/components/SettingsSheet.tsx:96
+#: src/components/SettingsSheet.tsx:104
+msgid "Language"
+msgstr "Language"
+
+#: src/components/PersonPage.tsx:148
+msgid "last tended by {tendedBy}"
+msgstr "last tended by {tendedBy}"
+
+#: src/components/Family.tsx:282
+#: src/components/Family.tsx:288
+msgid "Leave the shared tree"
+msgstr "Leave the shared tree"
+
+#: src/components/Family.tsx:267
+msgid "Leaving stops sharing from this account. Everything already on this device stays — the family's copy stays with the family."
+msgstr "Leaving stops sharing from this account. Everything already on this device stays — the family's copy stays with the family."
+
+#: src/components/AddKeepsake.tsx:67
+msgid "Letter home, 1944"
+msgstr "Letter home, 1944"
+
+#. placeholder {0}: new Date(i.createdAt).toLocaleDateString()
+#. placeholder {1}: i.uses
+#. placeholder {2}: i.maxUses
+#: src/components/Family.tsx:245
+msgid "Link from {0} — used {1} of {2}"
+msgstr "Link from {0} — used {1} of {2}"
+
+#: src/components/AddRelative.tsx:114
+msgid "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
+msgstr "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
+
+#: src/App.tsx:217
+msgid "Lock"
+msgstr "Lock"
+
+#: src/App.tsx:215
+msgid "Lock the vault"
+msgstr "Lock the vault"
+
+#: src/components/Family.tsx:236
+msgid "Make an invite link"
+msgstr "Make an invite link"
+
+#: src/components/Family.tsx:236
+msgid "Making a link…"
+msgstr "Making a link…"
+
+#: src/components/Welcome.tsx:116
+msgid "Making your vault…"
+msgstr "Making your vault…"
+
+#: src/components/SettingsSheet.tsx:53
+msgid "Meadow"
+msgstr "Meadow"
+
+#: src/components/RecoveryFlow.tsx:179
+msgid "New passphrase"
+msgstr "New passphrase"
+
+#: src/components/RecoveryFlow.tsx:145
+msgid "No guardians are set up on this account. Once you're back in, set some up from Sync so this is possible next time."
+msgstr "No guardians are set up on this account. Once you're back in, set some up from Sync so this is possible next time."
+
+#: src/components/PersonPage.tsx:68
+msgid "None recorded yet."
+msgstr "None recorded yet."
+
+#: src/components/Home.tsx:65
+msgid "Not yet placed"
+msgstr "Not yet placed"
+
+#: src/components/PersonPage.tsx:176
+msgid "Nothing kept here yet — a photo, a letter, a story worth saving."
+msgstr "Nothing kept here yet — a photo, a letter, a story worth saving."
+
+#: src/components/Family.tsx:142
+msgid "One tree, written together. Everyone you invite reads and writes every person, bond, and keepsake — the way a family actually remembers. Your whole tree here becomes the starting point."
+msgstr "One tree, written together. Everyone you invite reads and writes every person, bond, and keepsake — the way a family actually remembers. Your whole tree here becomes the starting point."
+
+#: src/components/Sync.tsx:26
+msgid "Only encrypted blobs leave this device. Your passphrase, and the key made from it, never do — so the server stores noise it can't read: not a name, not a date, not a word of a letter."
+msgstr "Only encrypted blobs leave this device. Your passphrase, and the key made from it, never do — so the server stores noise it can't read: not a name, not a date, not a word of a letter."
+
+#. placeholder {0}: displayName(p)
+#: src/components/TreeView.tsx:108
+msgid "Open {0}'s page"
+msgstr "Open {0}'s page"
+
+#: src/components/SettingsSheet.tsx:53
+msgid "Open daylight"
+msgstr "Open daylight"
+
+#: src/components/Family.tsx:136
+msgid "Open Sync"
+msgstr "Open Sync"
+
+#: src/components/TreeView.tsx:69
+msgid "Open their page"
+msgstr "Open their page"
+
+#: src/components/Family.tsx:216
+msgid "Or share a link"
+msgstr "Or share a link"
+
+#: src/components/PersonPage.tsx:165
+msgid "Parents"
+msgstr "Parents"
+
+#: src/components/PersonPage.tsx:166
+msgid "Partners"
+msgstr "Partners"
+
+#: src/components/LockScreen.tsx:100
+#: src/components/Welcome.tsx:107
+msgid "Passphrase"
+msgstr "Passphrase"
+
+#: src/components/AddKeepsake.tsx:58
+msgid "Photo or scan (JPEG, PNG, or PDF)"
+msgstr "Photo or scan (JPEG, PNG, or PDF)"
+
+#: src/components/SettingsSheet.tsx:91
+msgid "Pick the look that feels right. Saved on this device."
+msgstr "Pick the look that feels right. Saved on this device."
+
+#: src/components/Family.tsx:163
+msgid "Plant the shared tree"
+msgstr "Plant the shared tree"
+
+#: src/components/Family.tsx:163
+msgid "Planting…"
+msgstr "Planting…"
+
+#: src/App.tsx:182
+msgid "Quick unlock"
+msgstr "Quick unlock"
+
+#: src/components/SettingsSheet.tsx:136
+msgid "Reading…"
+msgstr "Reading…"
+
+#: src/components/Family.tsx:258
+msgid "Refresh"
+msgstr "Refresh"
+
+#: src/components/Family.tsx:258
+msgid "Refreshing…"
+msgstr "Refreshing…"
+
+#: src/components/EditPerson.tsx:140
+msgid "Remove from the tree"
+msgstr "Remove from the tree"
+
+#: src/components/PersonPage.tsx:190
+msgid "Remove this keepsake"
+msgstr "Remove this keepsake"
+
+#: src/components/PersonPage.tsx:192
+msgid "Remove this keepsake? It will be gone from the tree."
+msgstr "Remove this keepsake? It will be gone from the tree."
+
+#: src/components/EditPerson.tsx:132
+msgid "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
+msgstr "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
+
+#: src/components/Family.tsx:249
+msgid "revoke"
+msgstr "revoke"
+
+#: src/components/EditPerson.tsx:123
+msgid "Save"
+msgstr "Save"
+
+#: src/components/PersonPage.tsx:40
+msgid "Save the document to read it"
+msgstr "Save the document to read it"
+
+#: src/components/SettingsSheet.tsx:98
+msgid "Saved on this device. A language is downloaded only when you choose it — your device never holds one you don't use."
+msgstr "Saved on this device. A language is downloaded only when you choose it — your device never holds one you don't use."
+
+#: src/components/Home.tsx:57
+msgid "See the tree"
+msgstr "See the tree"
+
+#: src/components/Welcome.tsx:70
+msgid "Set a passphrase"
+msgstr "Set a passphrase"
+
+#: src/components/RecoveryFlow.tsx:187
+msgid "Set new passphrase"
+msgstr "Set new passphrase"
+
+#: src/components/SettingsSheet.tsx:86
+#: src/components/SettingsSheet.tsx:87
+msgid "Settings"
+msgstr "Settings"
+
+#: src/App.tsx:204
+msgid "Settings & vibe"
+msgstr "Settings & vibe"
+
+#: src/App.tsx:205
+msgid "Settings and vibe"
+msgstr "Settings and vibe"
+
+#: src/App.tsx:192
+msgid "Share"
+msgstr "Share"
+
+#: src/App.tsx:190
+msgid "Share the tree with family"
+msgstr "Share the tree with family"
+
+#: src/components/Family.tsx:230
+msgid "Share…"
+msgstr "Share…"
+
+#. placeholder {0}: g.tree.title
+#: src/App.tsx:190
+msgid "Shared: {0}"
+msgstr "Shared: {0}"
+
+#: src/components/PersonPage.tsx:168
+msgid "Siblings"
+msgstr "Siblings"
+
+#: src/components/RecoveryFlow.tsx:140
+msgid "Sign in"
+msgstr "Sign in"
+
+#: src/components/RecoveryFlow.tsx:129
+msgid "Sign in with your account (not your passphrase) so your guardians can find your request."
+msgstr "Sign in with your account (not your passphrase) so your guardians can find your request."
+
+#: src/App.tsx:173
+msgid "someone"
+msgstr "someone"
+
+#: src/components/RecoveryFlow.tsx:160
+msgid "Start recovery"
+msgstr "Start recovery"
+
+#: src/components/RecoveryFlow.tsx:160
+msgid "Starting…"
+msgstr "Starting…"
+
+#: src/components/Family.tsx:273
+msgid "Stay"
+msgstr "Stay"
+
+#: src/components/AddRelative.tsx:46
+msgid "step"
+msgstr "step"
+
+#: src/components/AddRelative.tsx:110
+#: src/components/EditPerson.tsx:107
+msgid "Still living"
+msgstr "Still living"
+
+#: src/App.tsx:199
+msgid "Sync"
+msgstr "Sync"
+
+#: src/App.tsx:197
+msgid "Sync across devices"
+msgstr "Sync across devices"
+
+#: src/App.tsx:199
+msgid "Synced"
+msgstr "Synced"
+
+#. placeholder {0}: g.account
+#: src/App.tsx:197
+msgid "Syncing as {0}"
+msgstr "Syncing as {0}"
+
+#: src/App.tsx:199
+msgid "Syncing…"
+msgstr "Syncing…"
+
+#: src/components/TreeView.tsx:71
+msgid "Tap anyone to look at the tree from where they stand."
+msgstr "Tap anyone to look at the tree from where they stand."
+
+#: src/components/AddRelative.tsx:59
+#: src/components/EditPerson.tsx:55
+msgid "The birth year didn't read as a number."
+msgstr "The birth year didn't read as a number."
+
+#: src/components/EditPerson.tsx:57
+msgid "The death year didn't read as a number."
+msgstr "The death year didn't read as a number."
+
+#: src/components/Family.tsx:123
+msgid "The family tree"
+msgstr "The family tree"
+
+#: src/components/Home.tsx:36
+msgid "The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone tells stories about. One name is enough; the rest grows from it."
+msgstr "The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone tells stories about. One name is enough; the rest grows from it."
+
+#: src/components/Family.tsx:158
+msgid "The Hale tree"
+msgstr "The Hale tree"
+
+#: src/components/LockScreen.tsx:67
+msgid "The paper way back in."
+msgstr "The paper way back in."
+
+#: src/components/Welcome.tsx:41
+msgid "The people you come from, the bonds between them, and what everyone remembers about them. Everything is encrypted on this device before it's stored — your family's story is nobody's business but your family's."
+msgstr "The people you come from, the bonds between them, and what everyone remembers about them. Everything is encrypted on this device before it's stored — your family's story is nobody's business but your family's."
+
+#: src/components/SettingsSheet.tsx:178
+msgid "The trade: your passphrase never leaves this device, so there's no reset by email — that button would mean someone else could read the tree. Two ways back in live in Sync: a printed recovery kit (a one-page code for a fire safe), or Guardians — a few people you trust, jointly. Keep the passphrase somewhere safe as well."
+msgstr "The trade: your passphrase never leaves this device, so there's no reset by email — that button would mean someone else could read the tree. Two ways back in live in Sync: a printed recovery kit (a one-page code for a fire safe), or Guardians — a few people you trust, jointly. Keep the passphrase somewhere safe as well."
+
+#: src/components/RecoveryFlow.tsx:109
+msgid "The two passphrases don't match."
+msgstr "The two passphrases don't match."
+
+#: src/components/AddKeepsake.tsx:36
+msgid "The year didn't read as a number."
+msgstr "The year didn't read as a number."
+
+#: src/components/Family.tsx:206
+msgid "them@example.com"
+msgstr "them@example.com"
+
+#: src/components/Welcome.tsx:103
+msgid "This is the only key to your family's vault. A few plain words you won't forget beats a short clever one."
+msgstr "This is the only key to your family's vault. A few plain words you won't forget beats a short clever one."
+
+#: src/components/Welcome.tsx:30
+msgid "Those don't match."
+msgstr "Those don't match."
+
+#: src/components/Sync.tsx:23
+msgid "tree"
+msgstr "tree"
+
+#: src/App.tsx:225
+msgid "Try again"
+msgstr "Try again"
+
+#: src/components/RecoveryFlow.tsx:183
+msgid "Type it again"
+msgstr "Type it again"
+
+#: src/components/SettingsSheet.tsx:51
+msgid "Under the leaves"
+msgstr "Under the leaves"
+
+#: src/components/SettingsSheet.tsx:52
+msgid "Understory"
+msgstr "Understory"
+
+#: src/components/LockScreen.tsx:104
+msgid "Unlock"
+msgstr "Unlock"
+
+#: src/components/LockScreen.tsx:104
+msgid "Unlocking…"
+msgstr "Unlocking…"
+
+#: src/components/LockScreen.tsx:125
+msgid "Use a recovery code"
+msgstr "Use a recovery code"
+
+#: src/components/Welcome.tsx:29
+msgid "Use at least 10 characters — a few plain words you'll remember."
+msgstr "Use at least 10 characters — a few plain words you'll remember."
+
+#: src/components/RecoveryFlow.tsx:108
+msgid "Use at least 8 characters — a few plain words you'll remember."
+msgstr "Use at least 8 characters — a few plain words you'll remember."
+
+#: src/components/LockScreen.tsx:108
+msgid "Use biometrics instead"
+msgstr "Use biometrics instead"
+
+#: src/components/SettingsSheet.tsx:90
+msgid "Vibe"
+msgstr "Vibe"
+
+#: src/components/RecoveryFlow.tsx:168
+msgid "Waiting for guardians to approve — {approvals} of {k} so far. Ask them to open the app."
+msgstr "Waiting for guardians to approve — {approvals} of {k} so far. Ask them to open the app."
+
+#: src/components/Welcome.tsx:85
+msgid "Want Grove on your home screen? <0>How to install</0>"
+msgstr "Want Grove on your home screen? <0>How to install</0>"
+
+#: src/components/LockScreen.tsx:95
+msgid "Welcome back."
+msgstr "Welcome back."
+
+#: src/components/SettingsSheet.tsx:77
+msgid "Welcomed {people}, {unions}, and {keepsakes} into the grove."
+msgstr "Welcomed {people}, {unions}, and {keepsakes} into the grove."
+
+#: src/components/AddKeepsake.tsx:66
+msgid "What is it?"
+msgstr "What is it?"
+
+#: src/components/AddKeepsake.tsx:70
+msgid "What it says, typed out (so it can be read and remembered)"
+msgstr "What it says, typed out (so it can be read and remembered)"
+
+#: src/components/Family.tsx:157
+msgid "What should it be called?"
+msgstr "What should it be called?"
+
+#: src/components/PersonPage.tsx:161
+msgid "Who were they? What did they love, what did they always say, what does the family still tell about them?"
+msgstr "Who were they? What did they love, what did they always say, what does the family still tell about them?"
+
+#: src/components/Family.tsx:179
+msgid "Who's in it"
+msgstr "Who's in it"
+
+#: src/components/RecoveryFlow.tsx:140
+msgid "Working…"
+msgstr "Working…"
+
+#: src/App.tsx:86
+msgid "You're in — the family tree is now yours to tend too."
+msgstr "You're in — the family tree is now yours to tend too."
+
+#: src/App.tsx:231
+msgid "You've been invited to a family tree. Connect Sync to join — <0>open Sync</0>."
+msgstr "You've been invited to a family tree. Connect Sync to join — <0>open Sync</0>."
+
+#: src/components/SettingsSheet.tsx:113
+msgid "Your family's history is portable"
+msgstr "Your family's history is portable"
+
+#: src/components/SettingsSheet.tsx:164
+msgid "Your family's story is nobody's business but your family's. Every person, bond, and keepsake is encrypted on this device before it's stored — a breach of any server would yield nothing but noise, and we couldn't read it if we wanted to."
+msgstr "Your family's story is nobody's business but your family's. Every person, bond, and keepsake is encrypted on this device before it's stored — a breach of any server would yield nothing but noise, and we couldn't read it if we wanted to."
+
+#: src/components/RecoveryFlow.tsx:176
+msgid "Your guardians have vouched for you. Choose a new passphrase."
+msgstr "Your guardians have vouched for you. Choose a new passphrase."
+
+#: src/components/LockScreen.tsx:96
+msgid "Your passphrase unlocks the tree on this device."
+msgstr "Your passphrase unlocks the tree on this device."

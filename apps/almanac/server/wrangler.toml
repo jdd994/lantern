@@ -1,0 +1,13 @@
+name = "almanac-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "almanac"
+database_id = "c69c5fdb-7097-4956-88eb-24b22616cd2a"
+
+[vars]
+# Comma-separated allowed origins. The pages.dev origin stays so installs from
+# before any custom domain keep syncing; empty string reflects * (dev only).
+ALLOWED_ORIGIN = "https://almanack.page,https://www.almanack.page,https://almanac-5ua.pages.dev"

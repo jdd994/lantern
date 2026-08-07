@@ -27,8 +27,26 @@ import {
   fromB64url,
   toBase64,
   VERIFIER_TEXT,
+  exportPrivateKeyB64,
+  importPrivateKeyB64,
+  createRecoveryCircle,
+  approveAsGuardian,
+  reconstructDEK,
+  PBKDF2_ITERATIONS,
+  startPairingSession,
+  wrapPairingPayload,
+  unwrapPairingPayload,
+  encodePairingQr,
+  decodePairingQr,
+  type PairingSession,
 } from "../lib/crypto";
-import { createVault as makeVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
+import {
+  createVault as makeVault,
+  openVault,
+  rewrapVault,
+  verifyDEK,
+  setPassphraseFromDEK,
+} from "@lantern/core/vault";
 import { compressImage, bytesToBase64 } from "../lib/media";
 import {
   biometricSupported,
@@ -42,6 +60,8 @@ import {
   putStoredEntry,
   allStoredStrands,
   putStoredStrand,
+  allStoredDayNotes,
+  putStoredDayNote,
   putMedia,
   getMedia,
   deleteMedia,
@@ -52,8 +72,12 @@ import {
   getSyncState,
   saveSyncState,
   markAllDirty,
+  getRecoverySession,
+  saveRecoverySession,
+  clearRecoverySession,
   type StoredEntry,
   type StoredStrand,
+  type StoredDayNote,
   type VaultMeta,
 } from "../lib/db";
 import {
@@ -76,21 +100,43 @@ import {
   joinFinish,
   deleteAccount as apiDeleteAccount,
   updateVault,
+  updateRecoveryKit,
   downloadMedia,
   deleteMediaRemote,
   uploadSharedMedia,
   downloadSharedMedia,
   deleteSharedMediaRemote,
+  setCircle,
+  fetchCircle,
+  startRequest,
+  fetchRecoveryStatus,
+  fetchRecoveryRequest,
+  cancelRequest as apiCancelRecoveryRequest,
+  completeRequest as apiCompleteRecoveryRequest,
+  fetchPendingForMe,
+  approveRecovery,
+  startPairing,
+  pollPairing,
+  deliverPairing,
+  cancelPairing,
   type SharedRecord,
   type StrandMember,
+  type GuardianEntry,
+  type RecoveryCircleInfo,
+  type RecoveryStatus,
+  type PendingForMe,
 } from "../lib/api";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
 import { syncNow } from "../lib/sync";
 import {
   uid,
+  dayKey,
   encodePayload,
   decodePayload,
   encodeStrand,
   decodeStrand,
+  encodeDayNote,
+  decodeDayNote,
   sharedPieces,
   type Entry,
   type Anchor,
@@ -98,6 +144,7 @@ import {
   type MediaConfig,
   type SharedStrandView,
   type SharedPiece,
+  type DayNote,
 } from "../lib/journal";
 import { buildBackup, type Backup } from "../lib/backup";
 
@@ -122,14 +169,20 @@ type LiveShared = {
 
 export function useJournal() {
   const [vaultState, setVaultState] = useState<VaultState>("loading");
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [strands, setStrands] = useState<Strand[]>([]);
+  const [dayNotes, setDayNotes] = useState<Record<string, DayNote>>({});
   const [saveError, setSaveError] = useState<SaveError>(null);
   const [bioSupported, setBioSupported] = useState(false);
   const [bioEnrolled, setBioEnrolled] = useState(false);
   const [account, setAccount] = useState<string | null>(null); // synced account email, or null
   const [sharedStrands, setSharedStrands] = useState<SharedStrandView[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null); // this account's id (shared authorship)
+  const [guardianCircle, setGuardianCircle] = useState<RecoveryCircleInfo | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(null); // a pending request on MY OWN account
+  const [pendingGuardianRequests, setPendingGuardianRequests] = useState<PendingForMe[]>([]); // requests I can approve
   const myUserIdRef = useRef<string | null>(null);
   const keyRef = useRef<CryptoKey | null>(null);
   const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
@@ -138,10 +191,31 @@ export function useJournal() {
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
   const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
   const sharedRef = useRef<Map<string, LiveShared>>(new Map()); // shared strands live (with unwrapped DEKs)
+  const pairingSessionRef = useRef<PairingSession | null>(null); // this device's throwaway keypair while showing a pairing QR
+  // Live mirrors of `entries`/`strands`. Mutations read and update these
+  // synchronously, then set state — never compute inside a setState updater:
+  // React defers the updater when another update is already pending (e.g. the
+  // addToStrand right after createEntry in write-into-strand), which skipped
+  // the persist step — the piece showed on screen but never reached the vault.
+  const entriesRef = useRef<Entry[]>([]);
+  const strandsRef = useRef<Strand[]>([]);
+
+  const commitEntries = useCallback((next: Entry[]) => {
+    entriesRef.current = next;
+    setEntries(next);
+  }, []);
+
+  const commitStrands = useCallback((next: Strand[]) => {
+    strandsRef.current = next;
+    setStrands(next);
+  }, []);
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
-    getVault().then((v) => setVaultState(v ? "locked" : "needs-setup"));
+    getVault().then((v) => {
+      setVaultState(v ? "locked" : "needs-setup");
+      setRecoveryKitAt(v?.recoveryKit?.createdAt ?? null);
+    });
     biometricSupported().then(setBioSupported);
     getDevice().then((d) => setBioEnrolled(!!d));
     getSyncState().then((s) => {
@@ -173,14 +247,14 @@ export function useJournal() {
     for (const s of stored) {
       if (s.deleted) continue; // tombstones aren't shown
       try {
-        const { text, anchor, mediaIds, mediaConfig } = decodePayload(await decryptString(key, s.content));
-        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, createdAt: s.createdAt, updatedAt: s.updatedAt });
+        const { text, anchor, mediaIds, mediaConfig, heading } = decodePayload(await decryptString(key, s.content));
+        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, heading, createdAt: s.createdAt, updatedAt: s.updatedAt });
       } catch {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
     }
-    setEntries(decrypted);
-  }, []);
+    commitEntries(decrypted);
+  }, [commitEntries]);
 
   const loadStrands = useCallback(async (key: CryptoKey) => {
     const stored = await allStoredStrands();
@@ -195,7 +269,22 @@ export function useJournal() {
       }
     }
     out.sort((a, b) => b.updatedAt - a.updatedAt);
-    setStrands(out);
+    commitStrands(out);
+  }, [commitStrands]);
+
+  const loadDayNotes = useCallback(async (key: CryptoKey) => {
+    const stored = await allStoredDayNotes();
+    const out: Record<string, DayNote> = {};
+    for (const s of stored) {
+      if (s.deleted) continue;
+      try {
+        const { text } = decodeDayNote(await decryptString(key, s.content));
+        if (text) out[s.id] = { key: s.id, text, updatedAt: s.updatedAt };
+      } catch {
+        // skip undecryptable
+      }
+    }
+    setDayNotes(out);
   }, []);
 
   // Reconcile with the server (pull others' changes, push ours), then refresh
@@ -211,13 +300,14 @@ export function useJournal() {
       if (changed) {
         await loadEntries(key);
         await loadStrands(key);
+        await loadDayNotes(key);
       }
     } catch {
       // offline / transient — a later trigger will retry
     } finally {
       syncingRef.current = false;
     }
-  }, [loadEntries, loadStrands]);
+  }, [loadEntries, loadStrands, loadDayNotes]);
 
   // Debounced: after you stop editing, push (and pull) shortly after.
   const scheduleSync = useCallback(() => {
@@ -448,8 +538,9 @@ export function useJournal() {
           createdAt: Date.now(),
         });
         keyRef.current = dek;
-        setEntries([]);
-        setStrands([]);
+        commitEntries([]);
+        commitStrands([]);
+        setDayNotes({});
       }
       if (account) {
         const err = await connectCreateAccount(account.email, account.password);
@@ -459,7 +550,7 @@ export function useJournal() {
       void requestDurableStorage();
       return null;
     },
-    [requestDurableStorage, connectCreateAccount]
+    [requestDurableStorage, connectCreateAccount, commitEntries, commitStrands]
   );
 
   // Returning: unlock with the passphrase. Returns false on a wrong one.
@@ -477,11 +568,12 @@ export function useJournal() {
       keyRef.current = opened.dek;
       await loadEntries(opened.dek);
       await loadStrands(opened.dek);
+      await loadDayNotes(opened.dek);
       setVaultState("open");
       void requestDurableStorage();
       return true;
     },
-    [loadEntries, loadStrands, requestDurableStorage]
+    [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]
   );
 
   // Returning via biometrics: a passkey + PRF unwrap a device-stored copy of
@@ -499,10 +591,11 @@ export function useJournal() {
     keyRef.current = key;
     await loadEntries(key);
     await loadStrands(key);
+    await loadDayNotes(key);
     setVaultState("open");
     void requestDurableStorage();
     return true;
-  }, [loadEntries, loadStrands, requestDurableStorage]);
+  }, [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]);
 
   // Opt in on this device (must be unlocked): wrap the in-memory key behind a
   // platform passkey. Returns false if the platform can't do PRF.
@@ -527,6 +620,98 @@ export function useJournal() {
   // is re-encrypted, so it's instant and every other device keeps reading its
   // data with the unchanged DEK. Biometric quick-unlock also survives (it wraps
   // the raw DEK). Returns an error message, or null on success.
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock your journal first.";
+    const vault = await getVault();
+    if (!vault) return "No journal on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await getVault();
+    if (!vault) return "No journal on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper here
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the journal and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const meta = await fetchVault(tokenRef.current);
+          if (meta.recoveryKit) {
+            vault = { ...vault, recoveryKit: meta.recoveryKit };
+            await saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This journal has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this journal. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated: VaultMeta = { ...vault, ...fresh };
+      await saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await updateVault(token, {
+            salt: updated.salt,
+            verifier: updated.verifier,
+            iterations: updated.iterations,
+            wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+      }
+      keyRef.current = dek;
+      await loadEntries(dek);
+      await loadStrands(dek);
+      await loadDayNotes(dek);
+      setVaultState("open");
+      void requestDurableStorage();
+      return null;
+    },
+    [loadEntries, loadStrands, loadDayNotes]
+  );
+
   const changePassphrase = useCallback(
     async (current: string, next: string): Promise<string | null> => {
       const dek = keyRef.current;
@@ -564,18 +749,274 @@ export function useJournal() {
     []
   );
 
+  // ---- Social recovery: MY circle (post-unlock, needs the key + identity) ---
+
+  const loadGuardianCircle = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      setGuardianCircle(await fetchCircle(token));
+    } catch {
+      setGuardianCircle(null); // no circle configured yet (404) or offline
+    }
+  }, []);
+
+  // Configure (or rotate) K-of-N guardians. Each guardian's codeword must have
+  // been told to them OUT LOUD, never typed anywhere but here — see HelpSheet.
+  // Rotating cancels any recovery request already in flight (its shares wrap
+  // the OLD recovery key). Returns an error message, or null on success.
+  const setupGuardians = useCallback(
+    async (guardians: { email: string; codeword: string }[], k: number, delayMs: number): Promise<string | null> => {
+      const token = tokenRef.current;
+      const dek = keyRef.current;
+      if (!token || !dek) return "Unlock your journal first.";
+      if (k < 2 || k > guardians.length) return "Pick at least 2, and no more than the number of guardians.";
+      try {
+        const resolved = await Promise.all(
+          guardians.map(async (g) => {
+            const em = g.email.trim().toLowerCase();
+            const { identityPublicKey } = await fetchKeys(token, em);
+            if (!identityPublicKey) throw new Error(`${em} doesn't have an account yet.`);
+            return { userId: em, identityPublicKey, codeword: g.codeword };
+          })
+        );
+        const circle = await createRecoveryCircle(dek, resolved, { k, n: resolved.length, delayMs });
+        const entries: GuardianEntry[] = circle.shares.map((s) => ({
+          email: s.userId, // resolved as the lookup email above — see createRecoveryCircle
+          shareIndex: s.shareIndex,
+          ephemeralPub: s.ephemeralPub,
+          wrapped: s.wrapped,
+          codewordSalt: s.codewordSalt,
+          codewordIterations: s.codewordIterations,
+        }));
+        await setCircle(token, k, resolved.length, delayMs, circle.recoveryWrappedDEK, entries);
+        await loadGuardianCircle();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't set up guardians.";
+      }
+    },
+    [loadGuardianCircle]
+  );
+
+  // Pull surfaces (deliberately no push/notify — see journal.ts's "never
+  // notifies" invariant): checked alongside ensureIdentity/loadSharedStrands,
+  // so any device shows a pending request next time it opens and syncs.
+  const refreshRecoveryStatus = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { request } = await fetchRecoveryStatus(token);
+      setRecoveryStatus(request);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  const cancelPendingRecovery = useCallback(async (): Promise<string | null> => {
+    const token = tokenRef.current;
+    const requestId = recoveryStatus?.requestId;
+    if (!token || !requestId) return "No pending request.";
+    try {
+      await apiCancelRecoveryRequest(token, requestId);
+      await refreshRecoveryStatus();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, [recoveryStatus, refreshRecoveryStatus]);
+
+  const refreshPendingGuardianRequests = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { requests } = await fetchPendingForMe(token);
+      setPendingGuardianRequests(requests);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  // Help a friend: unwrap my share (needs my identity key AND the codeword
+  // they told me out loud), re-wrap it to their device, submit. Wrong codeword
+  // fails loudly (AES-GCM) rather than silently sending garbage.
+  const approveGuardianRequest = useCallback(
+    async (requestId: string, codeword: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const identity = identityRef.current;
+      if (!token || !identity) return "Unlock your journal first.";
+      const entry = pendingGuardianRequests.find((r) => r.requestId === requestId);
+      if (!entry) return "That request isn't open anymore.";
+      try {
+        const wrappedShareForRequester = await approveAsGuardian(
+          identity.privateKey,
+          entry.myShare,
+          codeword,
+          entry.sessionPub
+        );
+        await approveRecovery(token, requestId, wrappedShareForRequester);
+        await refreshPendingGuardianRequests();
+        return null;
+      } catch {
+        return "That codeword isn't right.";
+      }
+    },
+    [pendingGuardianRequests, refreshPendingGuardianRequests]
+  );
+
+  // ---- Social recovery: RECOVERING (pre-unlock — no key, maybe no token) ----
+
+  // Sign in for the sole purpose of reaching a recovery circle — doesn't touch
+  // the local vault (unlike connectSignIn, which is for a brand-new device).
+  // Needed when this device was never connected to the account, or was
+  // disconnected, before the passphrase was forgotten.
+  const recoverySignIn = useCallback(async (email: string, password: string): Promise<string | null> => {
+    const em = email.trim().toLowerCase();
+    try {
+      const { token } = await login(em, password);
+      tokenRef.current = token;
+      await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
+      setAccount(em);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't sign in.";
+    }
+  }, []);
+
+  // Start a request: a fresh throwaway session keypair (saved locally, in the
+  // clear — this device only, see db.ts's RecoverySession), then ask the
+  // server to open the request so guardians can see it.
+  const startRecoveryRequest = useCallback(async (): Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  > => {
+    const token = tokenRef.current;
+    if (!token) return "Sign in to your account first.";
+    try {
+      const session = await generateIdentityKeypair();
+      const publicKeyB64 = await exportPublicKeyB64(session.publicKey);
+      const privateKeyPkcs8B64 = await exportPrivateKeyB64(session.privateKey);
+      const result = await startRequest(token, publicKeyB64);
+      await saveRecoverySession({ id: "session", requestId: result.requestId, publicKeyB64, privateKeyPkcs8B64 });
+      return result;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't start recovery.";
+    }
+  }, []);
+
+  const pollRecoveryRequest = useCallback(async (requestId: string) => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    try {
+      return await fetchRecoveryRequest(token, requestId);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const cancelRecoveryRequest = useCallback(async (requestId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    try {
+      await apiCancelRecoveryRequest(token, requestId);
+      await clearRecoverySession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, []);
+
+  // Once the delay window has cleared server-side: reconstruct the DEK from
+  // the approved shares, set a fresh passphrase from it, open the journal.
+  const finishRecoveryRequest = useCallback(
+    async (requestId: string, newPassphrase: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Not signed in.";
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      try {
+        const poll = await fetchRecoveryRequest(token, requestId);
+        if (!poll.recoveryWrappedDEK || !poll.approvalShares) {
+          return "Not ready yet — the delay window hasn't cleared.";
+        }
+        const session = await getRecoverySession();
+        if (!session || session.requestId !== requestId) {
+          return "This recovery attempt was started on a different device — finish it there.";
+        }
+        const sessionPriv = await importPrivateKeyB64(session.privateKeyPkcs8B64);
+        const dek = await reconstructDEK(sessionPriv, poll.approvalShares, poll.k, poll.recoveryWrappedDEK);
+
+        const v = await getVault();
+        if (!v) return "No journal on this device.";
+        const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+        const updated: VaultMeta = { ...v, ...fresh };
+        await saveVault(updated);
+        try {
+          await updateVault(token, {
+            salt: updated.salt,
+            verifier: updated.verifier,
+            iterations: updated.iterations,
+            wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+
+        keyRef.current = dek;
+        await loadEntries(dek);
+        await loadStrands(dek);
+        await loadDayNotes(dek);
+        setVaultState("open");
+        void requestDurableStorage();
+
+        await apiCompleteRecoveryRequest(token, requestId).catch(() => {});
+        await clearRecoverySession();
+        return null;
+      } catch (e) {
+        // Wrong/insufficient shares fail loudly here (unwrapVaultKey's auth tag).
+        return e instanceof Error ? e.message : "Couldn't finish recovery — the shares didn't reconstruct your key.";
+      }
+    },
+    [loadEntries, loadStrands, loadDayNotes, requestDurableStorage]
+  );
+
+  // Same pull-only triggers as the background sync effect above (unlock,
+  // reconnect, returning to the app, a gentle interval) — this IS the
+  // notification for "someone is trying to recover your account" and "a
+  // friend needs your help," deliberately not a push.
+  useEffect(() => {
+    if (vaultState !== "open" || !tokenRef.current) return;
+    void loadGuardianCircle();
+    void refreshRecoveryStatus();
+    void refreshPendingGuardianRequests();
+    const onWake = () => {
+      void refreshRecoveryStatus();
+      void refreshPendingGuardianRequests();
+    };
+    const onVis = () => document.visibilityState === "visible" && onWake();
+    window.addEventListener("online", onWake);
+    document.addEventListener("visibilitychange", onVis);
+    const id = window.setInterval(onWake, 60_000);
+    return () => {
+      window.removeEventListener("online", onWake);
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(id);
+    };
+  }, [vaultState, loadGuardianCircle, refreshRecoveryStatus, refreshPendingGuardianRequests]);
+
   const lock = useCallback(() => {
     keyRef.current = null;
-    setEntries([]);
-    setStrands([]);
+    commitEntries([]);
+    commitStrands([]);
     mediaUrls.current.clear(); // free decrypted image data URLs from memory
     identityRef.current = null;
     sharedRef.current.clear(); // drop unwrapped strand keys + decrypted shared content
     setSharedStrands([]);
     myUserIdRef.current = null;
     setMyUserId(null);
+    setGuardianCircle(null);
+    setRecoveryStatus(null);
+    setPendingGuardianRequests([]);
     setVaultState("locked");
-  }, []);
+  }, [commitEntries, commitStrands]);
 
   // Writes a record as ciphertext, always marked `dirty` so the (future) sync
   // engine knows it has local changes to push. A deleted record is a tombstone:
@@ -586,7 +1027,9 @@ export function useJournal() {
     if (!key) return;
     const content = await encryptString(
       key,
-      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig)
+      deleted
+        ? ""
+        : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig, undefined, entry.heading)
     );
     const record: StoredEntry = {
       id: entry.id,
@@ -622,14 +1065,14 @@ export function useJournal() {
   );
 
   const createEntry = useCallback(
-    async (text: string): Promise<Entry> => {
+    async (text: string, heading?: boolean): Promise<Entry> => {
       const t = Date.now();
-      const entry: Entry = { id: uid(), text, createdAt: t, updatedAt: t };
-      setEntries((prev) => [...prev, entry]);
+      const entry: Entry = { id: uid(), text, createdAt: t, updatedAt: t, heading: heading || undefined };
+      commitEntries([...entriesRef.current, entry]);
       await guardedPersist(entry);
       return entry;
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   const addEntry = useCallback(
@@ -639,36 +1082,36 @@ export function useJournal() {
     [createEntry]
   );
 
-  const updateEntry = useCallback(
-    async (id: string, text: string) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          updated = { ...e, text, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+  // Apply a change to one entry (bumping updatedAt) and persist it. Reads the
+  // ref so a mutation chained right after another update still sees the entry.
+  const mutateEntry = useCallback(
+    async (id: string, change: (e: Entry) => Entry) => {
+      const current = entriesRef.current.find((e) => e.id === id);
+      if (!current) return;
+      const updated = { ...change(current), updatedAt: Date.now() };
+      commitEntries(entriesRef.current.map((e) => (e.id === id ? updated : e)));
+      await guardedPersist(updated);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
+  );
+
+  const updateEntry = useCallback(
+    (id: string, text: string) => mutateEntry(id, (e) => ({ ...e, text })),
+    [mutateEntry]
   );
 
   // Attach / change / clear a thought's anchor in lived time. Pass null to
   // un-anchor it. Bumps updatedAt so the change syncs.
   const setAnchor = useCallback(
-    async (id: string, anchor: Anchor | null) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== id) return e;
-          updated = { ...e, anchor: anchor ?? undefined, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
-    },
-    [guardedPersist]
+    (id: string, anchor: Anchor | null) => mutateEntry(id, (e) => ({ ...e, anchor: anchor ?? undefined })),
+    [mutateEntry]
+  );
+
+  // Flag/unflag a thought as a strand section heading (STRANDS_PLAN.md §2).
+  // Only meaningful inside a Strand — the Stream/Timeline ignore it.
+  const setHeading = useCallback(
+    (id: string, heading: boolean) => mutateEntry(id, (e) => ({ ...e, heading: heading || undefined })),
+    [mutateEntry]
   );
 
   // Attach a photo to a thought: compress → encrypt → store locally, then add
@@ -700,34 +1143,17 @@ export function useJournal() {
         deleted: false,
         dirty: true,
       });
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          updated = { ...e, mediaIds: [...(e.mediaIds ?? []), mediaId], updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+      await mutateEntry(entryId, (e) => ({ ...e, mediaIds: [...(e.mediaIds ?? []), mediaId] }));
     },
-    [guardedPersist]
+    [mutateEntry]
   );
 
   const removeMedia = useCallback(
     async (entryId: string, mediaId: string) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          updated = {
-            ...e,
-            mediaIds: (e.mediaIds ?? []).filter((m) => m !== mediaId),
-            updatedAt: Date.now(),
-          };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
+      await mutateEntry(entryId, (e) => ({
+        ...e,
+        mediaIds: (e.mediaIds ?? []).filter((m) => m !== mediaId),
+      }));
       await deleteMedia(mediaId);
       mediaUrls.current.delete(mediaId);
       // Also free it from storage if we're connected (best-effort, idempotent).
@@ -740,26 +1166,19 @@ export function useJournal() {
         }
       }
     },
-    [guardedPersist]
+    [mutateEntry]
   );
 
   // Adjust a photo's look (size / tilt) within a thought. Merges into the
   // entry's per-photo config and persists.
   const setMediaConfig = useCallback(
-    async (entryId: string, mediaId: string, partial: MediaConfig) => {
-      let updated: Entry | null = null;
-      setEntries((prev) =>
-        prev.map((e) => {
-          if (e.id !== entryId) return e;
-          const cfg = { ...(e.mediaConfig ?? {}) };
-          cfg[mediaId] = { ...(cfg[mediaId] ?? {}), ...partial };
-          updated = { ...e, mediaConfig: cfg, updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedPersist(updated);
-    },
-    [guardedPersist]
+    (entryId: string, mediaId: string, partial: MediaConfig) =>
+      mutateEntry(entryId, (e) => {
+        const cfg = { ...(e.mediaConfig ?? {}) };
+        cfg[mediaId] = { ...(cfg[mediaId] ?? {}), ...partial };
+        return { ...e, mediaConfig: cfg };
+      }),
+    [mutateEntry]
   );
 
   // Decrypt a stored image to an in-memory object URL (cached). Returns null if
@@ -799,12 +1218,12 @@ export function useJournal() {
 
   const removeEntry = useCallback(
     async (entry: Entry) => {
-      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      commitEntries(entriesRef.current.filter((e) => e.id !== entry.id));
       // Soft delete: write a tombstone (deleted + dirty, bumped updatedAt) so
       // the removal can sync and win last-write-wins on other devices.
       await guardedPersist({ ...entry, updatedAt: Date.now() }, true);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   // Used by Undo: re-insert a previously deleted entry. Bump updatedAt so this
@@ -812,10 +1231,10 @@ export function useJournal() {
   const restoreEntry = useCallback(
     async (entry: Entry) => {
       const revived: Entry = { ...entry, updatedAt: Date.now() };
-      setEntries((prev) => [...prev, revived]);
+      commitEntries([...entriesRef.current, revived]);
       await guardedPersist(revived);
     },
-    [guardedPersist]
+    [commitEntries, guardedPersist]
   );
 
   // A restorable, ciphertext-only backup of the whole vault. Returns null if
@@ -826,7 +1245,8 @@ export function useJournal() {
     // A backup is a clean snapshot — leave tombstones out.
     const liveEntries = (await allStoredEntries()).filter((e) => !e.deleted);
     const liveStrands = (await allStoredStrands()).filter((s) => !s.deleted);
-    return buildBackup(v, liveEntries, liveStrands);
+    const liveDayNotes = (await allStoredDayNotes()).filter((n) => !n.deleted);
+    return buildBackup(v, liveEntries, liveStrands, liveDayNotes);
   }, []);
 
   // Restore a parsed backup onto a fresh device. Writes the vault + ciphertext,
@@ -857,9 +1277,49 @@ export function useJournal() {
       deleted: false,
       dirty: true,
     }));
-    await importData(vault, entries, strands);
+    const dayNotesToRestore: StoredDayNote[] = backup.dayNotes.map((n) => ({
+      id: n.id,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+      content: n.content,
+      deleted: false,
+      dirty: true,
+    }));
+    await importData(vault, entries, strands, dayNotesToRestore);
     setVaultState("locked");
   }, []);
+
+  // ---- Day notes -----------------------------------------------------------
+  // A light title/reflection for a single day, keyed by dayKey — never a full
+  // Strand (STRANDS_PLAN.md §1). Pass an empty string to clear it.
+
+  const setDayNote = useCallback(
+    async (ts: number, text: string) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const k = dayKey(ts);
+      const trimmed = text.trim();
+      const updatedAt = Date.now();
+      setDayNotes((prev) => {
+        const next = { ...prev };
+        if (trimmed) next[k] = { key: k, text: trimmed, updatedAt };
+        else delete next[k];
+        return next;
+      });
+      const content = await encryptString(key, trimmed ? encodeDayNote(trimmed) : "");
+      const record: StoredDayNote = {
+        id: k,
+        createdAt: updatedAt,
+        updatedAt,
+        content,
+        deleted: !trimmed,
+        dirty: true,
+      };
+      await putStoredDayNote(record);
+      scheduleSync();
+    },
+    [scheduleSync]
+  );
 
   // ---- Strands -----------------------------------------------------------
 
@@ -897,31 +1357,28 @@ export function useJournal() {
     [persistStrand, scheduleSync]
   );
 
-  // Apply a change to one strand (bumping updatedAt) and persist it.
+  // Apply a change to one strand (bumping updatedAt) and persist it. Reads the
+  // ref so a mutation chained right after another update still sees the strand.
   const mutateStrand = useCallback(
     async (id: string, change: (s: Strand) => Strand) => {
-      let updated: Strand | null = null;
-      setStrands((prev) =>
-        prev.map((s) => {
-          if (s.id !== id) return s;
-          updated = { ...change(s), updatedAt: Date.now() };
-          return updated;
-        })
-      );
-      if (updated) await guardedStrandPersist(updated);
+      const current = strandsRef.current.find((s) => s.id === id);
+      if (!current) return;
+      const updated = { ...change(current), updatedAt: Date.now() };
+      commitStrands(strandsRef.current.map((s) => (s.id === id ? updated : s)));
+      await guardedStrandPersist(updated);
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   const createStrand = useCallback(
     async (title: string): Promise<Strand> => {
       const t = Date.now();
       const strand: Strand = { id: uid(), title: title.trim(), entryIds: [], createdAt: t, updatedAt: t };
-      setStrands((prev) => [strand, ...prev]);
+      commitStrands([strand, ...strandsRef.current]);
       await guardedStrandPersist(strand);
       return strand;
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   const renameStrand = useCallback(
@@ -931,10 +1388,10 @@ export function useJournal() {
 
   const deleteStrand = useCallback(
     async (strand: Strand) => {
-      setStrands((prev) => prev.filter((s) => s.id !== strand.id));
+      commitStrands(strandsRef.current.filter((s) => s.id !== strand.id));
       await guardedStrandPersist({ ...strand, updatedAt: Date.now() }, true);
     },
-    [guardedStrandPersist]
+    [commitStrands, guardedStrandPersist]
   );
 
   // Add an existing thought to a strand (no-op if already a member).
@@ -943,6 +1400,22 @@ export function useJournal() {
       mutateStrand(strandId, (s) =>
         s.entryIds.includes(entryId) ? s : { ...s, entryIds: [...s.entryIds, entryId] }
       ),
+    [mutateStrand]
+  );
+
+  // Insert right after a specific piece (e.g. the last piece in a chapter),
+  // instead of always appending to the very end of the strand. Falls back to
+  // appending if `afterId` is missing or no longer in the strand.
+  const addToStrandAfter = useCallback(
+    (strandId: string, entryId: string, afterId: string | null) =>
+      mutateStrand(strandId, (s) => {
+        if (s.entryIds.includes(entryId)) return s;
+        const idx = afterId ? s.entryIds.indexOf(afterId) : -1;
+        if (idx === -1) return { ...s, entryIds: [...s.entryIds, entryId] };
+        const ids = [...s.entryIds];
+        ids.splice(idx + 1, 0, entryId);
+        return { ...s, entryIds: ids };
+      }),
     [mutateStrand]
   );
 
@@ -962,6 +1435,27 @@ export function useJournal() {
   const writeInStrand = useCallback(
     async (strandId: string, text: string) => {
       const entry = await createEntry(text);
+      await addToStrand(strandId, entry.id);
+    },
+    [createEntry, addToStrand]
+  );
+
+  // Write a piece into a specific chapter (STRANDS_PLAN.md §2): lands at the
+  // end of that heading's section rather than the end of the whole strand, so
+  // adding several pieces to the same chapter in a row doesn't need reordering.
+  const writeInStrandAfter = useCallback(
+    async (strandId: string, text: string, afterId: string | null) => {
+      const entry = await createEntry(text);
+      await addToStrandAfter(strandId, entry.id, afterId);
+    },
+    [createEntry, addToStrandAfter]
+  );
+
+  // Start a new chapter in one step: write + flag as a heading together,
+  // rather than writing a plain piece and separately flagging it after.
+  const writeChapterInStrand = useCallback(
+    async (strandId: string, title: string) => {
+      const entry = await createEntry(title, true);
       await addToStrand(strandId, entry.id);
     },
     [createEntry, addToStrand]
@@ -1475,8 +1969,10 @@ export function useJournal() {
           verifier: meta.verifier,
           iterations: meta.iterations,
           wrappedDEK: meta.wrappedDEK ?? undefined,
+          recoveryKit: meta.recoveryKit ?? undefined,
           createdAt: Date.now(),
         });
+        setRecoveryKitAt(meta.recoveryKit?.createdAt ?? null);
         tokenRef.current = token;
         await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
         setAccount(em);
@@ -1488,6 +1984,118 @@ export function useJournal() {
     },
     []
   );
+
+  // ---- QR device linking (opt-in alternative to typing email+password+passphrase) ----
+
+  // NEW, unset-up device: generate a throwaway keypair, register it with the
+  // server, and return the text to render as a QR. Refuses if this device
+  // already has a journal — same guard as connectSignIn.
+  const startLinkAsNewDevice = useCallback(async (): Promise<{ qr: string } | { error: string }> => {
+    if (await getVault()) return { error: "This device already has a journal." };
+    try {
+      const session = await startPairingSession();
+      await startPairing(session.id, session.publicKeyB64);
+      pairingSessionRef.current = session;
+      return { qr: encodePairingQr(session) };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Couldn't start linking. Check your connection." };
+    }
+  }, []);
+
+  // NEW device: poll once. "delivered" means another device scanned the QR and
+  // handed everything over — install the vault and open it immediately, no
+  // passphrase needed (see @lantern/core/pairing's file-top note on why that's
+  // an intentional tradeoff, not an oversight).
+  const pollLinkAsNewDevice = useCallback(async (): Promise<
+    "pending" | "expired" | "cancelled" | "linked" | string
+  > => {
+    const session = pairingSessionRef.current;
+    if (!session) return "No pairing in progress.";
+    try {
+      const res = await pollPairing(session.id);
+      if (res.status !== "delivered") return res.status;
+      if (!res.wrapped) return "pending";
+
+      const payload = await unwrapPairingPayload(session.privateKeyPkcs8B64, res.wrapped);
+      await saveVault({
+        id: "vault",
+        salt: payload.vault.salt,
+        verifier: payload.vault.verifier,
+        iterations: payload.vault.iterations,
+        wrappedDEK: payload.vault.wrappedDEK,
+        createdAt: Date.now(),
+      });
+      const dek = await importKeyRaw(payload.dekRaw);
+      keyRef.current = dek;
+      tokenRef.current = payload.token;
+      myUserIdRef.current = payload.userId;
+      setMyUserId(payload.userId);
+      await saveSyncState({ id: "state", cursor: 0, token: payload.token, accountEmail: payload.accountEmail });
+      setAccount(payload.accountEmail);
+      await loadEntries(dek);
+      await loadStrands(dek);
+      setVaultState("open");
+      void requestDurableStorage();
+      pairingSessionRef.current = null;
+      return "linked";
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't finish linking this device.";
+    }
+  }, [loadEntries, loadStrands, requestDurableStorage]);
+
+  // EXISTING, already-unlocked device, right after scanning the new device's
+  // QR: hand over a live copy of everything — the account token, the vault's
+  // envelope metadata, and the DEK itself — wrapped so only that device can
+  // read it. Returns an error message, or null on success.
+  const linkNewDeviceFromScan = useCallback(
+    async (qrText: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const key = keyRef.current;
+      if (!token || !key) return "Unlock your journal first.";
+      const scanned = decodePairingQr(qrText);
+      if (!scanned) return "That code doesn't look like a Driftless pairing QR.";
+      const v = await getVault();
+      const state = await getSyncState();
+      if (!v || !v.wrappedDEK || !myUserIdRef.current || !state?.accountEmail) {
+        return "This device needs its own synced account before it can link another one.";
+      }
+      try {
+        const payload = {
+          token,
+          userId: myUserIdRef.current,
+          accountEmail: state.accountEmail,
+          vault: {
+            salt: v.salt,
+            verifier: v.verifier,
+            iterations: v.iterations ?? PBKDF2_ITERATIONS,
+            wrappedDEK: v.wrappedDEK,
+          },
+          dekRaw: await exportKeyRaw(key),
+        };
+        const wrapped = await wrapPairingPayload(scanned.publicKeyB64, payload);
+        await deliverPairing(token, scanned.id, wrapped);
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't link that device.";
+      }
+    },
+    []
+  );
+
+  // EXISTING device: "that wasn't me" — undo a delivery just made from the same
+  // scanned QR, within its short (~5 minute) window.
+  const cancelDeviceLink = useCallback(async (qrText: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    const scanned = decodePairingQr(qrText);
+    if (!scanned) return "That code doesn't look like a Driftless pairing QR.";
+    try {
+      await cancelPairing(token, scanned.id);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't undo that.";
+    }
+  }, []);
 
   // Stop syncing on this device. Local data stays; the account is untouched.
   const disconnectAccount = useCallback(async () => {
@@ -1536,10 +2144,13 @@ export function useJournal() {
     removeEntry,
     restoreEntry,
     setAnchor,
+    setHeading,
     attachMedia,
     removeMedia,
     setMediaConfig,
     getMediaUrl,
+    dayNotes,
+    setDayNote,
     strands,
     createStrand,
     renameStrand,
@@ -1548,15 +2159,25 @@ export function useJournal() {
     removeFromStrand,
     reorderStrand,
     writeInStrand,
+    writeInStrandAfter,
+    writeChapterInStrand,
     addPhotoToStrand,
     exportBackup,
     restoreBackup,
     account,
     connectCreateAccount,
     connectSignIn,
+    startLinkAsNewDevice,
+    pollLinkAsNewDevice,
+    linkNewDeviceFromScan,
+    cancelDeviceLink,
     disconnectAccount,
     deleteAccount,
     changePassphrase,
+    recoveryKitAt,
+    createRecoveryKit,
+    removeRecoveryKit,
+    recoverWithKit,
     syncNow: runSync,
     sharedStrands,
     createSharedStrand,
@@ -1576,5 +2197,19 @@ export function useJournal() {
     deleteSharedPiece,
     myUserId,
     refreshShared: loadSharedStrands,
+    guardianCircle,
+    loadGuardianCircle,
+    setupGuardians,
+    recoveryStatus,
+    refreshRecoveryStatus,
+    cancelPendingRecovery,
+    pendingGuardianRequests,
+    refreshPendingGuardianRequests,
+    approveGuardianRequest,
+    recoverySignIn,
+    startRecoveryRequest,
+    pollRecoveryRequest,
+    cancelRecoveryRequest,
+    finishRecoveryRequest,
   };
 }

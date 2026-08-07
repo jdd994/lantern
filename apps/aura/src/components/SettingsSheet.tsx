@@ -1,11 +1,14 @@
 // SettingsSheet.tsx — the app's own vibe, your connected brands, and a plain word
 // on how Aura works. No account, no vault: Aura is a controller for your lights.
-import { useRef, useState } from "react";
-import { Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
-import { connectorFor, type Device } from "../lib/connectors";
+import { useEffect, useRef, useState } from "react";
+import { CapabilityLedger, Sheet, ThemePicker, type ThemeOption } from "@lantern/ui";
+import { connectorFor, tierWording, type Device } from "../lib/connectors";
 import type { StoredSource } from "../lib/db";
+import { appVersion, isTauri } from "../lib/platform";
+import { TransferPanel } from "./TransferPanel";
 
 const DEFAULT_ACCENT = "#E7B75A";
+const EXPORT_ACCOUNTS_KEY = "aura-export-include-accounts";
 
 export function SettingsSheet({
   themes,
@@ -17,8 +20,8 @@ export function SettingsSheet({
   sources,
   devices,
   onDisconnect,
-  adaptive,
-  onAdaptive,
+  mirrorVibes,
+  onMirrorVibes,
   onExport,
   onImport,
   onClose,
@@ -32,30 +35,123 @@ export function SettingsSheet({
   sources: StoredSource[];
   devices: Device[];
   onDisconnect: (sourceId: string) => void;
-  adaptive: boolean;
-  onAdaptive: (on: boolean) => void;
-  onExport: () => string;
-  onImport: (text: string) => Promise<{ ok: boolean; error?: string }>;
+  mirrorVibes: boolean;
+  onMirrorVibes: (on: boolean) => void;
+  onExport: (includeAccounts?: boolean, compact?: boolean) => string;
+  onImport: (text: string) => Promise<{ ok: boolean; error?: string; summary?: string }>;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [ioNote, setIoNote] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  const [pasting, setPasting] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  // Persisted, not just component state — this toggle living only in memory
+  // meant closing and reopening Settings between "turn it on" and "tap
+  // Export" silently reset it back off, with no visible sign it had.
+  const [includeAccounts, setIncludeAccounts] = useState(() => {
+    try {
+      return localStorage.getItem(EXPORT_ACCOUNTS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function setIncludeAccountsPersisted(v: boolean) {
+    setIncludeAccounts(v);
+    try {
+      localStorage.setItem(EXPORT_ACCOUNTS_KEY, v ? "1" : "0");
+    } catch {
+      /* private mode — it'll just default off next time */
+    }
+  }
+  // Desktop only — a plain way to confirm you're on the build you think
+  // you're on, since Windows/macOS installers don't always show this.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    appVersion().then(setVersion);
+  }, []);
 
-  function exportSetup() {
-    const blob = new Blob([onExport()], { type: "application/json" });
+  // Desktop only: start-at-login. null until the shell answers (or forever, in
+  // the browser) — the toggle simply doesn't render until there's a real state
+  // to show, rather than guessing and flickering.
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    void import("@tauri-apps/plugin-autostart").then(async ({ isEnabled }) => {
+      try {
+        setAutostart(await isEnabled());
+      } catch {
+        /* leave the toggle unrendered rather than lie about the state */
+      }
+    });
+  }, []);
+  async function toggleAutostart() {
+    try {
+      const { enable, disable, isEnabled } = await import("@tauri-apps/plugin-autostart");
+      if (autostart) await disable();
+      else await enable();
+      setAutostart(await isEnabled());
+    } catch {
+      /* the OS said no — the toggle stays showing the real state */
+    }
+  }
+
+  // The actual friction in "move a file to your other device" was never the
+  // JSON — it's getting that file across, which used to mean emailing it to
+  // yourself or hunting for a cloud drive. Every phone already has a fast,
+  // native answer to that (AirDrop, Nearby Share, Windows Share) reachable
+  // from the browser as navigator.share() with a file attached — so try that
+  // first, and only fall back to a plain download where it isn't supported
+  // (most desktop browsers today).
+  async function exportSetup() {
+    const filename = `aura-setup-${new Date().toISOString().slice(0, 10)}.json`;
+    const text = onExport(includeAccounts);
+    const file = new File([text], filename, { type: "application/json" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Aura setup" });
+        setIoNote("Setup shared.");
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return; // you backed out — no note needed
+        // any other share failure falls through to the plain download below
+      }
+    }
+    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `aura-setup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     setIoNote("Setup exported.");
   }
 
+  async function copyAsText() {
+    try {
+      await navigator.clipboard.writeText(onExport(includeAccounts));
+      setIoNote("Setup copied — paste it anywhere you'd move text.");
+    } catch {
+      setIoNote("Couldn't copy — try Export setup instead.");
+    }
+  }
+
   async function importSetup(file: File) {
     const text = await file.text();
     const res = await onImport(text);
-    setIoNote(res.ok ? "Setup imported." : (res.error ?? "Import failed."));
+    // A generic "Setup imported." says nothing about what actually happened
+    // — summary spells out counts and account status, so an empty or
+    // partial file doesn't read as a silent no-op.
+    setIoNote(res.ok ? (res.summary ?? "Setup imported.") : (res.error ?? "Import failed."));
+  }
+
+  async function importPastedText() {
+    const res = await onImport(pasteText);
+    setIoNote(res.ok ? (res.summary ?? "Setup imported.") : (res.error ?? "Import failed."));
+    if (res.ok) {
+      setPasting(false);
+      setPasteText("");
+    }
   }
   return (
     <Sheet onClose={onClose} ariaLabel="Settings">
@@ -88,57 +184,103 @@ export function SettingsSheet({
       <div className="set-section">
         <div className="adaptive-row">
           <div>
-            <span className="label">Adaptive white</span>
-            <p className="hint">Tunable-white bulbs follow the day — warm at dawn and dusk, cool at midday.</p>
+            <span className="label">Mirror vibes</span>
+            <p className="hint">
+              When another lantern app on this computer sets a vibe, Aura's lights follow — and vice versa.
+              Local only; nothing leaves this machine.
+            </p>
           </div>
           <button
             className="toggle"
             role="switch"
-            aria-checked={adaptive}
-            aria-label="Adaptive white"
-            onClick={() => onAdaptive(!adaptive)}
+            aria-checked={mirrorVibes}
+            aria-label="Mirror vibes"
+            onClick={() => onMirrorVibes(!mirrorVibes)}
           >
             <span className="toggle-knob" />
           </button>
         </div>
       </div>
 
+      {/* The capability ledger: everything you said yes to, what it costs, and
+          the undo — right here, stated once, never a nag. Entries derive from
+          what's actually connected, so this page can't drift from the truth. */}
       <div className="set-section">
         <span className="label">Connected</span>
-        {sources.length === 0 ? (
-          <p className="hint">No lights connected yet.</p>
+        <CapabilityLedger
+          entries={sources.map((s) => {
+            const conn = connectorFor(s.id);
+            const count = devices.filter((d) => d.sourceId === s.id).length;
+            return {
+              id: s.id,
+              label: conn?.label ?? s.id,
+              tier: conn?.descriptor.tier ?? 0,
+              tierLabel: conn ? tierWording(conn.descriptor.tier) : undefined,
+              discloses: conn?.descriptor.discloses ?? "",
+              detail: count === 1 ? "1 light" : `${count} lights`,
+              since: s.connectedAt,
+            };
+          })}
+          onRevoke={onDisconnect}
+          revokeLabel="Disconnect"
+          emptyText="No lights connected yet."
+        />
+      </div>
+
+      <div className="set-section">
+        <span className="label">Move to another device</span>
+        <p className="hint">
+          {transferring
+            ? null
+            : "Scan a code between two devices — no server, no account, nothing but the two of you."}
+        </p>
+        {transferring ? (
+          <TransferPanel
+            onExport={onExport}
+            onImport={onImport}
+            onClose={() => setTransferring(false)}
+          />
         ) : (
-          <ul className="source-list">
-            {sources.map((s) => {
-              const count = devices.filter((d) => d.sourceId === s.id).length;
-              return (
-                <li className="source-row" key={s.id}>
-                  <span>
-                    {connectorFor(s.id)?.label ?? s.id}
-                    <span className="hint"> · {count} {count === 1 ? "light" : "lights"}</span>
-                  </span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => onDisconnect(s.id)}>
-                    Disconnect
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <button className="btn btn-sm" onClick={() => setTransferring(true)}>
+            Move with a code
+          </button>
         )}
       </div>
 
       <div className="set-section">
-        <span className="label">Your setup</span>
+        <span className="label">Export / Import</span>
         <p className="hint">
-          Move your rooms, scenes, and vibes to another device. The file holds no keys — you re-pair
-          your lights there, and everything lines back up.
+          Move your rooms, scenes, and vibes another way — a file, or copied text, instead of a scan.
+        </p>
+        <div className="adaptive-row">
+          <span className="hint">Include your connected accounts (Govee, Home Assistant…)</span>
+          <button
+            className="toggle sm"
+            role="switch"
+            aria-checked={includeAccounts}
+            aria-label="Include connected accounts in export"
+            onClick={() => setIncludeAccountsPersisted(!includeAccounts)}
+          >
+            <span className="toggle-knob" />
+          </button>
+        </div>
+        <p className="hint">
+          {includeAccounts
+            ? "This file can control your lights too — only send it somewhere you trust."
+            : "Off (default): the file holds no keys — you re-pair your lights on the other device, and everything else lines back up."}
         </p>
         <div className="io-row">
           <button className="btn btn-sm" onClick={exportSetup}>
             Export setup
           </button>
+          <button className="btn btn-sm" onClick={copyAsText}>
+            Copy as text
+          </button>
           <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
             Import setup
+          </button>
+          <button className="btn btn-sm" onClick={() => setPasting((v) => !v)}>
+            Paste text
           </button>
           <input
             ref={fileRef}
@@ -152,15 +294,55 @@ export function SettingsSheet({
             }}
           />
         </div>
+        {pasting && (
+          <div className="paste-row">
+            <textarea
+              className="note-input"
+              rows={3}
+              placeholder="Paste a copied setup here"
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+            <button className="btn btn-sm" disabled={!pasteText.trim()} onClick={importPastedText}>
+              Import pasted text
+            </button>
+          </div>
+        )}
         {ioNote && <p className="hint io-note">{ioNote}</p>}
       </div>
+
+      {isTauri() && (
+        <div className="set-section">
+          <span className="label">Desktop</span>
+          <p className="hint">
+            Closing the window keeps Aura running in the tray, so automations and the day rhythm
+            carry on. Quit from the tray icon when you want it fully stopped.
+          </p>
+          {autostart !== null && (
+            <div className="adaptive-row">
+              <span className="hint">Start quietly in the tray when you log in</span>
+              <button
+                className="toggle sm"
+                role="switch"
+                aria-checked={autostart}
+                aria-label="Start Aura when you log in"
+                onClick={toggleAutostart}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="set-section">
         <span className="label">How Aura works</span>
         <p className="hint">
           Aura runs entirely on this device and talks straight to each brand's own service. It has no
-          account and no server of its own — your keys, devices, and scenes never leave here.
+          account, and your keys, devices, and scenes never leave here. The only exception is a note you
+          choose to send from Help — that's the one thing that ever reaches a server of ours.
         </p>
+        {version && <p className="hint io-note">Aura desktop v{version}</p>}
       </div>
     </Sheet>
   );

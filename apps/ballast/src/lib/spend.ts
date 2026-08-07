@@ -14,6 +14,18 @@
 import { add, isNegative, negate, zero, type Money } from "./money";
 import { CATEGORIES, type Category } from "./categorize";
 
+// A line item off a receipt. Amounts are positive magnitudes — the sign lives
+// on the transaction, once. `category` is set only when it differs from the
+// transaction's own; most receipts are all one thing. `hsaEligible` follows
+// the same rule: set only when it differs from (overrides) the transaction's
+// own flag — a mixed receipt can have some HSA-eligible items and some not.
+export type TransactionItem = {
+  label: string;
+  amount: Money;
+  category?: Category;
+  hsaEligible?: boolean;
+};
+
 export type TransactionContent = {
   // Negative = money left. Positive = money arrived. Signed, so totals are a
   // plain sum and nothing downstream has to remember a convention.
@@ -23,6 +35,15 @@ export type TransactionContent = {
   note?: string;
   receiptId?: string; // -> the encrypted image in the media store
   accountId?: string;
+  items?: TransactionItem[]; // read off the receipt; encrypted with the rest
+  // HSA shorthand for an un-itemized transaction — see `hsaAmount` for how
+  // this interacts with per-item flags. Eligibility is a fact about the
+  // purchase, not a budget category, so it lives alongside `category` rather
+  // than inside it.
+  hsaEligible?: boolean;
+  // Set once you've drawn the matching amount back out of the HSA. All-or-
+  // nothing per transaction — no partial/linked-withdrawal tracking.
+  reimbursedAt?: number;
 };
 
 export type Transaction = TransactionContent & {
@@ -61,6 +82,32 @@ export type CategoryTotal = {
   share: number; // 0..1 of total spend in the window
 };
 
+// How a single transaction's magnitude distributes across categories.
+//
+// A receipt from a mixed store is genuinely more than one kind of spending —
+// $50 of groceries and $30 of shopping on one Target tape. When the items on a
+// transaction carry their own categories, attribute each item's amount to its
+// own category and whatever the items don't cover (tax, unread lines) to the
+// transaction's headline category. If the items claim MORE than the whole
+// transaction, the breakdown is inconsistent — fall back to the headline rather
+// than invent a scaling factor. We report; we don't make data up.
+export function attribute(t: Transaction): Array<{ category: Category; minor: number }> {
+  const magnitude = Math.abs(t.amount.minor);
+  const items = t.items ?? [];
+  const itemSum = items.reduce((a, i) => a + Math.abs(i.amount.minor), 0);
+  const split = items.some((i) => i.category && i.category !== t.category);
+  if (!split || itemSum > magnitude) return [{ category: t.category, minor: magnitude }];
+
+  const out = new Map<Category, number>();
+  for (const i of items) {
+    const c = i.category ?? t.category;
+    out.set(c, (out.get(c) ?? 0) + Math.abs(i.amount.minor));
+  }
+  const remainder = magnitude - itemSum;
+  if (remainder > 0) out.set(t.category, (out.get(t.category) ?? 0) + remainder);
+  return [...out.entries()].map(([category, minor]) => ({ category, minor }));
+}
+
 export function byCategory(
   transactions: Transaction[],
   from: number,
@@ -70,8 +117,10 @@ export function byCategory(
   const totals = new Map<Category, { minor: number; count: number }>();
   for (const t of transactions) {
     if (!isSpend(t) || !inWindow(t, from, to)) continue;
-    const cur = totals.get(t.category) ?? { minor: 0, count: 0 };
-    totals.set(t.category, { minor: cur.minor + Math.abs(t.amount.minor), count: cur.count + 1 });
+    for (const part of attribute(t)) {
+      const cur = totals.get(part.category) ?? { minor: 0, count: 0 };
+      totals.set(part.category, { minor: cur.minor + part.minor, count: cur.count + 1 });
+    }
   }
   const grand = [...totals.values()].reduce((a, b) => a + b.minor, 0);
   return [...totals.entries()]
@@ -82,6 +131,46 @@ export function byCategory(
       share: grand === 0 ? 0 : minor / grand,
     }))
     .sort((a, b) => b.total.minor - a.total.minor);
+}
+
+// ---- HSA banking -----------------------------------------------------------
+// The "shoebox strategy": pay HSA-eligible things out of pocket, bank the
+// receipt, reimburse yourself from the HSA whenever — there's no deadline.
+// This only tracks what you've flagged and whether you've since drawn the
+// matching amount back out; it never touches the HSA's actual balance.
+
+// The HSA-eligible slice of a transaction's magnitude. Same rule as
+// `attribute()`: per-item flags are authoritative once any item overrides,
+// otherwise the transaction-level flag covers the whole signed amount.
+export function hsaAmount(t: Transaction): number {
+  const magnitude = Math.abs(t.amount.minor);
+  const items = t.items ?? [];
+  const overridden = items.some((i) => i.hsaEligible !== undefined);
+  if (!overridden) return t.hsaEligible ? magnitude : 0;
+  return items.reduce((sum, i) => sum + (i.hsaEligible ? Math.abs(i.amount.minor) : 0), 0);
+}
+
+export type HsaBanked = {
+  total: Money; // everything ever flagged
+  unreimbursed: Money; // the subset not yet marked reimbursed
+  items: Transaction[]; // the flagged transactions, for a list view
+};
+
+// Deliberately no window arg — "reimburse yourself years later" is the whole
+// point, so this looks at the entire ledger, not "this month".
+export function hsaBanked(transactions: Transaction[], currency: string): HsaBanked {
+  let total = zero(currency);
+  let unreimbursed = zero(currency);
+  const items: Transaction[] = [];
+  for (const t of transactions) {
+    if (!isSpend(t)) continue;
+    const minor = hsaAmount(t);
+    if (minor === 0) continue;
+    items.push(t);
+    total = add(total, { minor, currency });
+    if (!t.reimbursedAt) unreimbursed = add(unreimbursed, { minor, currency });
+  }
+  return { total, unreimbursed, items };
 }
 
 // ---- windows -------------------------------------------------------------
@@ -215,4 +304,56 @@ export function recurring(
     });
   }
   return out.sort((a, b) => b.amount.minor - a.amount.minor);
+}
+
+// ---- what you're buying ----------------------------------------------------
+// Item-level awareness, possible only because receipts itemise now. The same
+// discipline as everything above: what YOU bought, how often, what it added up
+// to — facts about your own month, rendered calmly. No "needs vs wants", no
+// verdict, no comparison. Noticing is the entire feature; what to do about the
+// chips is the user's business, and they're better placed to decide than we are.
+
+// Receipt labels for the same thing vary by size and packaging noise
+// ("GREEK YOGURT 32OZ", "Greek Yogurt"). Reduce to the words.
+export function normalizeItemLabel(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z\s&']/g, " ")
+    .replace(/\b(OZ|LB|LBS|CT|PK|PKG|EA|KG|ML|G|L|X)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export type ItemPattern = {
+  label: string; // as first seen on a receipt — the user's own words for it
+  count: number;
+  total: Money; // positive magnitude
+};
+
+// Repeated purchases in the window, most-often first. `min` 2: a list of
+// one-offs is noise, and "what you're buying most" implies again-and-again.
+export function itemPatterns(
+  transactions: Transaction[],
+  from: number,
+  to: number,
+  currency: string,
+  min = 2
+): ItemPattern[] {
+  const map = new Map<string, { label: string; count: number; minor: number }>();
+  for (const t of transactions) {
+    if (!isSpend(t) || !inWindow(t, from, to)) continue;
+    for (const i of t.items ?? []) {
+      const key = normalizeItemLabel(i.label);
+      if (key.length < 3) continue;
+      const cur = map.get(key) ?? { label: i.label, count: 0, minor: 0 };
+      cur.count += 1;
+      cur.minor += Math.abs(i.amount.minor);
+      map.set(key, cur);
+    }
+  }
+  return [...map.values()]
+    .filter((p) => p.count >= min)
+    .map((p) => ({ label: p.label, count: p.count, total: { minor: p.minor, currency } }))
+    .sort((a, b) => b.count - a.count || b.total.minor - a.total.minor)
+    .slice(0, 8);
 }

@@ -1,9 +1,19 @@
-// ConnectSheet.tsx — connect a lighting brand. A lightweight precursor to the
-// shared "connect a source" consent flow: it names the brand, takes the key, and
-// says plainly where that key goes (straight to the brand, never Aura's servers).
-import { useState } from "react";
-import { Sheet } from "@lantern/ui";
-import { connectors } from "../lib/connectors";
+// ConnectSheet.tsx — connect a lighting brand. Two steps on purpose: which brand
+// (an informed choice, wearing the same family trust-tier badge as Ballast's
+// accounts and Hearth's wearables — see @lantern/core/connect), then that brand's
+// consent + credential. No brand is pre-selected — the picker is the first thing
+// you see, not a tab strip behind a Govee key field.
+import { useEffect, useRef, useState } from "react";
+import { Sheet, TierBadge, TradeOffCard } from "@lantern/ui";
+import { connectors, tierWording } from "../lib/connectors";
+
+// Pairing used to be one shot: press the bridge's button, then click Pair,
+// with the two having to land within the bridge's ~30s window or it just
+// failed. Polling instead — press the button any time in this window, no
+// exact synchronization needed — is the forgiving pattern most smart-home
+// apps use for exactly this kind of physical-button handshake.
+const PAIR_RETRY_MS = 2000;
+const PAIR_TIMEOUT_MS = 40_000;
 
 export function ConnectSheet({
   onConnect,
@@ -12,25 +22,52 @@ export function ConnectSheet({
   onConnect: (sourceId: string, cred: string) => Promise<string | null>;
   onClose: () => void;
 }) {
-  const [sourceId, setSourceId] = useState(connectors[0]?.id ?? "");
+  const [sourceId, setSourceId] = useState<string | null>(null);
   const [cred, setCred] = useState("");
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const conn = connectors.find((c) => c.id === sourceId);
   const canPair = !!conn?.pair;
   const needsCred = conn?.needsCred !== false;
-  const canSubmit = !!conn && (!needsCred || cred.trim().length > 0);
+  const canSubmit =
+    !!conn &&
+    (!needsCred ||
+      (conn.credFields ? conn.credFields.every((f) => (fields[f.key] ?? "").trim().length > 0) : cred.trim().length > 0));
 
   // Pairing (Hue) state.
   const [address, setAddress] = useState("");
   const [bridges, setBridges] = useState<string[]>([]);
   const [finding, setFinding] = useState(false);
+  const [pairSecondsLeft, setPairSecondsLeft] = useState<number | null>(null);
+  const pairCancelRef = useRef(false);
+
+  // A closed/unmounted sheet mid-poll must stop retrying — nothing left to
+  // report the result to.
+  useEffect(
+    () => () => {
+      pairCancelRef.current = true;
+    },
+    []
+  );
+
+  // Switching brands (including "back") clears every field — a leftover Govee
+  // key must never get submitted as a Home Assistant token.
+  function chooseBrand(id: string | null) {
+    setSourceId(id);
+    setCred("");
+    setFields({});
+    setAddress("");
+    setBridges([]);
+    setError(null);
+  }
 
   async function submit() {
-    if (!canSubmit) return;
+    if (!conn || !canSubmit) return;
     setBusy(true);
     setError(null);
-    const err = await onConnect(sourceId, needsCred ? cred : "demo");
+    const value = conn.credFields ? conn.credFields.map((f) => fields[f.key] ?? "").join("|") : cred;
+    const err = await onConnect(conn.id, needsCred ? value : "demo");
     setBusy(false);
     if (err) setError(err);
     else onClose();
@@ -49,45 +86,86 @@ export function ConnectSheet({
 
   async function pairSubmit() {
     if (!conn?.pair || !address.trim()) return;
+    const addr = address.trim();
     setBusy(true);
     setError(null);
-    try {
-      const paired = await conn.pair(address.trim());
-      const err = await onConnect(sourceId, paired);
-      if (err) setError(err);
-      else onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Pairing failed.");
-    } finally {
-      setBusy(false);
+    pairCancelRef.current = false;
+    const deadline = Date.now() + PAIR_TIMEOUT_MS;
+    let lastError: unknown = null;
+
+    while (Date.now() < deadline) {
+      if (pairCancelRef.current) return;
+      setPairSecondsLeft(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
+      try {
+        const paired = await conn.pair(addr);
+        if (pairCancelRef.current) return;
+        const err = await onConnect(conn.id, paired);
+        setBusy(false);
+        setPairSecondsLeft(null);
+        if (err) setError(err);
+        else onClose();
+        return;
+      } catch (e) {
+        // Most retries during this window are the bridge honestly saying
+        // "link button not pressed yet" — expected, not a failure to show.
+        // Only the final attempt's error, if the whole window runs out,
+        // is worth surfacing.
+        lastError = e;
+        await new Promise((r) => setTimeout(r, PAIR_RETRY_MS));
+      }
     }
+
+    if (pairCancelRef.current) return;
+    setBusy(false);
+    setPairSecondsLeft(null);
+    setError(
+      lastError instanceof Error
+        ? lastError.message
+        : "Didn't hear back from the bridge in time — press the link button and try again."
+    );
   }
 
   return (
     <Sheet onClose={onClose} ariaLabel="Connect your lights">
       <h3>Connect your lights</h3>
 
-      {connectors.length > 1 ? (
-        <div className="seg">
+      {!conn ? (
+        <div className="provider-grid">
           {connectors.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="seg-btn"
-              aria-pressed={sourceId === c.id}
-              onClick={() => setSourceId(c.id)}
-            >
-              {c.label}
+            <button key={c.id} type="button" className="provider-card" onClick={() => chooseBrand(c.id)}>
+              <span className="provider-card-head">
+                <span className="provider-card-label">{c.label}</span>
+                <TierBadge tier={c.descriptor.tier}>{tierWording(c.descriptor.tier)}</TierBadge>
+              </span>
+              <span className="provider-card-desc">{c.descriptor.discloses}</span>
             </button>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <>
+          <button type="button" className="linklike" onClick={() => chooseBrand(null)}>
+            ← Choose a different brand
+          </button>
+
+          <TradeOffCard
+            tier={conn.descriptor.tier}
+            tierLabel={tierWording(conn.descriptor.tier)}
+            label={conn.label}
+            discloses={conn.descriptor.discloses}
+            takes={conn.descriptor.takes}
+            refuses={conn.descriptor.refuses}
+            takesHead="What Aura takes"
+            refusesHead="What Aura won't take"
+          />
+        </>
+      )}
 
       {conn && canPair ? (
         <>
           <p className="hint">
-            Aura will find your Hue bridge on this network. Press the round button on top of the
-            bridge, then pair — the key it gives back stays on this device.
+            Aura will find your Hue bridge on this network. Tap Pair, then press the round button on
+            top of the bridge any time in the next 40 seconds — no need to time it exactly. The key it
+            gives back stays on this device.
           </p>
 
           <div className="sheet-actions" style={{ justifyContent: "flex-start" }}>
@@ -117,42 +195,56 @@ export function ConnectSheet({
             />
           </label>
 
+          {busy && pairSecondsLeft !== null && (
+            <p className="hint">Waiting for the bridge's button — {pairSecondsLeft}s left…</p>
+          )}
           {error ? <div className="error">{error}</div> : null}
 
           <div className="sheet-actions">
             <button className="btn btn-ghost" onClick={onClose}>
-              Cancel
+              {busy ? "Stop waiting" : "Cancel"}
             </button>
             <button className="btn btn-primary" disabled={busy || !address.trim()} onClick={pairSubmit}>
-              {busy ? "Pairing…" : "Press link button, then Pair"}
+              {busy ? "Waiting…" : "Pair"}
             </button>
           </div>
         </>
       ) : conn ? (
         <>
-          {needsCred ? (
+          {needsCred && conn.credFields ? (
             <>
-              <label className="field">
-                <span className="label">{conn.credLabel}</span>
-                <input
-                  type="password"
-                  value={cred}
-                  onChange={(e) => setCred(e.target.value)}
-                  autoFocus
-                  autoComplete="off"
-                />
-                <span className="hint">{conn.credHint}</span>
-              </label>
-
-              <p className="hint">
-                Aura talks straight to {conn.label} from this device. Your key stays here — Aura has
-                no server of its own, so it never sees your key or your lights.
-              </p>
+              {conn.credFields.map((f, i) => (
+                <label className="field" key={f.key}>
+                  <span className="label">{f.label}</span>
+                  <input
+                    type={f.type ?? "text"}
+                    value={fields[f.key] ?? ""}
+                    onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    autoFocus={i === 0}
+                    autoComplete="off"
+                  />
+                  {f.hint ? <span className="hint">{f.hint}</span> : null}
+                </label>
+              ))}
+              <p className="hint">{conn.credHint}</p>
             </>
+          ) : needsCred ? (
+            <label className="field">
+              <span className="label">{conn.credLabel}</span>
+              <input
+                type="password"
+                value={cred}
+                onChange={(e) => setCred(e.target.value)}
+                autoFocus
+                autoComplete="off"
+              />
+              <span className="hint">{conn.credHint}</span>
+            </label>
           ) : (
             <p className="hint">
-              Four make-believe lights to play with — dim them, recolor them, save a scene and recall
-              it. No hardware, no key. A good way to feel Aura before you wire up real bulbs.
+              Dim them, recolor them, save a scene and recall it. A good way to feel Aura before you
+              wire up real bulbs.
             </p>
           )}
 

@@ -82,6 +82,15 @@ async function call(cred: string, path: string, init?: RequestInit): Promise<any
 export const hue: Connector = {
   id: "hue",
   label: "Philips Hue",
+  descriptor: {
+    id: "hue",
+    label: "Philips Hue",
+    tier: 1,
+    discloses:
+      "Nothing leaves your home network. Aura talks straight to your bridge over local WiFi — no cloud, no Philips account, no internet round-trip for a single command.",
+    takes: ["A pairing key your bridge hands over when you press its link button, stored on this device"],
+    refuses: ["Never touches the internet, never goes through Philips' cloud API"],
+  },
   credLabel: "Bridge address + key",
   credHint: '"<bridge-ip>|<application-key>" — from pressing the bridge link button.',
 
@@ -101,11 +110,28 @@ export const hue: Connector = {
   // button on the bridge, then we POST to the (v1) /api endpoint; the bridge answers
   // with a username we use as the CLIP v2 application key.
   async pair(address) {
-    const res = await httpFetch(`https://${address}/api`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ devicetype: "aura#desktop" }),
-    });
+    // Distinguish "never reached the bridge" (wrong network, a VPN routing
+    // local traffic through its tunnel, a typo'd IP) from "reached it, but
+    // pairing itself was rejected" (link button not pressed in time) — both
+    // used to surface as the same bare "Pairing failed.", which pointed
+    // people at the wrong fix.
+    let res: Response;
+    try {
+      res = await httpFetch(`https://${address}/api`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ devicetype: "aura#desktop" }),
+      });
+    } catch (e) {
+      // The guidance is a guess at the likeliest cause, not a diagnosis —
+      // show the actual underlying error alongside it instead of replacing
+      // it, so a cause other than "unreachable" (a permission scope, a TLS
+      // failure, anything) doesn't get silently hidden behind a wrong guess.
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `Couldn't reach a bridge at that address (${detail}) — check you're on the same network, and that a VPN isn't routing local traffic through its tunnel.`
+      );
+    }
     const data = await res.json();
     const first = Array.isArray(data) ? data[0] : data;
     if (first?.error) {

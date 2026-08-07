@@ -1,0 +1,21 @@
+# Security headers, applied to every response. The CSP is deliberately strict:
+# Grove is fully self-contained, so nothing loads from or talks to a third
+# party — ever. A family's story has exactly one wire out of the building:
+#
+# `connect-src` — our own sync server, which receives opaque ciphertext and
+# non-secret metadata only (never the passphrase, never the key, never a name,
+# a date, or a word of a letter). Keepsake scans display from data: URLs
+# decrypted in memory, which is why img-src carries data:.
+# `ws://localhost:51774` is the vibe relay (@lantern/vibe-relay) — the
+# same-machine, account-free mood transport. It can only ever reach the
+# user's own machine; if the relay isn't running it silently no-ops.
+# Never an analytics host; there is no analytics, and nothing that could ever
+# see a family's tree.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://grove-server.jdd994.workers.dev ws://localhost:51774; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin

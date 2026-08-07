@@ -8,8 +8,9 @@ Driftless is a personal journaling PWA built around one job: **remove all
 friction between a fleeting thought and its safe landing.** Open it, the cursor
 is already waiting; type; it's kept, timestamped, and threaded onto a timeline.
 
-It is **local-first** and **end-to-end encrypted**. It is **not** yet synced
-across devices — that's the main open chapter (see Roadmap).
+It is **local-first** and **end-to-end encrypted**, and **synced across devices**
+(Cloudflare Workers + D1, opaque ciphertext only — see Roadmap for what's still
+open on top of that).
 
 ## Purpose (the north star)
 
@@ -57,8 +58,8 @@ presence shouldn't require effort.
 - `src/lib/crypto.ts` — passphrase → AES-GCM key; encrypt/decrypt; verifier.
 - `src/lib/db.ts` — IndexedDB (v4). Stores: `vault` (salt + verifier),
   `entries` (ciphertext + plaintext timestamps + `deleted` tombstone + `dirty`
-  outbox flag), `sync` (pull cursor + auth token; unused until the sync engine
-  lands), `device` (per-device biometric enrollment: a passkey id + the vault
+  outbox flag), `sync` (pull cursor + auth token — live, the engine reads/writes
+  it every sync), `device` (per-device biometric enrollment: a passkey id + the vault
   key wrapped by its WebAuthn-PRF secret — device-local, never synced), and
   `strands` (named ordered collections; ciphertext of `{title, entryIds}`).
   Deletes are soft (tombstone), filtered out of the UI. See SYNC_PLAN.md.
@@ -106,54 +107,70 @@ presence shouldn't require effort.
 npm run dev      # local dev server (PWA enabled in dev for testing install)
 npm run build    # tsc -b && vite build
 npm run preview  # serve the built app
+npm run test     # unit tests (pure logic in lib/)
+npm run e2e      # e2e/smoke.mjs — drives the real app in headless Chromium
+                 # through capture/strand/photo flows WITH reloads in between;
+                 # run it after touching useJournal.ts, db.ts, or sync
 ```
 
 ## Roadmap (in order)
 
-1. **Sync backend — DECIDED (2026-06-30): a tiny custom server.** Chosen over a
-   managed option (e.g. Supabase) for more control and the smallest trust
-   surface. The model: the client encrypts, the server stores opaque ciphertext,
-   devices reconcile. (Cloudflare Workers + D1 is a candidate host, since the
-   app is already deployed on Cloudflare Pages — gives "your own server" with
-   near-zero ops.) Not built yet.
-2. **Sync engine.** Per-entry records already have `id`, `createdAt`,
-   `updatedAt`. Add a `deleted` tombstone + a `syncedAt`/version field and do
-   last-write-wins by `updatedAt` to start. Push/pull ciphertext on reconnect;
-   the service worker can do background sync.
-3. **Encrypt timestamps** before/when syncing if metadata privacy matters (today
-   they're plaintext so local sort/group is cheap). Decide explicitly.
-4. **Account + key portability.** To read the same journal on a new device, the
-   user re-enters the passphrase there; the salt must travel with the account.
-   Never transmit the passphrase or derived key — only the salt + ciphertext.
-   The account (login) and the passphrase are deliberately separate secrets —
-   see invariant 4: the account says *whose* ciphertext this is; the passphrase
-   *decrypts* it and never leaves the device. Don't derive the key from the
-   login credential.
+1. **Sync backend — BUILT.** A tiny custom server (Cloudflare Workers + D1),
+   chosen over a managed option (e.g. Supabase, decided 2026-06-30) for more
+   control and the smallest trust surface. The client encrypts, the server
+   (`server/`, factory in `@lantern/server`) stores opaque ciphertext only,
+   devices reconcile. Deployed at driftless.page.
+2. **Sync engine — BUILT.** `src/lib/sync.ts` binds `@lantern/core/sync` (LWW by
+   `updatedAt`, per-user `seq` cursor, `deleted` tombstones) to Driftless's
+   entries/strands, plus a `pushMedia` for encrypted photos. Wired end-to-end
+   via `useJournal.ts`'s `syncNow`, triggered from `App.tsx`.
+3. **Timestamp metadata — DECIDED 2026-07-27: accept + document now, fix fully
+   in the shared core later.** What the server can see (writing rhythm: record
+   timestamps, seq order, counts/sizes/kinds, day-note ids which are literal
+   dates) is documented honestly in SECURITY.md. Encrypting stored timestamps
+   alone was rejected: sync fires ~1.5s after writing, so request timing leaks
+   the same rhythm to a live server — partial fixes add complexity without
+   closing the leak. The full fix — **metadata-private records** (createdAt/
+   updatedAt inside the ciphertext, version-counter LWW instead of wall-clock,
+   opaque day-note ids, `markAllDirty` re-push as migration) — is a designed-in
+   REQUIREMENT of the shared-core sync extraction, so all apps inherit it at
+   once. Don't half-do it per-app.
+4. **Account + key portability — BUILT.** Register/login on the server; the vault
+   salt + verifier travel with the account so a new device re-derives the same
+   key from the passphrase. The account (login) and the passphrase stay
+   deliberately separate secrets — see invariant 4: the account says *whose*
+   ciphertext this is; the passphrase *decrypts* it and never leaves the device.
+   The key is never derived from the login credential.
 5. Niceties (some done): named threads → **Strands (done)**, biometric →
    **Quick unlock (done)**, richer export → **encrypted Back up (done)**,
    media in entries/strands → **polaroids (done)**, co-authored shared/family
    strands → **Sharing S1–S4 (done)**, in-app landing → **warm first-run
    welcome (done)** — `Welcome.tsx`, the first setup step, states the "no reset"
    trade up front (the PWA link *is* the distribution; no separate marketing
-   site). Still open: a **calm suggestion
+   site), media sync over R2 → **done** (SYNC_PLAN phases 1–5), custom domain →
+   **done** (driftless.page is the deployed origin), tags + search → **done**
+   (TagBar, search toolbar, read-#tag-as-one). Still open: a **calm suggestion
    box** (GitHub Discussions now — zero-infra, engage at your pace; optional
    in-app box posting to our own D1 later — framed "read when I can, no
-   obligation"); **media in entries/strands** (see SYNC_PLAN); pin/favorite;
-   per-day word count; a **custom domain** (prettier/trustworthier link,
-   DNS-only maintenance).
-6. **Strand evolution — "substrands"/sections (idea, not now).** Composition at
-   multiple scales: fragments → section → whole (chapters in a book, movements
-   in a song). Avoid arbitrary recursive nesting (strand-in-strand trees drift
-   toward a fiddly outliner and fight the "calm, easy, intuitive" pillar).
-   Lightest, most on-brand approach: a **section is just a piece flagged as a
-   heading** — everything until the next heading belongs to it. Keeps the flat
-   model and "everything is a thought," gives grouped fragments + read-as-one
-   flow, no new hierarchy to manage. ~90% of the value, little of the risk.
-   Design carefully, after sync.
+   obligation"); pin/favorite; per-day word count (weigh against the no-metrics
+   filter before building).
+6. **Strand sections — BUILT.** A **section is just a piece flagged as a
+   heading** — everything until the next heading belongs to it (the lightest
+   approach won: flat model, "everything is a thought," no recursive nesting,
+   which would have drifted toward a fiddly outliner). Built as: heading
+   flag on entries, "+ New chapter" (write + flag in one step), "+ Add to this
+   chapter" (lands at that section's end), reader TOC. See STRANDS_PLAN.md.
 
 ## Watch out for
 
 - StrictMode double-invokes effects in dev — keep effects idempotent.
 - IndexedDB calls are async; the UI updates optimistically in the hook, then
   persists. Keep that order so capture feels instant.
+- **Never compute a record inside a setState updater and persist it after.**
+  React defers updaters when another update is pending (any chained mutation),
+  so the captured value stays null and the persist silently never happens —
+  this is exactly how strand membership was lost until 6311be9. In
+  `useJournal`, mutate through the ref mirrors (`entriesRef`/`strandsRef`) and
+  the commit helpers (`commitEntries`/`commitStrands`), or the `mutateEntry`/
+  `mutateStrand` helpers built on them. `npm run e2e` guards this class of bug.
 - Don't add analytics or any third-party script that could see entry content.

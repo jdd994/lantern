@@ -28,6 +28,7 @@
   --glow-dim:  color-mix(in srgb, var(--accent) 14%, transparent);
 
   --off:       #6E6552; /* a light that's off — dim, never alarming */
+  --danger:    #D9634A;
 
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
@@ -100,6 +101,24 @@ body {
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
 .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
 .brand span { color: var(--glow); }
+/* the wordmark doubles as the door to Homes; with several homes, the active
+   one's name rides quietly beneath it */
+.brand-home { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0; min-width: 0; }
+.brand-home:hover .brand { color: var(--ink); }
+.home-tag { font-size: 11.5px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+.brand-home:hover .home-tag { color: var(--ink-soft); }
+
+/* homes sheet */
+.home-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.home-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.home-row.active { border-color: var(--glow); background: var(--glow-dim); }
+.home-pick { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; text-align: left; padding: 0; }
+.home-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--off); flex: none; }
+.home-row.active .home-dot { background: var(--glow); box-shadow: 0 0 8px -1px var(--glow); }
+.home-name-text { font-size: 14.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-here { font-size: 11px; color: var(--ink-faint); flex: none; }
+.home-rename { max-width: 130px; flex: none; }
+.home-erase { color: var(--danger); border-color: var(--danger); flex: none; }
 .top-actions { display: flex; gap: 8px; align-items: center; }
 
 /* buttons */
@@ -140,10 +159,22 @@ h4 { margin: 0; }
 /* section headings */
 h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-faint); margin: 0; font-weight: 600; }
 
-/* segmented brand picker (connect sheet) */
+/* segmented picker (Hue bridge list, ambient mode, automation days) */
 .seg { display: flex; gap: 6px; padding: 4px; margin-bottom: 16px; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); }
 .seg-btn { flex: 1; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--ink-soft); }
 .seg-btn[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+
+/* connect sheet — brand picker (a real choice, not a tab strip) + trust-tier consent */
+.provider-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.provider-card { display: block; width: 100%; text-align: left; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg-raised); }
+.provider-card:hover { border-color: var(--glow); background: var(--surface-2); }
+.provider-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.provider-card-label { font-size: 15px; color: var(--ink); }
+.provider-card-desc { display: block; margin-top: 4px; font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+
+/* badge + consent card come from @lantern/ui (TierBadge / TradeOffCard) */
+.linklike { border: none; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--ink-faint); cursor: pointer; margin-bottom: 14px; }
+.linklike:hover { color: var(--ink); }
 
 .icon-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 17px; color: var(--ink-soft); border: 1px solid var(--line); background: var(--surface); }
 .icon-btn:hover { color: var(--ink); background: var(--surface-2); }
@@ -158,7 +189,15 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .device { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 14px 16px; transition: border-color .2s, box-shadow .2s; }
 .device.is-on { border-color: var(--glow); box-shadow: 0 0 0 1px var(--glow-dim), 0 6px 24px -12px var(--glow); }
 .device-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.device-name { font-size: 15px; color: var(--ink); }
+.device-name { font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-name-input { flex: 1; min-width: 0; padding: 5px 8px; background: var(--bg-raised); border: 1px solid var(--glow); border-radius: 8px; color: var(--ink); font: inherit; font-size: 15px; }
+.device-head-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* identify — a quick blink so you can see which physical light this row is */
+.identify-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft); font-size: 12px; line-height: 1; display: grid; place-items: center; flex: none; }
+.identify-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--glow); }
+.identify-btn:disabled { color: var(--glow); border-color: var(--glow); animation: identify-pulse 0.6s ease-in-out infinite; }
+@keyframes identify-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* toggle */
 .toggle { width: 46px; height: 27px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); position: relative; flex: none; transition: background .2s, border-color .2s; }
@@ -168,6 +207,11 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 
 .device-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; margin-top: 14px; }
 .device-controls .dim, .device-controls .temp { min-width: 110px; }
+
+/* master fader — scales the room's dimmable-and-on lights together, doesn't
+   flatten them. A little more presence than an individual light's slider. */
+.room-brightness { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised); }
+.room-brightness .label { flex: none; margin: 0; }
 
 /* white temperature slider — warm to cool */
 .temp { -webkit-appearance: none; appearance: none; flex: 1; height: 6px; padding: 0; border: none; border-radius: 999px; background: linear-gradient(90deg, #FFB146, #FFEFD6 52%, #CFE0FF); }
@@ -217,6 +261,27 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .room-name { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .01em; color: var(--ink); }
 .room-master { display: flex; gap: 4px; }
 
+/* room collapse toggle — plain-text button, the chevron does the talking */
+.room-toggle { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.room-title { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.room-toggle .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.room-combo-tag { font-size: 11px; font-weight: 400; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.room-chevron { flex: none; display: inline-block; font-size: 11px; color: var(--ink-faint); transition: transform .18s ease, color .18s ease; }
+.room-chevron.is-open { transform: rotate(90deg); color: var(--ink-soft); }
+.room-toggle:hover .room-chevron { color: var(--ink); }
+
+/* combining rooms (RoomsSheet) */
+.room-combo-row { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; margin-right: 10px; }
+.room-combo-row .room-rename { margin-right: 0; }
+.room-combo-note { padding-left: 2px; }
+.combo-picker { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0 12px; }
+.combo-check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-soft); cursor: pointer; }
+.combo-check input { width: auto; }
+
+/* collapsed room summary — one dot per light, its actual color, nothing else */
+.room-dots { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 4px; }
+.room-dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 1px var(--line-soft) inset; }
+
 /* per-room scenes (compact, embedded in a room block) */
 .room-scenes { margin-top: 14px; }
 .room-scenes-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 26px; }
@@ -230,6 +295,8 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .assign-select { width: auto; flex: none; padding: 8px 10px; font-size: 14px; }
 
 /* ---- vibe strip (shared vibe layer) ---- */
+.vibe-palette { margin-bottom: 18px; }
+.vibe-palette-label { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; margin-bottom: 8px; }
 .vibes { display: flex; flex-wrap: wrap; gap: 8px; }
 .vibe { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px 9px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; transition: background .15s, border-color .15s; }
 .vibe:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glow); }
@@ -269,11 +336,19 @@ h2 { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: v
 .auto-toggle { display: flex; align-items: center; gap: 8px; margin-right: auto; font-size: 14px; color: var(--ink-soft); }
 .auto-toggle input { width: auto; }
 
+/* ---- day rhythm ---- */
+.rhythm-desc { margin-top: 10px; }
+.rhythm-sun { margin-top: 14px; }
+
 /* ---- automations ---- */
 .auto-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .auto-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .auto-row.off { opacity: .55; }
-.auto-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; min-width: 0; }
+.auto-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 8px; min-width: 0; text-align: left; padding: 0; }
+.auto-main:hover .auto-when { color: var(--glow); }
+.auto-row.editing { border-color: var(--glow); background: var(--glow-dim); }
+.auto-starters { margin-bottom: 16px; }
+.auto-starters .hint { margin-top: 8px; }
 .auto-when { font-size: 14px; color: var(--ink); font-weight: 600; }
 .auto-arrow { color: var(--ink-faint); }
 .auto-do { font-size: 14px; color: var(--ink-soft); }
@@ -302,4 +377,89 @@ input[type=time], input[type=number] { width: 100%; padding: 11px 13px; border-r
 
 /* connected sources (settings) */
 .source-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- move to another device (QR transfer) ---- */
+.transfer-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.transfer-qr { display: block; width: 320px; max-width: 100%; height: auto; margin: 4px 0; border-radius: 10px; border: 1px solid var(--line); background: #fff; padding: 8px; }
+.pairing-scanner { display: block; width: 100%; max-width: 320px; aspect-ratio: 1 / 1; object-fit: cover; margin: 4px 0; border-radius: 10px; border: 1px solid var(--line); background: #000; }
+.paste-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-width: 420px; }
+
+/* ---- note to the maker / support (help sheet) ---- */
+.note-maker { border-top: 1px solid var(--line-soft); padding-top: 16px; margin-top: 16px; }
+.note-input, .note-contact {
+  display: block;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  margin-top: 8px;
+  resize: vertical;
+}
+.note-input:focus, .note-contact:focus { border-color: rgba(231, 183, 90, 0.45); }
+.note-input::placeholder, .note-contact::placeholder { color: var(--ink-faint); }
+.note-error { font-family: var(--sans); font-size: 12.5px; color: var(--danger); margin: 8px 0 0; }
+.note-send { margin-top: 10px; }
+
+.support { border-top: 1px solid var(--line-soft); padding-top: 16px; margin-top: 16px; }
+.support-row { margin-top: 10px; }
+.support-label { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.support-addr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.support-addr:hover { border-color: var(--line); }
+.support-addr-text { flex: 1; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); word-break: break-all; line-height: 1.4; }
+.support-copy { flex: none; font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--glow); }
+/* Card tip — the primary, welcoming option. */
+.support-card {
+  display: block;
+  text-align: center;
+  margin-top: 6px;
+  padding: 11px 16px;
+  border-radius: 11px;
+  background: var(--glow-dim);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--glow);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background .15s, border-color .15s;
+}
+.support-card:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); }
+/* Crypto — quiet secondary. */
+.support-crypto { margin-top: 18px; }
+.support-crypto-label { display: block; font-family: var(--sans); font-size: 12px; color: var(--ink-faint); margin-bottom: 10px; }
+.support-note-plain, .support-note { font-family: var(--sans); font-size: 12.5px; line-height: 1.55; color: var(--ink-faint); margin-top: 14px; }
+
+/* Kinship footer — one quiet line, only here in the maker's corner. */
+.kin { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.kin-label { display: block; font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+.kin a { color: var(--ink-soft); font-size: 13px; text-decoration: none; }
+.kin a:hover { color: var(--glow); text-decoration: underline; }
 .source-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 14px; }
+
+/* voice-describe (AmbientSheet) */
+.describe-row { display: flex; gap: 10px; align-items: center; }
+.describe-row input[type="text"] { flex: 1; }
+.voice-input { display: flex; align-items: center; }
+.voice-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--danger); font-size: 15px; display: grid; place-items: center; flex: none; }
+.voice-btn:hover:not(:disabled) { border-color: var(--glow); }
+.voice-btn:disabled { opacity: .6; font-size: 11px; color: var(--ink-soft); }
+.voice-btn.is-recording { color: #fff; background: var(--danger); border-color: var(--danger); animation: identify-pulse 0.9s ease-in-out infinite; }
+.voice-confirm { display: flex; flex-direction: column; gap: 10px; }

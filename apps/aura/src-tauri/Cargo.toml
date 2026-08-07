@@ -15,7 +15,14 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-http = "2"
+# "dangerous-settings" gates accepting a self-signed cert / mismatched
+# hostname at runtime (danger: {...} in platform.ts's httpFetch) — without
+# it the plugin refuses any request that asks for that, which is exactly
+# what a Hue bridge's local HTTPS endpoint always needs.
+tauri-plugin-http = { version = "2", features = ["dangerous-settings"] }
+# Start-at-login (Settings toggle, off by default) — with "--hidden" so a login
+# launch goes straight to the tray.
+tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

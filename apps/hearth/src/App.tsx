@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
+import { useEffect, useRef, useState } from "react";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useHearth } from "./hooks/useHearth";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -15,7 +17,7 @@ import { Kitchens } from "./components/Kitchens";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Flame, Gear, Pot, Pulse } from "./components/icons";
-import { useTheme } from "@lantern/ui";
+import { InstallSheet, UpdateToast, useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
 import type { DistanceUnit } from "./lib/run";
 
@@ -33,6 +35,17 @@ const TABS = [
   { id: "body", label: "Body", Icon: Pulse },
 ] as const;
 
+// Hearth's own moods, loosely mapped to the shared @lantern/core vibe vocabulary —
+// only for announcing a pick over the local vibe relay, so e.g. Aura's lights can
+// follow if it's running and mirroring is on. Publish-only: Hearth's own theme
+// never changes because of what another app picked, so nothing here ever surprises
+// you mid-cook.
+const MOOD_TO_VIBE: Record<string, string> = {
+  ember: "candlelight",
+  hearthlight: "wind-down",
+  cream: "daylight",
+};
+
 export default function App() {
   const h = useHearth();
   const [logging, setLogging] = useState(false);
@@ -43,12 +56,12 @@ export default function App() {
   const [weekOf, setWeekOf] = useState(() => Date.now());
   const [planningDay, setPlanningDay] = useState<number | null>(null);
   const [settings, setSettings] = useState(false);
+  const [installHelp, setInstallHelp] = useState(false);
   // A return from Fitbit's consent page carries ?code — land on Body, where
   // the connection (and its outcome) actually lives.
   const [tab, setTab] = useState<Tab>(() =>
     new URLSearchParams(window.location.search).has("code") ? "body" : "today"
   );
-  const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
   // Display preference only — metres are canonical in storage. Plaintext
   // localStorage is fine: "this person likes miles" is bookkeeping, not a secret.
   const [unit, setUnit] = useState<DistanceUnit>(() =>
@@ -58,6 +71,37 @@ export default function App() {
     setUnit(u);
     localStorage.setItem("hearth-unit", u);
   };
+  const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+  useEffect(() => {
+    relayRef.current = connectVibeRelay("hearth", () => {});
+    return () => relayRef.current?.close();
+  }, []);
+  const handleMood = (id: string) => {
+    setMood(id);
+    const vibeId = MOOD_TO_VIBE[id];
+    if (vibeId) relayRef.current?.publish({ vibeId });
+  };
+
+  // A new deploy parks behind the service worker until the person says so —
+  // the shared UpdateToast (@lantern/ui) is the whole ceremony. Rendered in
+  // every return branch below, locked screens included: an update offer that
+  // hides behind the vault is one most people never see.
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => void registration.update(), 60 * 60_000);
+    },
+  });
+  const updateToast = needRefresh ? (
+    <UpdateToast
+      appName="Hearth"
+      onRefresh={() => void updateServiceWorker(true)}
+      onDismiss={() => setNeedRefresh(false)}
+    />
+  ) : null;
 
   if (h.status === "loading") return null;
   if (h.status === "setup") {
@@ -75,22 +119,45 @@ export default function App() {
             onDisconnect={h.disconnect}
             onDelete={h.deleteAccount}
             onChangePassphrase={h.changePassphrase}
+            recoveryKitAt={h.recoveryKitAt}
+            onCreateRecoveryKit={h.createRecoveryKit}
+            onRemoveRecoveryKit={h.removeRecoveryKit}
             onSyncNow={h.syncNow}
             onClose={() => setSync(false)}
+            guardianCircle={h.guardianCircle}
+            onSetupGuardians={h.setupGuardians}
+            recoveryStatus={h.recoveryStatus}
+            onCancelPendingRecovery={h.cancelPendingRecovery}
+            pendingGuardianRequests={h.pendingGuardianRequests}
+            onApproveGuardianRequest={h.approveGuardianRequest}
           />
         ) : null}
+        {updateToast}
       </>
     );
   }
   if (h.status === "locked") {
     return (
+      <>
       <LockScreen
         onUnlock={h.unlock}
         onBiometric={h.unlockWithBiometric}
         hasBiometric={h.hasBiometric}
         error={h.error}
         busy={h.busy}
+        account={h.account}
+        syncError={h.syncError}
+        guardianCircle={h.guardianCircle}
+        onRecoverySignIn={h.connectSignIn}
+        onLoadGuardianCircle={h.loadGuardianCircle}
+        onStartRecovery={h.startRecoveryRequest}
+        onPollRecovery={h.pollRecoveryRequest}
+        onCancelRecovery={h.cancelRecoveryRequest}
+        onFinishRecovery={h.finishRecoveryRequest}
+        onRecoverWithKit={h.recoverWithKit}
       />
+      {updateToast}
+      </>
     );
   }
 
@@ -277,11 +344,17 @@ export default function App() {
       {loggingMetric ? <LogMetric onLog={h.logMetric} onClose={() => setLoggingMetric(false)} /> : null}
       {settings ? (
         <SettingsSheet
-          mood={mood} onMood={setMood}
+          mood={mood}
+          onMood={handleMood}
           unit={unit} onUnit={pickUnit}
+          onInstallHelp={() => {
+            setSettings(false);
+            setInstallHelp(true);
+          }}
           onClose={() => setSettings(false)}
         />
       ) : null}
+      {installHelp ? <InstallSheet appName="Hearth" onClose={() => setInstallHelp(false)} /> : null}
       {sync ? (
         <Sync
           account={h.account}
@@ -293,10 +366,20 @@ export default function App() {
           onDisconnect={h.disconnect}
           onDelete={h.deleteAccount}
             onChangePassphrase={h.changePassphrase}
+            recoveryKitAt={h.recoveryKitAt}
+            onCreateRecoveryKit={h.createRecoveryKit}
+            onRemoveRecoveryKit={h.removeRecoveryKit}
             onSyncNow={h.syncNow}
           onClose={() => setSync(false)}
+          guardianCircle={h.guardianCircle}
+          onSetupGuardians={h.setupGuardians}
+          recoveryStatus={h.recoveryStatus}
+          onCancelPendingRecovery={h.cancelPendingRecovery}
+          pendingGuardianRequests={h.pendingGuardianRequests}
+          onApproveGuardianRequest={h.approveGuardianRequest}
         />
       ) : null}
+      {updateToast}
     </div>
   );
 }

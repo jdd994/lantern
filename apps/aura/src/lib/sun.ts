@@ -5,6 +5,7 @@
 // Good to within a minute or two — plenty for "bring the lights up at sunset."
 
 const ZENITH = 90.833; // official sunrise/sunset (sun's upper limb at the horizon)
+const CIVIL_ZENITH = 96; // civil twilight — sun 6° below the horizon; dusk/dawn edges
 const rad = (d: number) => (d * Math.PI) / 180;
 const deg = (r: number) => (r * 180) / Math.PI;
 const norm = (v: number, max: number) => ((v % max) + max) % max;
@@ -16,7 +17,13 @@ function dayOfYear(y: number, m: number, d: number): number {
   return n1 - n2 * n3 + d - 30;
 }
 
-export function sunTime(date: Date, lat: number, lon: number, event: "sunrise" | "sunset"): Date | null {
+export function sunTime(
+  date: Date,
+  lat: number,
+  lon: number,
+  event: "sunrise" | "sunset",
+  zenith = ZENITH
+): Date | null {
   const y = date.getFullYear();
   const m = date.getMonth() + 1;
   const d = date.getDate();
@@ -39,7 +46,7 @@ export function sunTime(date: Date, lat: number, lon: number, event: "sunrise" |
   const sinDec = 0.39782 * Math.sin(rad(L));
   const cosDec = Math.cos(Math.asin(sinDec));
 
-  const cosH = (Math.cos(rad(ZENITH)) - sinDec * Math.sin(rad(lat))) / (cosDec * Math.cos(rad(lat)));
+  const cosH = (Math.cos(rad(zenith)) - sinDec * Math.sin(rad(lat))) / (cosDec * Math.cos(rad(lat)));
   if (cosH > 1 || cosH < -1) return null; // sun never rises / never sets this day
 
   const H = (event === "sunrise" ? 360 - deg(Math.acos(cosH)) : deg(Math.acos(cosH))) / 15;
@@ -50,4 +57,12 @@ export function sunTime(date: Date, lat: number, lon: number, event: "sunrise" |
   const hours = Math.floor(UT);
   const minutes = Math.floor((UT - hours) * 60);
   return new Date(Date.UTC(y, m - 1, d, hours, minutes));
+}
+
+// Civil twilight: dawn is when morning light genuinely starts, dusk when the last
+// of it goes — the honest edges for easing lights up and down, rather than
+// snapping at the sunrise/sunset instant. Null at latitudes/seasons where the sun
+// never gets 6° below the horizon (the "white nights" — twilight all night long).
+export function twilight(date: Date, lat: number, lon: number, edge: "dawn" | "dusk"): Date | null {
+  return sunTime(date, lat, lon, edge === "dawn" ? "sunrise" : "sunset", CIVIL_ZENITH);
 }

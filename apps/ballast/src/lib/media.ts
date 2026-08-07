@@ -73,3 +73,45 @@ export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; t
   if (!blob) throw new Error("Couldn't process that image.");
   return { bytes: await blob.arrayBuffer(), type: "image/jpeg" };
 }
+
+// What the OCR engine should read: the camera's ORIGINAL bytes, not the 0.82
+// re-encode above — lossy compression eats exactly the thin thermal strokes
+// the reader needs (a field photo read measurably worse re-encoded than raw).
+// The one exception is a huge original: past ~4000px the WASM engine's memory
+// bill gets dangerous on phones, so downscale gently at high quality. Storage
+// still uses compressImage — what you see saved is unchanged.
+export const OCR_MAX_DIM = 4000;
+
+// High-quality downscale, no re-encode when already small enough. The OCR
+// passes use this twice: once to cap huge originals (WASM memory), and once to
+// make a gentler variant — high resolution renders background texture (wood
+// grain, patterned borders) as crisp false detail that drowns the reader, so a
+// smaller image is sometimes the BETTER read, not the worse one.
+export async function scaledJpeg(image: Blob, maxDim: number, quality = 0.92): Promise<Blob> {
+  const bitmap = await createImageBitmap(image);
+  const maxEdge = Math.max(bitmap.width, bitmap.height);
+  if (maxEdge <= maxDim) {
+    bitmap.close?.();
+    return image;
+  }
+  const scale = maxDim / maxEdge;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close?.();
+    return image;
+  }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob: Blob | null = await new Promise((res) =>
+    canvas.toBlob((b) => res(b), "image/jpeg", quality)
+  );
+  return blob ?? image;
+}
+
+export async function imageForOcr(file: File): Promise<Blob> {
+  return scaledJpeg(file, OCR_MAX_DIM);
+}

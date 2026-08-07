@@ -27,6 +27,9 @@ apps/
   driftless   a quiet place to catch your thoughts   (journal · strands · sharing)
   ballast     steady footing with your money          (net worth · trust ladder)
   hearth      tending and nourishing yourself gently  (food log · body · recipes)
+  grove       a family tree written together          (hourglass tree · keepsakes · GEDCOM)
+  aura        your home's light, following your day   (day rhythm · vibes · automations)
+  manifest    the list of what you carry              (shared checklists · claims · clone)
 ```
 
 ## How an app is built on the core
@@ -44,7 +47,7 @@ Each app supplies **thin adapters + config**, then its own UI and domain logic:
   `kinds`, its `meta` extractors, store access, and network calls.
 - **Server** (`server/src/index.ts`) — `createServer({ kinds, service })`; Driftless
   passes a `deleteAccount` cascade hook and adds media/sharing routes on top.
-- **Hook** (`useJournal` / `useLedger` / `useHearth`) — the only place state, IO,
+- **Hook** (`useJournal` / `useLedger` / `useHearth` / `useGrove` / `useManifest`) — the only place state, IO,
   and the decrypted key meet. Its setup/unlock/change-passphrase delegate to
   `@lantern/core/vault`; the rest (CRUD, derived state, connect/sync flows) is the
   app's own.
@@ -64,15 +67,54 @@ ciphertext as **`meta`**, its **palette** + vibe presets, its **help copy**, and
 **Changing either would lock users out of existing vaults / biometric enrollments.
 They are frozen forever.**
 
+## Recovery — the ways back in
+
+The passphrase never leaves the device and the server holds only ciphertext, so
+there is **no reset by email** — a reset button would mean the operator could
+read the vault (operator-recoverability and operator-readability are the same
+property). Instead there are three doors, all built in `@lantern/core` and wired
+into every app, presented **bridge-before-cliff** in the UI (lead with the way
+back in, then state the trade as the reason the privacy is real):
+
+1. **Biometric quick unlock** (`core/biometric`) — per-device, opt-in. A
+   platform passkey's PRF secret wraps the DEK; the wrap never syncs. Enrolling
+   two devices is a practical everyday safety net: either device opens the
+   vault if the passphrase slips.
+2. **Guardians — social recovery** (`core/recovery`) — K-of-N people you trust,
+   each holding an encrypted key share unlockable only with their identity key
+   *plus* a codeword told out loud, behind a server-enforced delay window.
+   Recovery ends by **setting a fresh passphrase** (`setPassphraseFromDEK` —
+   the DEK is re-wrapped; nothing is re-encrypted; the old passphrase dies).
+   Guardians must hold accounts on the same app; right for the shared apps,
+   wrong for a solo vault.
+3. **The paper recovery kit** (`core/kit`) — the solo answer, right for a
+   Ballast with no circle. A random 130-bit code (Crockford base32, typo- and
+   case-forgiving) derives a wrapping key; the DEK is wrapped under it and the
+   blob rides with the vault envelope — locally and in the `vaults.recovery_kit`
+   column (`PUT /vault/recovery-kit`, returned by `GET /vault`) — so the code
+   works on a replacement device after sign-in. The code itself exists only on
+   the printed page (`RecoveryKit.tsx`; `window.print()` behind a CSS veil).
+   The page says honestly what it is: anyone holding it can open the vault —
+   the deed to the house. Minting a new kit or removing it retires the old
+   page. The locked-out door ("Use a recovery code" on every lock screen) ends
+   the same way guardians do: code → DEK → verify → fresh passphrase → unlock.
+
+The escalation deliberately **not** built: an operator-held spare key
+("recoverable vault" tier). If real people still bounce off the model, that
+would be offered per-vault at creation as an informed trade-off — never as a
+silent default.
+
 ## What is deliberately NOT shared
 
 - **The account/sync lifecycle hook** (connect / sign-in / disconnect / delete /
   runSync). The apps diverge most here — boolean vs `string|null` returns, different
   reload steps, currency vs identity vs sharing state — so a shared hook would be a
   config-heavy abstraction that hurts more than it helps. Left per-app by choice.
-- **Driftless's sharing crypto** (ECIES / invite links) and its server extension
-  (media/R2, shared strands, invites, feedback). Only Driftless needs them today;
-  they move to the core if a second app ever does.
+- ~~Driftless's sharing crypto~~ — this one *did* move: the sharing crypto
+  (ECIES DEK wrapping, invite links) and the shared-strand/recovery server
+  routes now live in the core, exactly because a second app needed them. Each
+  app binds only its frozen HKDF invite labels, the same discipline as
+  `VERIFIER_TEXT`.
 
 ## Invariants (the whole point)
 
@@ -97,5 +139,6 @@ npx vitest run packages/core # the shared-core unit tests (vault, envelope)
 ```
 
 Each app builds and **deploys independently** to its own Cloudflare Pages project +
-Worker + D1 + custom domain (driftless.page · ballast.gold · hearth.garden). The
-monorepo is a source reorganization only; it does not change any deploy target.
+Worker + D1 + custom domain (driftless.page · ballast.gold · hearth.garden ·
+grove.page · auravibe.app · tripmanifest.app). The monorepo is a source
+reorganization only; it does not change any deploy target.
