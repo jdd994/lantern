@@ -578,6 +578,96 @@ kbd {
   padding: 10px 12px;
 }
 
+/* ---------- voice memos ---------- */
+.audio-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.audio-memo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  padding: 6px 12px 6px 6px;
+}
+.audio-play {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--amber-dim);
+  color: var(--amber);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.audio-play:hover { background: rgba(219, 161, 74, 0.28); }
+.audio-duration { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+.audio-remove {
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 2px;
+  transition: color 0.15s;
+}
+.audio-remove:hover { color: var(--danger); }
+
+/* The recorder itself — a quiet pulsing dot while it's on, a Stop / Discard
+   pair, and a calm note in place of it if the mic was ever declined. Never
+   auto-starts; only appears after an explicit "Record voice" / "+ Voice" tap. */
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  width: fit-content;
+  max-width: 100%;
+}
+.voice-rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex: none;
+  animation: voice-pulse 1.4s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.voice-rec-time { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); min-width: 2.4em; }
+.voice-recorder-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  max-width: 360px;
+}
+.voice-recorder-note p {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* ---------- empty state ---------- */
 .empty { text-align: center; padding: 70px 20px 40px; color: var(--ink-faint); }
 .empty .mark { font-family: var(--serif); font-size: 30px; color: var(--amber); opacity: 0.55; }

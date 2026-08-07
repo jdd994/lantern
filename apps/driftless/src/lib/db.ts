@@ -14,7 +14,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob } from "./crypto";
 
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export type VaultMeta = {
   id: "vault";
@@ -85,6 +85,20 @@ export type StoredMedia = {
   dirty: boolean;
 };
 
+// An attached voice memo, stored as encrypted raw audio bytes — same shape and
+// same local-first-not-synced-yet status as StoredMedia, plus how long it
+// runs (so playback can show a duration before the ciphertext is decrypted).
+export type StoredAudioMemo = {
+  id: string;
+  type: string; // mime, e.g. audio/webm
+  createdAt: number;
+  durationMs: number;
+  iv: Uint8Array;
+  data: ArrayBuffer; // ciphertext
+  deleted: boolean;
+  dirty: boolean;
+};
+
 // A recovery attempt's throwaway session keypair — generated fresh per
 // attempt, lives here in the clear for its duration, and is what guardians'
 // approved shares get wrapped to (never the account's real identity key,
@@ -105,6 +119,7 @@ interface DriftlessDB extends DBSchema {
   device: { key: string; value: DeviceEnrollment };
   strands: { key: string; value: StoredStrand };
   media: { key: string; value: StoredMedia };
+  audio: { key: string; value: StoredAudioMemo };
   recoverySession: { key: string; value: RecoverySession };
 }
 
@@ -152,6 +167,10 @@ function db() {
         // v6: social recovery's throwaway per-attempt session keypair.
         if (oldVersion < 6) {
           database.createObjectStore("recoverySession", { keyPath: "id" });
+        }
+        // v7: audio (encrypted voice memo bytes, local-first — mirrors media).
+        if (oldVersion < 7) {
+          database.createObjectStore("audio", { keyPath: "id" });
         }
       },
     });
@@ -232,6 +251,7 @@ export async function markAllDirty(): Promise<void> {
   for (const e of await d.getAll("entries")) if (!e.dirty) await d.put("entries", { ...e, dirty: true });
   for (const s of await d.getAll("strands")) if (!s.dirty) await d.put("strands", { ...s, dirty: true });
   for (const m of await d.getAll("media")) if (!m.dirty && !m.deleted) await d.put("media", { ...m, dirty: true });
+  for (const a of await d.getAll("audio")) if (!a.dirty && !a.deleted) await d.put("audio", { ...a, dirty: true });
 }
 
 export async function putMedia(media: StoredMedia): Promise<void> {
@@ -252,6 +272,24 @@ export async function clearMediaDirty(id: string): Promise<void> {
   const d = await db();
   const m = await d.get("media", id);
   if (m && m.dirty) await d.put("media", { ...m, dirty: false });
+}
+
+export async function putAudioMemo(audio: StoredAudioMemo): Promise<void> {
+  await (await db()).put("audio", audio);
+}
+export async function getAudioMemo(id: string): Promise<StoredAudioMemo | undefined> {
+  return (await db()).get("audio", id);
+}
+export async function deleteAudioMemo(id: string): Promise<void> {
+  await (await db()).delete("audio", id);
+}
+export async function dirtyAudioMemos(): Promise<StoredAudioMemo[]> {
+  return (await (await db()).getAll("audio")).filter((a) => a.dirty && !a.deleted);
+}
+export async function clearAudioMemoDirty(id: string): Promise<void> {
+  const d = await db();
+  const a = await d.get("audio", id);
+  if (a && a.dirty) await d.put("audio", { ...a, dirty: false });
 }
 
 export async function getRecoverySession(): Promise<RecoverySession | undefined> {

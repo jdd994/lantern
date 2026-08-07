@@ -383,6 +383,9 @@ export default function App() {
 
             onSetMediaConfig={j.setMediaConfig}
             getMediaUrl={j.getMediaUrl}
+            onAttachAudio={j.attachAudio}
+            onRemoveAudio={j.removeAudio}
+            getAudioUrl={j.getAudioUrl}
           />
         </>
       )}
@@ -401,6 +404,9 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onAttachAudio={j.attachAudio}
+          onRemoveAudio={j.removeAudio}
+          getAudioUrl={j.getAudioUrl}
         />
       )}
 
@@ -416,6 +422,7 @@ export default function App() {
           onReorder={j.reorderStrand}
           onWriteIn={j.writeInStrand}
           onAddPhoto={j.addPhotoToStrand}
+          onAddVoice={j.addVoiceToStrand}
           onSaveEntry={j.updateEntry}
           onDeleteEntry={handleDelete}
           onAnchor={j.setAnchor}
@@ -425,6 +432,9 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onAttachAudio={j.attachAudio}
+          onRemoveAudio={j.removeAudio}
+          getAudioUrl={j.getAudioUrl}
         />
       )}
 

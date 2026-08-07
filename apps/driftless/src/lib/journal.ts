@@ -23,6 +23,8 @@ export type Entry = {
   anchor?: Anchor;
   mediaIds?: string[]; // attached images (stored encrypted in the media store)
   mediaConfig?: Record<string, MediaConfig>; // per-photo size/tilt
+  audioIds?: string[]; // attached voice memos (stored encrypted in the audio store)
+  audioDurations?: Record<string, number>; // ms, so playback can show a length before decrypting
 };
 
 // A gentle, stable default tilt derived from the media id, so polaroids look
@@ -55,6 +57,8 @@ type Payload = {
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
   author?: string; // shared pieces only: the user id who wrote it
+  audioIds?: string[];
+  audioDurations?: Record<string, number>;
 };
 
 export function encodePayload(
@@ -62,13 +66,17 @@ export function encodePayload(
   anchor?: Anchor,
   mediaIds?: string[],
   mediaConfig?: Record<string, MediaConfig>,
-  author?: string
+  author?: string,
+  audioIds?: string[],
+  audioDurations?: Record<string, number>
 ): string {
   const p: Payload = { __driftless: 1, text };
   if (hasAnchor(anchor)) p.anchor = anchor;
   if (mediaIds && mediaIds.length) p.mediaIds = mediaIds;
   if (mediaConfig && Object.keys(mediaConfig).length) p.mediaConfig = mediaConfig;
   if (author) p.author = author;
+  if (audioIds && audioIds.length) p.audioIds = audioIds;
+  if (audioDurations && Object.keys(audioDurations).length) p.audioDurations = audioDurations;
   return JSON.stringify(p);
 }
 
@@ -78,6 +86,8 @@ export function decodePayload(decrypted: string): {
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
   author?: string;
+  audioIds?: string[];
+  audioDurations?: Record<string, number>;
 } {
   try {
     const obj = JSON.parse(decrypted) as Payload;
@@ -89,6 +99,9 @@ export function decodePayload(decrypted: string): {
         mediaConfig:
           obj.mediaConfig && typeof obj.mediaConfig === "object" ? obj.mediaConfig : undefined,
         author: typeof obj.author === "string" ? obj.author : undefined,
+        audioIds: Array.isArray(obj.audioIds) && obj.audioIds.length ? obj.audioIds : undefined,
+        audioDurations:
+          obj.audioDurations && typeof obj.audioDurations === "object" ? obj.audioDurations : undefined,
       };
     }
   } catch {
