@@ -29,6 +29,23 @@ function timeLabel(at: number): string {
 // Kitchen is the food world, Body is the body world. Each stays short enough
 // to see whole; the gear sheet keeps sync and settings.
 type Tab = "today" | "kitchen" | "body";
+
+// The Kitchen holds four unrelated things, and stacking them made the tab a long
+// scroll again — the exact problem the tabs were meant to end, moved one level
+// down. They aren't peers, either: recipes and the week are what you DO, the
+// pantry is something you CONSULT, a shared kitchen is somewhere you VISIT. So
+// the Kitchen gets its own segmented row and each view is shown whole.
+//
+// Shared kitchens stays here rather than moving into the gear sheet: it holds
+// co-authored recipes and a co-authored week, which is content to browse, not
+// setup to configure. A shared week behind a settings icon would be lost.
+type KitchenView = "recipes" | "week" | "pantry" | "shared";
+const KITCHEN_VIEWS = [
+  { id: "recipes", label: "Recipes" },
+  { id: "week", label: "Week" },
+  { id: "pantry", label: "Pantry" },
+  { id: "shared", label: "Shared" },
+] as const;
 const TABS = [
   { id: "today", label: "Today", Icon: Flame },
   { id: "kitchen", label: "Kitchen", Icon: Pot },
@@ -54,6 +71,7 @@ export default function App() {
   // The recipe open for curation — costing a line, fixing a word, adding the
   // photo. Held by id so it follows the live record rather than a stale copy.
   const [editingRecipe, setEditingRecipe] = useState<string | null>(null);
+  const [kitchenView, setKitchenView] = useState<KitchenView>("recipes");
   const [loggingMetric, setLoggingMetric] = useState(false);
   const [sync, setSync] = useState(false);
   const [weekOf, setWeekOf] = useState(() => Date.now());
@@ -239,54 +257,79 @@ export default function App() {
       </>) : null}
 
       {tab === "kitchen" ? (<>
-      <section className="section">
-        <div className="section-head">
-          <h2 className="section-title">Recipes</h2>
-          <button className="btn btn-sm" onClick={() => setAddingRecipe(true)}>Add</button>
-        </div>
-        <Recipes
+      {/* aria-pressed, not role="tab" — the app's own idiom (see the Distance
+          choice in SettingsSheet), and honest: full tab semantics would promise
+          a tabpanel relationship and arrow-key navigation this doesn't have. */}
+      <div className="segmented" role="group" aria-label="What to see in the Kitchen">
+        {KITCHEN_VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            aria-pressed={kitchenView === v.id}
+            className="segment"
+            onClick={() => setKitchenView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {kitchenView === "recipes" ? (
+        <section className="section">
+          <div className="section-head">
+            <h2 className="section-title">Recipes</h2>
+            <button className="btn btn-sm" onClick={() => setAddingRecipe(true)}>Add</button>
+          </div>
+          <Recipes
+            recipes={h.recipes}
+            busy={h.busy}
+            onCook={(r) => void h.logRecipeServing(r)}
+            onOpen={(r) => setEditingRecipe(r.id)}
+            onRemove={(id) => void h.removeRecipe(id)}
+          />
+        </section>
+      ) : null}
+
+      {kitchenView === "week" ? (
+        <Plan
+          plans={h.plans}
           recipes={h.recipes}
           busy={h.busy}
-          onCook={(r) => void h.logRecipeServing(r)}
-          onOpen={(r) => setEditingRecipe(r.id)}
-          onRemove={(id) => void h.removeRecipe(id)}
+          weekOf={weekOf}
+          onWeek={setWeekOf}
+          onCook={(e) => void h.cookPlan(e)}
+          onRemove={(id) => void h.removePlan(id)}
+          onAdd={(day) => setPlanningDay(day)}
         />
-      </section>
+      ) : null}
 
-      <Pantry
-        pantry={h.pantry}
-        recipes={h.recipes}
-        busy={h.busy}
-        onAdd={(foodId, name) => void h.addPantryItem(foodId, name)}
-        onRemove={(id) => void h.removePantryItem(id)}
-        onCook={(r) => void h.logRecipeServing(r)}
-      />
+      {kitchenView === "pantry" ? (
+        <Pantry
+          pantry={h.pantry}
+          recipes={h.recipes}
+          busy={h.busy}
+          onAdd={(foodId, name) => void h.addPantryItem(foodId, name)}
+          onRemove={(id) => void h.removePantryItem(id)}
+          onCook={(r) => void h.logRecipeServing(r)}
+        />
+      ) : null}
 
-      <Kitchens
-        kitchens={h.kitchens}
-        recipes={h.recipes}
-        account={h.account}
-        busy={h.kitchenBusy}
-        error={h.kitchenError}
-        onCreate={(n) => void h.createKitchen(n)}
-        onInvite={h.inviteToKitchen}
-        onShare={(id, r) => void h.shareRecipe(id, r)}
-        onCook={(r) => void h.logRecipeServing(r)}
-        onRefresh={() => void h.syncKitchens()}
-        onPlan={(id, c) => void h.sharePlan(id, c)}
-        onRemovePlan={(id, pid) => void h.removeSharedPlan(id, pid)}
-      />
-
-      <Plan
-        plans={h.plans}
-        recipes={h.recipes}
-        busy={h.busy}
-        weekOf={weekOf}
-        onWeek={setWeekOf}
-        onCook={(e) => void h.cookPlan(e)}
-        onRemove={(id) => void h.removePlan(id)}
-        onAdd={(day) => setPlanningDay(day)}
-      />
+      {kitchenView === "shared" ? (
+        <Kitchens
+          kitchens={h.kitchens}
+          recipes={h.recipes}
+          account={h.account}
+          busy={h.kitchenBusy}
+          error={h.kitchenError}
+          onCreate={(n) => void h.createKitchen(n)}
+          onInvite={h.inviteToKitchen}
+          onShare={(id, r) => void h.shareRecipe(id, r)}
+          onCook={(r) => void h.logRecipeServing(r)}
+          onRefresh={() => void h.syncKitchens()}
+          onPlan={(id, c) => void h.sharePlan(id, c)}
+          onRemovePlan={(id, pid) => void h.removeSharedPlan(id, pid)}
+        />
+      ) : null}
       </>) : null}
 
       {tab === "body" ? (<>
