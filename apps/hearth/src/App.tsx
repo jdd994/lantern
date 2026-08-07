@@ -10,18 +10,30 @@ import { Goals, AddGoal } from "./components/Goals";
 import { Recipes, AddRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Wearables } from "./components/Wearables";
+import { Runs } from "./components/Runs";
 import { Plan, AddPlan } from "./components/Plan";
 import { Pantry } from "./components/Pantry";
 import { Kitchens } from "./components/Kitchens";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
-import { Gear } from "./components/icons";
+import { Flame, Gear, Pot, Pulse } from "./components/icons";
 import { InstallSheet, UpdateToast, useTheme } from "@lantern/ui";
 import { loggedNutrients, type FoodLog } from "./lib/nutrition";
+import type { DistanceUnit } from "./lib/run";
 
 function timeLabel(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
+
+// The three rooms of the app (decided 2026-07-17): Today is the daily act,
+// Kitchen is the food world, Body is the body world. Each stays short enough
+// to see whole; the gear sheet keeps sync and settings.
+type Tab = "today" | "kitchen" | "body";
+const TABS = [
+  { id: "today", label: "Today", Icon: Flame },
+  { id: "kitchen", label: "Kitchen", Icon: Pot },
+  { id: "body", label: "Body", Icon: Pulse },
+] as const;
 
 // Hearth's own moods, loosely mapped to the shared @lantern/core vibe vocabulary —
 // only for announcing a pick over the local vibe relay, so e.g. Aura's lights can
@@ -45,6 +57,20 @@ export default function App() {
   const [planningDay, setPlanningDay] = useState<number | null>(null);
   const [settings, setSettings] = useState(false);
   const [installHelp, setInstallHelp] = useState(false);
+  // A return from Fitbit's consent page carries ?code — land on Body, where
+  // the connection (and its outcome) actually lives.
+  const [tab, setTab] = useState<Tab>(() =>
+    new URLSearchParams(window.location.search).has("code") ? "body" : "today"
+  );
+  // Display preference only — metres are canonical in storage. Plaintext
+  // localStorage is fine: "this person likes miles" is bookkeeping, not a secret.
+  const [unit, setUnit] = useState<DistanceUnit>(() =>
+    localStorage.getItem("hearth-unit") === "mi" ? "mi" : "km"
+  );
+  const pickUnit = (u: DistanceUnit) => {
+    setUnit(u);
+    localStorage.setItem("hearth-unit", u);
+  };
   const { mood, setMood } = useTheme("hearth-mood", MOODS.map((m) => m.id), "ember");
   const relayRef = useRef<VibeRelayHandle | null>(null);
   useEffect(() => {
@@ -168,7 +194,37 @@ export default function App() {
 
       {h.error ? <div className="error">{h.error}</div> : null}
 
+      {tab === "today" ? (<>
       <Today today={h.today} hasLogs={todayLogs.length > 0} />
+
+      <section className="section">
+        <div className="section-head">
+          <h2 className="section-title">Eaten today</h2>
+          <button className="btn btn-sm btn-primary" onClick={() => setLogging(true)}>Log food</button>
+        </div>
+        {todayLogs.length === 0 ? (
+          <div className="empty">Nothing yet today. Log your first thing with the button above.</div>
+        ) : (
+          todayLogs.map((l) => {
+            const nut = loggedNutrients(l);
+            return (
+              <div className="log" key={l.id}>
+                <div className="log-main">
+                  <div className="log-name">{l.name}</div>
+                  <div className="log-meta">
+                    <span>{Math.round(l.amountGrams)} g</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{timeLabel(l.at)}</span>
+                    {l.note ? (<><span aria-hidden="true">·</span><span>{l.note}</span></>) : null}
+                  </div>
+                </div>
+                <div className="log-amt">{Math.round(nut.kcal)}<span className="log-kcal"> kcal</span></div>
+                <button className="btn btn-ghost btn-sm" onClick={() => void h.removeLog(l.id)} title="Remove">×</button>
+              </div>
+            );
+          })
+        )}
+      </section>
 
       <section className="section">
         <div className="section-head">
@@ -177,7 +233,9 @@ export default function App() {
         </div>
         <Goals goals={h.goals} progressFor={h.progressFor} onRemove={(id) => void h.removeGoal(id)} />
       </section>
+      </>) : null}
 
+      {tab === "kitchen" ? (<>
       <section className="section">
         <div className="section-head">
           <h2 className="section-title">Recipes</h2>
@@ -225,47 +283,46 @@ export default function App() {
         onRemove={(id) => void h.removePlan(id)}
         onAdd={(day) => setPlanningDay(day)}
       />
+      </>) : null}
 
-      <section className="section">
-        <div className="section-head">
-          <h2 className="section-title">Eaten today</h2>
-          <button className="btn btn-sm btn-primary" onClick={() => setLogging(true)}>Log food</button>
-        </div>
-        {todayLogs.length === 0 ? (
-          <div className="empty">Nothing yet today. Log your first thing with the button above.</div>
-        ) : (
-          todayLogs.map((l) => {
-            const nut = loggedNutrients(l);
-            return (
-              <div className="log" key={l.id}>
-                <div className="log-main">
-                  <div className="log-name">{l.name}</div>
-                  <div className="log-meta">
-                    <span>{Math.round(l.amountGrams)} g</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{timeLabel(l.at)}</span>
-                    {l.note ? (<><span aria-hidden="true">·</span><span>{l.note}</span></>) : null}
-                  </div>
-                </div>
-                <div className="log-amt">{Math.round(nut.kcal)}<span className="log-kcal"> kcal</span></div>
-                <button className="btn btn-ghost btn-sm" onClick={() => void h.removeLog(l.id)} title="Remove">×</button>
-              </div>
-            );
-          })
-        )}
-      </section>
-
+      {tab === "body" ? (<>
       <Body metrics={h.metrics} onLog={() => setLoggingMetric(true)} onRemove={(id) => void h.removeMetric(id)}>
         <Wearables
           connections={h.connections}
           busy={h.wearableBusy}
           error={h.wearableError}
-          canConnect={h.canConnectWearable}
+          canUse={h.canUseWearable}
           onConnect={(p) => void h.connectWearable(p)}
           onImport={(p) => void h.importWearable(p)}
           onDisconnect={(p) => void h.disconnectWearable(p)}
+          onSaveReadings={(p, readings) => h.saveWearableReadings(p, readings)}
         />
       </Body>
+
+      <Runs
+        runs={h.runs}
+        error={h.runError}
+        unit={unit}
+        onImport={(files) => void h.importGPX(files)}
+        onRemove={(id) => void h.removeRun(id)}
+      />
+      </>) : null}
+
+      <nav className="tabbar" aria-label="Sections">
+        <div className="tabbar-inner">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              className={"tab-btn" + (tab === id ? " active" : "")}
+              aria-current={tab === id ? "page" : undefined}
+              onClick={() => setTab(id)}
+            >
+              <Icon />
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
 
       {logging ? (
         <LogFood
@@ -289,6 +346,7 @@ export default function App() {
         <SettingsSheet
           mood={mood}
           onMood={handleMood}
+          unit={unit} onUnit={pickUnit}
           onInstallHelp={() => {
             setSettings(false);
             setInstallHelp(true);

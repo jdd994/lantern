@@ -30,7 +30,7 @@ import type { MetricContent, MetricKind } from "../metrics";
 import type { FitbitTokens } from "./fitbit";
 
 export type { Tier };
-export type ProviderId = "fitbit";
+export type ProviderId = "fitbit" | "strap" | "ring";
 
 // The shared consent contract (@lantern/core/connect), with the id narrowed to
 // the providers Hearth actually ships. `discloses` is who learns precisely what,
@@ -38,13 +38,61 @@ export type ProviderId = "fitbit";
 // their body, because they are. `takes`/`refuses` both render in the consent
 // sheet, so the refusals are a promise made in public rather than a comment in
 // a file.
-export type Provider = ProviderDescriptor & { id: ProviderId };
+//
+// `mode` is Hearth's own addition, not a core concern: how readings arrive.
+// "grant" is the Fitbit shape — connect once, hold a token, refresh history on
+// demand. "session" is the strap shape — nothing is held at all; each reading
+// is a live sit with the device, and the only thing that persists is what you
+// chose to save. No other lantern app has a session-mode provider yet, so it
+// stays here until a second one earns the move into core.
+export type Provider = ProviderDescriptor & {
+  id: ProviderId;
+  mode: "grant" | "session";
+};
 
 export const PROVIDERS: Record<ProviderId, Provider> = {
+  strap: {
+    id: "strap",
+    label: "Heart-rate strap",
+    tier: 0,
+    mode: "session",
+    discloses:
+      "The strap talks to this page over Bluetooth, and the reading never leaves this device — " +
+      "no account, no cloud, no company in between. This isn't a vendor integration: any strap " +
+      "or armband speaking the standard Bluetooth heart-rate profile works (Polar, Garmin, " +
+      "Wahoo…), and none of them ever learns what was listening.",
+    takes: [
+      "Heart rate, live while you watch",
+      "Beat-to-beat intervals — an honest resting reading and its variability",
+    ],
+    refuses: [
+      "Energy expended — the strap volunteers calories mid-stream; the parser steps over those bytes unread",
+      "Anything you didn't choose to save — a sit you close is gone",
+    ],
+  },
+  ring: {
+    id: "ring",
+    label: "Smart ring",
+    tier: 0,
+    mode: "session",
+    discloses:
+      "A ColMi-class ring (R02 and cousins) talks to this page over Bluetooth, and the reading " +
+      "never leaves this device — no account, no vendor app, no cloud. The protocol is one the " +
+      "community reverse-engineered, not one the vendor granted: the ring answers whoever's in " +
+      "the room, and tonight that's you.",
+    takes: ["Heart rate, live while you watch"],
+    refuses: [
+      "Blood pressure, blood sugar, fatigue — the ring offers these as readings; a small optical sensor can't honestly measure them, so they're never requested",
+      "Calories — logged by the ring, never asked for",
+      "Variability — the ring's stream carries no raw beat-to-beat intervals, so no honest number exists to take",
+      "Anything you didn't choose to save — a sit you close is gone",
+    ],
+  },
   fitbit: {
     id: "fitbit",
     label: "Fitbit",
     tier: 2,
+    mode: "grant",
     discloses:
       "Your browser talks straight to Fitbit — nobody new sees anything. Fitbit already holds " +
       "these readings; this only copies them to you. They learn that an app read your data, " +
@@ -101,10 +149,14 @@ export type Reading = {
   unit: string;
   at: number;
   natural: string;
+  // The reading's own uncertainty, stated as part of the datum ("mostly 54–61")
+  // rather than discarded at save time. A number stripped of its spread looks
+  // more certain than the device ever claimed.
+  note?: string;
 };
 
 export function readingContent(r: Reading, provider: ProviderId): MetricContent {
-  return { kind: r.kind, value: r.value, unit: r.unit, source: provider };
+  return { kind: r.kind, value: r.value, unit: r.unit, source: provider, ...(r.note ? { note: r.note } : {}) };
 }
 
 // ---- connections ---------------------------------------------------------
