@@ -164,6 +164,15 @@ export function HelpSheet({
           </section>
 
           <section>
+            <h3>Voice memos</h3>
+            <p>
+              Open a thought and tap <b>Record voice</b> to add a memo — recorded on this device,
+              encrypted the same way as your writing, never transcribed. The mic only turns on when
+              you tap it, and you can discard a recording before saving it.
+            </p>
+          </section>
+
+          <section>
             <h3>Tags</h3>
             <p>Start a word with # to tag it. Tap a tag to filter your Stream.</p>
           </section>

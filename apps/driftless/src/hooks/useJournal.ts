@@ -63,6 +63,9 @@ import {
   putMedia,
   getMedia,
   deleteMedia,
+  putAudioMemo,
+  getAudioMemo,
+  deleteAudioMemo,
   importData,
   getDevice,
   saveDevice,
@@ -177,6 +180,7 @@ export function useJournal() {
   const syncingRef = useRef(false);
   const syncTimer = useRef<number | null>(null);
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
+  const audioUrls = useRef<Map<string, string>>(new Map()); // audioId → object URL (decrypted, in-memory)
   const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
   const sharedRef = useRef<Map<string, LiveShared>>(new Map()); // shared strands live (with unwrapped DEKs)
   const pairingSessionRef = useRef<PairingSession | null>(null); // this device's throwaway keypair while showing a pairing QR
@@ -215,8 +219,20 @@ export function useJournal() {
     for (const s of stored) {
       if (s.deleted) continue; // tombstones aren't shown
       try {
-        const { text, anchor, mediaIds, mediaConfig } = decodePayload(await decryptString(key, s.content));
-        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, createdAt: s.createdAt, updatedAt: s.updatedAt });
+        const { text, anchor, mediaIds, mediaConfig, audioIds, audioDurations } = decodePayload(
+          await decryptString(key, s.content)
+        );
+        decrypted.push({
+          id: s.id,
+          text,
+          anchor,
+          mediaIds,
+          mediaConfig,
+          audioIds,
+          audioDurations,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        });
       } catch {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
@@ -863,6 +879,7 @@ export function useJournal() {
     setEntries([]);
     setStrands([]);
     mediaUrls.current.clear(); // free decrypted image data URLs from memory
+    audioUrls.current.clear(); // free decrypted voice memo object URLs from memory
     identityRef.current = null;
     sharedRef.current.clear(); // drop unwrapped strand keys + decrypted shared content
     setSharedStrands([]);
@@ -883,7 +900,17 @@ export function useJournal() {
     if (!key) return;
     const content = await encryptString(
       key,
-      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig)
+      deleted
+        ? ""
+        : encodePayload(
+            entry.text,
+            entry.anchor,
+            entry.mediaIds,
+            entry.mediaConfig,
+            undefined,
+            entry.audioIds,
+            entry.audioDurations
+          )
     );
     const record: StoredEntry = {
       id: entry.id,
@@ -1094,6 +1121,117 @@ export function useJournal() {
     }
   }, []);
 
+  // Attach a voice memo — recorded on-device, never transcribed or sent
+  // anywhere unencrypted — the same way a photo attaches: encrypt, store
+  // locally, reference by id, and let the regular sync loop upload it.
+  const MAX_AUDIO_BYTES = 8 * 1024 * 1024; // matches the server's per-blob cap
+  const attachAudio = useCallback(
+    async (entryId: string, blob: Blob, durationMs: number) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const bytes = await blob.arrayBuffer();
+      if (bytes.byteLength > MAX_AUDIO_BYTES) {
+        setSaveError({
+          message: "That memo is too long to save — try a shorter one.",
+          retry: () => {},
+        });
+        return;
+      }
+      const type = blob.type || "audio/webm";
+      const cb = await encryptBytes(key, bytes);
+      const audioId = uid();
+      await putAudioMemo({
+        id: audioId,
+        type,
+        createdAt: Date.now(),
+        durationMs,
+        iv: cb.iv,
+        data: cb.data,
+        deleted: false,
+        dirty: true,
+      });
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          updated = {
+            ...e,
+            audioIds: [...(e.audioIds ?? []), audioId],
+            audioDurations: { ...(e.audioDurations ?? {}), [audioId]: durationMs },
+            updatedAt: Date.now(),
+          };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
+    },
+    [guardedPersist]
+  );
+
+  const removeAudio = useCallback(
+    async (entryId: string, audioId: string) => {
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          const durations = { ...(e.audioDurations ?? {}) };
+          delete durations[audioId];
+          updated = {
+            ...e,
+            audioIds: (e.audioIds ?? []).filter((a) => a !== audioId),
+            audioDurations: durations,
+            updatedAt: Date.now(),
+          };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
+      await deleteAudioMemo(audioId);
+      audioUrls.current.delete(audioId);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await deleteMediaRemote(token, audioId);
+        } catch {
+          // offline / transient — the blob just lingers; harmless
+        }
+      }
+    },
+    [guardedPersist]
+  );
+
+  // Decrypt a stored voice memo to an in-memory object URL (cached). Same
+  // on-demand-download-if-missing shape as getMediaUrl — the memo rides the
+  // same opaque-blob endpoint as photos.
+  const getAudioUrl = useCallback(async (id: string): Promise<string | null> => {
+    const cached = audioUrls.current.get(id);
+    if (cached) return cached;
+    const key = keyRef.current;
+    if (!key) return null;
+    let a = await getAudioMemo(id);
+    if (a?.deleted) return null;
+    if (!a) {
+      const token = tokenRef.current;
+      if (!token) return null;
+      try {
+        const dl = await downloadMedia(token, id);
+        if (!dl) return null;
+        a = { id, type: dl.type, createdAt: Date.now(), durationMs: 0, iv: dl.iv, data: dl.data, deleted: false, dirty: false };
+        await putAudioMemo(a);
+      } catch {
+        return null;
+      }
+    }
+    try {
+      const bytes = await decryptBytes(key, { iv: a.iv, data: a.data });
+      const url = `data:${a.type};base64,${bytesToBase64(bytes)}`;
+      audioUrls.current.set(id, url);
+      return url;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const removeEntry = useCallback(
     async (entry: Entry) => {
       setEntries((prev) => prev.filter((e) => e.id !== entry.id));
@@ -1273,6 +1411,16 @@ export function useJournal() {
       await addToStrand(strandId, entry.id);
     },
     [createEntry, attachMedia, addToStrand]
+  );
+
+  // Same, for a voice memo: a captionless thought carrying the recording.
+  const addVoiceToStrand = useCallback(
+    async (strandId: string, blob: Blob, durationMs: number) => {
+      const entry = await createEntry("");
+      await attachAudio(entry.id, blob, durationMs);
+      await addToStrand(strandId, entry.id);
+    },
+    [createEntry, attachAudio, addToStrand]
   );
 
   // ---- Shared strands (co-authored, E2E) --------------------------------
@@ -1949,6 +2097,9 @@ export function useJournal() {
     removeMedia,
     setMediaConfig,
     getMediaUrl,
+    attachAudio,
+    removeAudio,
+    getAudioUrl,
     strands,
     createStrand,
     renameStrand,
@@ -1958,6 +2109,7 @@ export function useJournal() {
     reorderStrand,
     writeInStrand,
     addPhotoToStrand,
+    addVoiceToStrand,
     exportBackup,
     restoreBackup,
     account,

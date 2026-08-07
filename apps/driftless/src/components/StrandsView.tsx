@@ -4,7 +4,8 @@
 // ordinary thought too), arrange the order, and read the whole as one draft.
 import { useMemo, useRef, useState } from "react";
 import { strandEntries, type Entry, type Strand, type Anchor, type MediaConfig } from "../lib/journal";
-import { EntryItem, MediaThumb } from "./EntryItem";
+import { EntryItem, MediaThumb, AudioMemo } from "./EntryItem";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 type Props = {
   strands: Strand[];
@@ -17,6 +18,7 @@ type Props = {
   onReorder: (strandId: string, entryIds: string[]) => void;
   onWriteIn: (strandId: string, text: string) => void;
   onAddPhoto: (strandId: string, file: File) => void;
+  onAddVoice: (strandId: string, blob: Blob, durationMs: number) => void;
   onSaveEntry: (id: string, text: string) => void;
   onDeleteEntry: (id: string) => void;
   onAnchor: (id: string, anchor: Anchor | null) => void;
@@ -25,6 +27,9 @@ type Props = {
   onRemoveMedia: (entryId: string, mediaId: string) => void;
   onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  onAttachAudio: (entryId: string, blob: Blob, durationMs: number) => void;
+  onRemoveAudio: (entryId: string, audioId: string) => void;
+  getAudioUrl: (id: string) => Promise<string | null>;
 };
 
 export function StrandsView(props: Props) {
@@ -103,6 +108,7 @@ function StrandDetail({
   onReorder,
   onWriteIn,
   onAddPhoto,
+  onAddVoice,
   onSaveEntry,
   onDeleteEntry,
   onAnchor,
@@ -111,11 +117,15 @@ function StrandDetail({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onAttachAudio,
+  onRemoveAudio,
+  getAudioUrl,
 }: Props & { strand: Strand; byId: Map<string, Entry>; onBack: () => void }) {
   const [reading, setReading] = useState(false);
   const [titleDraft, setTitleDraft] = useState(strand.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const [compose, setCompose] = useState("");
+  const [recordingChapter, setRecordingChapter] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
   const ordered = strandEntries(strand.entryIds, byId);
@@ -203,6 +213,18 @@ function StrandDetail({
                     ))}
                   </div>
                 )}
+                {e.audioIds && e.audioIds.length > 0 && (
+                  <div className="audio-list">
+                    {e.audioIds.map((aid) => (
+                      <AudioMemo
+                        key={aid}
+                        audioId={aid}
+                        getUrl={getAudioUrl}
+                        durationMs={e.audioDurations?.[aid]}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -242,6 +264,9 @@ function StrandDetail({
                 onRemoveMedia={onRemoveMedia}
                 onSetMediaConfig={onSetMediaConfig}
                 getMediaUrl={getMediaUrl}
+                onAttachAudio={onAttachAudio}
+                onRemoveAudio={onRemoveAudio}
+                getAudioUrl={getAudioUrl}
               />
             </div>
           ))}
@@ -277,7 +302,21 @@ function StrandDetail({
                   e.target.value = "";
                 }}
               />
+              {!recordingChapter && (
+                <button className="ghost-btn" onClick={() => setRecordingChapter(true)}>
+                  ＋ Voice
+                </button>
+              )}
             </div>
+            {recordingChapter && (
+              <VoiceRecorder
+                onRecorded={(blob, durationMs) => {
+                  onAddVoice(strand.id, blob, durationMs);
+                  setRecordingChapter(false);
+                }}
+                onCancel={() => setRecordingChapter(false)}
+              />
+            )}
           </div>
 
           <StrandPicker

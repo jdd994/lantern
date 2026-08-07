@@ -10,6 +10,7 @@ import {
   type Strand,
   type MediaConfig,
 } from "../lib/journal";
+import { VoiceRecorder, formatElapsed } from "./VoiceRecorder";
 
 type Props = {
   entry: Entry;
@@ -27,6 +28,10 @@ type Props = {
   onRemoveMedia?: (entryId: string, mediaId: string) => void;
   onSetMediaConfig?: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl?: (id: string) => Promise<string | null>;
+  // Optional: voice memo attachments.
+  onAttachAudio?: (entryId: string, blob: Blob, durationMs: number) => void;
+  onRemoveAudio?: (entryId: string, audioId: string) => void;
+  getAudioUrl?: (id: string) => Promise<string | null>;
 };
 
 // One attached photo: decrypts to an in-memory URL on mount. Shows a gentle
@@ -129,6 +134,74 @@ export function MediaThumb({
   );
 }
 
+// One attached voice memo: decrypts to an in-memory URL on mount, same shape
+// as MediaThumb. A quiet play/pause button + elapsed time, not the browser's
+// default <audio> chrome, so it reads calm and consistent with the rest of
+// the app.
+export function AudioMemo({
+  audioId,
+  getUrl,
+  durationMs,
+  onRemove,
+}: {
+  audioId: string;
+  getUrl: (id: string) => Promise<string | null>;
+  durationMs?: number;
+  onRemove?: () => void;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getUrl(audioId).then((u) => {
+      if (!alive) return;
+      if (u) setUrl(u);
+      else setGone(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [audioId, getUrl]);
+
+  if (gone) return <div className="media-missing">Voice memo added on another device</div>;
+  if (!url) return <div className="media-loading" />;
+
+  return (
+    <div className="audio-memo">
+      <button
+        className="audio-play"
+        onClick={() => {
+          const a = audioRef.current;
+          if (!a) return;
+          if (playing) a.pause();
+          else void a.play();
+        }}
+        title={playing ? "Pause" : "Play"}
+        aria-label={playing ? "Pause voice memo" : "Play voice memo"}
+      >
+        {playing ? "⏸" : "▶"}
+      </button>
+      <span className="audio-duration">{durationMs ? formatElapsed(durationMs) : ""}</span>
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="none"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+      {onRemove && (
+        <button className="audio-remove" onClick={onRemove} title="Remove voice memo" aria-label="Remove voice memo">
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Render text with #tags tinted, safely (React escapes by default).
 function Body({ text }: { text: string }) {
   const parts = text.split(/(\s#[a-z0-9_-]{1,40})/gi);
@@ -162,6 +235,9 @@ export function EntryItem({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onAttachAudio,
+  onRemoveAudio,
+  getAudioUrl,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.text);
@@ -169,11 +245,13 @@ export function EntryItem({
   const [anchorDraft, setAnchorDraft] = useState("");
   const [addingStrand, setAddingStrand] = useState(false);
   const [newStrand, setNewStrand] = useState("");
+  const [recording, setRecording] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const edited = entry.updatedAt !== entry.createdAt;
   const canStrand = strands && onToggleStrand && onCreateStrandWith;
   const media = entry.mediaIds ?? [];
+  const audio = entry.audioIds ?? [];
 
   // Grow the edit box to fit the whole thought (up to ~60vh, then scroll), so
   // editing shows full context instead of a few cramped lines.
@@ -277,6 +355,30 @@ export function EntryItem({
                 />
               ))}
             </div>
+          )}
+
+          {audio.length > 0 && getAudioUrl && (
+            <div className="audio-list">
+              {audio.map((aid) => (
+                <AudioMemo
+                  key={aid}
+                  audioId={aid}
+                  getUrl={getAudioUrl}
+                  durationMs={entry.audioDurations?.[aid]}
+                  onRemove={onRemoveAudio ? () => onRemoveAudio(entry.id, aid) : undefined}
+                />
+              ))}
+            </div>
+          )}
+
+          {recording && onAttachAudio && (
+            <VoiceRecorder
+              onRecorded={(blob, durationMs) => {
+                onAttachAudio(entry.id, blob, durationMs);
+                setRecording(false);
+              }}
+              onCancel={() => setRecording(false)}
+            />
           )}
 
           {entry.anchor && !anchoring && !addingStrand && (
@@ -383,6 +485,11 @@ export function EntryItem({
                     }}
                   />
                 </>
+              )}
+              {onAttachAudio && !recording && (
+                <button className="act" onClick={() => setRecording(true)}>
+                  Record voice
+                </button>
               )}
               <button className="act del" onClick={() => onDelete(entry.id)}>
                 Delete

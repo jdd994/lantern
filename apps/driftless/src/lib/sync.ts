@@ -5,8 +5,8 @@
 import { createSyncEngine, createMediaSync, type SyncRecord } from "@lantern/core/sync";
 import { pushChanges, pullChanges, uploadMedia } from "./api";
 import {
-  dirtyEntries, dirtyStrands, dirtyMedia,
-  clearEntryDirty, clearStrandDirty, clearMediaDirty,
+  dirtyEntries, dirtyStrands, dirtyMedia, dirtyAudioMemos,
+  clearEntryDirty, clearStrandDirty, clearMediaDirty, clearAudioMemoDirty,
   getStoredEntry, getStoredStrand, putStoredEntry, putStoredStrand,
   getSyncState, saveSyncState,
   type StoredEntry, type StoredStrand,
@@ -57,10 +57,19 @@ export const pushMedia = createMediaSync({
   clearDirty: clearMediaDirty,
 });
 
-// Full sync: others' changes, then ours, then any pending photos.
+// Voice memos ride the same opaque-blob endpoint as photos (the server just
+// stores ciphertext by id — it doesn't care what it decrypts to).
+export const pushAudio = createMediaSync({
+  dirtyMedia: dirtyAudioMemos,
+  upload: uploadMedia,
+  clearDirty: clearAudioMemoDirty,
+});
+
+// Full sync: others' changes, then ours, then any pending photos/voice memos.
 export async function syncNow(token: string): Promise<boolean> {
   const changed = await engine.pull(token);
   await engine.push(token);
   await pushMedia(token);
+  await pushAudio(token);
   return changed;
 }

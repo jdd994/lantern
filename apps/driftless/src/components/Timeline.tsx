@@ -17,6 +17,9 @@ type Props = {
   onRemoveMedia: (entryId: string, mediaId: string) => void;
   onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  onAttachAudio: (entryId: string, blob: Blob, durationMs: number) => void;
+  onRemoveAudio: (entryId: string, audioId: string) => void;
+  getAudioUrl: (id: string) => Promise<string | null>;
 };
 
 export function Timeline({
@@ -31,6 +34,9 @@ export function Timeline({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onAttachAudio,
+  onRemoveAudio,
+  getAudioUrl,
 }: Props) {
   const { dated, undated } = timelineGroups(entries);
 
@@ -71,6 +77,9 @@ export function Timeline({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onAttachAudio={onAttachAudio}
+              onRemoveAudio={onRemoveAudio}
+              getAudioUrl={getAudioUrl}
             />
           ))}
         </section>
@@ -98,6 +107,9 @@ export function Timeline({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onAttachAudio={onAttachAudio}
+              onRemoveAudio={onRemoveAudio}
+              getAudioUrl={getAudioUrl}
             />
           ))}
         </section>

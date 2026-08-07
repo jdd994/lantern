@@ -16,6 +16,9 @@ type Props = {
   onRemoveMedia: (entryId: string, mediaId: string) => void;
   onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
+  onAttachAudio: (entryId: string, blob: Blob, durationMs: number) => void;
+  onRemoveAudio: (entryId: string, audioId: string) => void;
+  getAudioUrl: (id: string) => Promise<string | null>;
 };
 
 const RECENT_WINDOW = 1000 * 60 * 60 * 6; // glow ticks from the last 6 hours
@@ -34,6 +37,9 @@ export function Stream({
   onRemoveMedia,
   onSetMediaConfig,
   getMediaUrl,
+  onAttachAudio,
+  onRemoveAudio,
+  getAudioUrl,
 }: Props) {
   if (totalCount === 0) {
     return (
@@ -96,6 +102,9 @@ export function Stream({
               onRemoveMedia={onRemoveMedia}
               onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
+              onAttachAudio={onAttachAudio}
+              onRemoveAudio={onRemoveAudio}
+              getAudioUrl={getAudioUrl}
             />
           ))}
         </section>
