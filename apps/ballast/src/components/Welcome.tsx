@@ -71,10 +71,13 @@ export function Welcome({
 
           <div className="trade">
             <strong>The trade:</strong> the key is made from your passphrase, and your
-            passphrase never leaves this device. So there is <strong>no reset</strong>. If you
-            forget it, nobody — not us, not anyone — can get your data back. Write it down and
-            put it somewhere safe. That is the price of the guarantee, and we would rather you
-            hear it now than later.
+            passphrase never leaves this device — so nobody, not us, not anyone, can read your
+            numbers. If you ever forget it there are two ways back
+            in: a printed <strong>recovery kit</strong> (made in Sync — a one-page code for a
+            fire safe, right for a vault that's yours alone), or <strong>Guardians</strong>, a
+            few people you trust acting jointly. There is no reset by email, because a reset
+            button would mean we could see what you see. Write the passphrase down and put
+            it somewhere safe too. We would rather you hear all of this now than later.
           </div>
 
           <h2 style={{ fontSize: 17, marginTop: 30 }}>What it costs to connect an account</h2>

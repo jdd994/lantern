@@ -16,8 +16,22 @@ import {
   sealJSON,
   PBKDF2_ITERATIONS,
   VERIFIER_TEXT,
+  exportPublicKeyB64,
+  exportPrivateKeyB64,
+  importPrivateKeyB64,
+  unwrapPrivateKey,
+  generateIdentityKeypair,
+  createRecoveryCircle,
+  approveAsGuardian,
+  reconstructDEK,
 } from "../lib/crypto";
-import { createVault, openVault, rewrapVault, verifyDEK } from "@lantern/core/vault";
+import { importPublicKeyB64 } from "@lantern/core/sharing";
+import {
+  createVault, openVault, rewrapVault, verifyDEK, setPassphraseFromDEK,
+} from "@lantern/core/vault";
+import { tagger } from "@lantern/core/connect";
+import { makeRecoveryKit, openRecoveryKit } from "@lantern/core/kit";
+import type { GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll } from "../lib/api";
 import * as db from "../lib/db";
 import {
   valueAccounts,
@@ -86,8 +100,35 @@ export type Ledger = {
   deleteAccount: () => Promise<boolean>;
   // Change the vault passphrase (envelope re-wrap; no data re-encryption).
   changePassphrase: (current: string, next: string) => Promise<string | null>;
+  // Paper recovery kit (@lantern/core/kit): when this vault minted one, and
+  // the mint / retire / locked-out-door operations.
+  recoveryKitAt: number | null;
+  createRecoveryKit: () => Promise<{ code: string } | string>;
+  removeRecoveryKit: () => Promise<string | null>;
+  recoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
   // Sync now, on demand (pull others' changes, push ours).
   syncNow: () => Promise<void>;
+
+  // Social recovery — guardians who can jointly help recover a forgotten
+  // passphrase. See @lantern/core/recovery.
+  guardianCircle: RecoveryCircleInfo | null;
+  loadGuardianCircle: () => Promise<void>;
+  setupGuardians: (guardians: { email: string; codeword: string }[], k: number, delayMs: number) => Promise<string | null>;
+  recoveryStatus: RecoveryStatus; // a pending request on MY OWN account
+  refreshRecoveryStatus: () => Promise<void>;
+  cancelPendingRecovery: () => Promise<string | null>;
+  pendingGuardianRequests: PendingForMe[]; // requests I can approve, as a guardian
+  refreshPendingGuardianRequests: () => Promise<void>;
+  approveGuardianRequest: (requestId: string, codeword: string) => Promise<string | null>;
+  // Pre-unlock (the locked screen, before the key exists): sign in with
+  // connectSignIn first (safe to call with a local vault already present),
+  // then these.
+  startRecoveryRequest: () => Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  >;
+  pollRecoveryRequest: (requestId: string) => Promise<RecoveryRequestPoll | null>;
+  cancelRecoveryRequest: (requestId: string) => Promise<string | null>;
+  finishRecoveryRequest: (requestId: string, newPassphrase: string) => Promise<string | null>;
 
   setup: (passphrase: string, currency: string) => Promise<void>;
   unlock: (passphrase: string) => Promise<boolean>;
@@ -108,15 +149,61 @@ export type Ledger = {
   // indexes the store), not part of the encrypted payload — and because a
   // receipt is usually from yesterday, not from now.
   addTransaction: (content: TransactionContent, at: number, receipt?: File) => Promise<void>;
+  // Edit an existing transaction. `receipt` is tri-state: undefined leaves the
+  // current receipt (if any) untouched, null explicitly detaches it, and a
+  // File replaces it — the old one is deleted either way a new one lands.
+  updateTransaction: (
+    id: string,
+    content: TransactionContent,
+    at: number,
+    receipt?: File | null
+  ) => Promise<void>;
+  // Bulk import (CSV/OFX — tier 0). Record ids are HMACs of each row's natural
+  // key (@lantern/core/connect), so importing the same file twice lands on the
+  // same ids: rows already present — including ones you've since deleted — are
+  // skipped, never duplicated and never resurrected.
+  importTransactions: (
+    rows: Array<{ content: TransactionContent; at: number; natural: string }>
+  ) => Promise<{ added: number; skipped: number }>;
   removeTransaction: (id: string) => Promise<void>;
-  // Decrypt a receipt photo into a data: URL for display. Nothing is cached to
-  // disk in the clear — the plaintext image exists only in the open <img>.
-  loadReceipt: (mediaId: string) => Promise<string | null>;
+  // The HSA "shoebox strategy": mark a banked expense reimbursed (or, passing
+  // undefined, un-mark it — cheap to support, and no banking decision should
+  // be a one-way door).
+  markReimbursed: (id: string, reimbursedAt: number | undefined) => Promise<void>;
+  // Decrypt a receipt into a data: URL for display, plus the media type so the
+  // caller knows what it's rendering (a photo vs. an opaque PDF attachment).
+  // Nothing is cached to disk in the clear — the plaintext exists only in the
+  // open <img>/<embed>.
+  loadReceipt: (mediaId: string) => Promise<{ dataUrl: string; type: string } | null>;
   // What the categoriser thinks, and whether it learned it from you or guessed.
   suggest: (merchant: string) => Suggestion | null;
 };
 
 const uid = () => crypto.randomUUID();
+
+// Downscaled/re-encoded + encrypted + stored for a photo; passed through
+// as-is for a PDF (compressImage assumes an image `createImageBitmap` can
+// decode, which a PDF isn't — there's no OCR path for one either, so there's
+// nothing to lose by skipping the re-encode). Shared by add and edit, since
+// both write a receipt the same way.
+async function storeReceiptMedia(key: CryptoKey, file: File): Promise<string> {
+  const isPdf = file.type === "application/pdf";
+  const { bytes, type } = isPdf
+    ? { bytes: await file.arrayBuffer(), type: file.type }
+    : await compressImage(file);
+  const sealed = await encryptBytes(key, bytes);
+  const id = uid();
+  await db.putMedia({
+    id,
+    type,
+    createdAt: Date.now(),
+    iv: sealed.iv,
+    data: sealed.data,
+    deleted: false,
+    dirty: true,
+  });
+  return id;
+}
 
 export function useLedger(): Ledger {
   // The key. In a ref, never in state, never persisted. React state can end up
@@ -129,6 +216,13 @@ export function useLedger(): Ledger {
   const [account, setAccount] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  // The identity keypair, unwrapped with the vault key — never in state, never
+  // persisted unwrapped. Only used for guardian lookups + approving as a
+  // guardian; nothing else in Ballast needs it (no shared strands here).
+  const identityRef = useRef<CryptoKeyPair | null>(null);
+  const [guardianCircle, setGuardianCircle] = useState<RecoveryCircleInfo | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<RecoveryStatus>(null);
+  const [pendingGuardianRequests, setPendingGuardianRequests] = useState<PendingForMe[]>([]);
 
   const [status, setStatus] = useState<Status>("loading");
   const [currency, setCurrency] = useState("USD");
@@ -143,6 +237,8 @@ export function useLedger(): Ledger {
   const [memory, setMemory] = useState<MerchantMemory>({});
 
   const [canBiometric, setCanBiometric] = useState(false);
+  // Paper recovery kit — when this vault minted one (null = none).
+  const [recoveryKitAt, setRecoveryKitAt] = useState<number | null>(null);
   const [hasBiometric, setHasBiometric] = useState(false);
 
   // Is there a vault on this device yet? Effects are idempotent so StrictMode's
@@ -157,6 +253,7 @@ export function useLedger(): Ledger {
       ]);
       setCanBiometric(supported);
       setHasBiometric(!!device);
+      setRecoveryKitAt(vault?.recoveryKit?.createdAt ?? null);
       if (sync?.token) {
         tokenRef.current = sync.token;
         setAccount(sync.accountEmail ?? null);
@@ -299,6 +396,16 @@ export function useLedger(): Ledger {
       void loadPrices(snaps, cur);
       // If this device is connected, sync on unlock so it opens up to date.
       if (tokenRef.current) void runSync();
+      // Pull-only recovery surfaces (no push/notify) — checked once per
+      // unlock. Declared further down this file; referenced here only inside
+      // the closure body (never in the deps array), so there's no temporal-
+      // dead-zone issue at render time.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      void loadGuardianCircle();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      void refreshRecoveryStatus();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      void refreshPendingGuardianRequests();
     },
     [loadAll, loadPrices, runSync]
   );
@@ -375,6 +482,10 @@ export function useLedger(): Ledger {
     setMemory({});
     setPrices({});
     clearPriceCache();
+    identityRef.current = null;
+    setGuardianCircle(null);
+    setRecoveryStatus(null);
+    setPendingGuardianRequests([]);
     setError(null);
     setStatus("locked");
   }, []);
@@ -453,7 +564,9 @@ export function useLedger(): Ledger {
             iterations: dto.iterations ?? PBKDF2_ITERATIONS,
             currency: cur,
             identityPrivate: dto.identityPrivWrapped ?? undefined,
+            recoveryKit: dto.recoveryKit ?? undefined,
           });
+          setRecoveryKitAt(dto.recoveryKit?.createdAt ?? null);
           setCurrency(cur);
           setStatus("locked");
         }
@@ -540,6 +653,309 @@ export function useLedger(): Ledger {
       return null;
     },
     []
+  );
+
+  // ---- paper recovery kit ----------------------------------------------------
+  // The solo answer: a printed code in a fire safe. The code never touches a
+  // wire; the vault (and, when connected, the server) hold only the DEK
+  // wrapped under the code's derived key. See @lantern/core/kit.
+
+  const createRecoveryKit = useCallback(async (): Promise<{ code: string } | string> => {
+    const dek = keyRef.current;
+    if (!dek) return "Unlock the vault first.";
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { code, kit } = await makeRecoveryKit(dek);
+    await db.saveVault({ ...vault, recoveryKit: kit });
+    setRecoveryKitAt(kit.createdAt);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, kit);
+      } catch {
+        // offline / unmigrated server — the kit still works on this device;
+        // the next passphrase change or kit action can retry.
+      }
+    }
+    return { code };
+  }, []);
+
+  const removeRecoveryKit = useCallback(async (): Promise<string | null> => {
+    const vault = await db.getVault();
+    if (!vault) return "No vault on this device.";
+    const { recoveryKit: _gone, ...rest } = vault;
+    await db.saveVault(rest);
+    setRecoveryKitAt(null);
+    const token = tokenRef.current;
+    if (token) {
+      try {
+        await api.updateRecoveryKit(token, null);
+      } catch {
+        // best-effort; the local removal already killed the paper for this device
+      }
+    }
+    return null;
+  }, []);
+
+  // The locked-out door: the code off the paper opens the vault and mints a
+  // fresh passphrase — same ending as guardian recovery.
+  const recoverWithKit = useCallback(
+    async (code: string, newPassphrase: string): Promise<string | null> => {
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      let vault = await db.getVault();
+      // A replacement device may hold the envelope but not the kit yet — the
+      // server copy covers it when an account is connected.
+      if (vault && !vault.recoveryKit && tokenRef.current) {
+        try {
+          const dto = await api.fetchVault(tokenRef.current);
+          if (dto.recoveryKit) {
+            vault = { ...vault, recoveryKit: dto.recoveryKit };
+            await db.saveVault(vault);
+          }
+        } catch {
+          // offline — fall through to the local answer
+        }
+      }
+      if (!vault?.recoveryKit) return "This vault has no recovery kit — the paper can't help here.";
+      const dek = await openRecoveryKit(code, vault.recoveryKit);
+      if (!dek || !(await verifyDEK(dek, vault.verifier, VERIFIER_TEXT))) {
+        return "That code doesn't open this vault. Check the paper — dashes and case don't matter.";
+      }
+      const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+      const updated = { ...vault, ...fresh };
+      await db.saveVault(updated);
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch {
+          // this device is already recovered; the server lags until next sync
+        }
+      }
+      setRecoveryKitAt(updated.recoveryKit?.createdAt ?? null);
+      await finishUnlock(dek, vault.currency);
+      return null;
+    },
+    [finishUnlock]
+  );
+
+  // ---- social recovery ------------------------------------------------------
+  // Guardians who can jointly help recover a forgotten passphrase, without us
+  // or any single one of them ever holding the key. See @lantern/core/recovery.
+
+  // The identity keypair, unwrapped with the vault key. Ballast has generated
+  // one for every vault since day one (see db.ts) but never used it until now
+  // — it's what makes this account look-up-able as a guardian, and what lets
+  // it approve someone else's request.
+  const ensureIdentity = useCallback(async (): Promise<CryptoKeyPair | null> => {
+    if (identityRef.current) return identityRef.current;
+    const key = keyRef.current;
+    const vault = await db.getVault();
+    if (!key || !vault?.identityPublic || !vault?.identityPrivate) return null;
+    try {
+      identityRef.current = {
+        publicKey: await importPublicKeyB64(vault.identityPublic),
+        privateKey: await unwrapPrivateKey(key, vault.identityPrivate),
+      };
+      return identityRef.current;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const loadGuardianCircle = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      setGuardianCircle(await api.fetchCircle(token));
+    } catch {
+      setGuardianCircle(null); // none configured (404), or offline
+    }
+  }, []);
+
+  // Configure (or rotate) K-of-N guardians. Each guardian's codeword must have
+  // been told to them OUT LOUD, never typed anywhere but here. Rotating
+  // cancels any recovery request already in flight (its shares wrap the OLD
+  // recovery key). Returns an error message, or null on success.
+  const setupGuardians = useCallback(
+    async (guardians: { email: string; codeword: string }[], k: number, delayMs: number): Promise<string | null> => {
+      const token = tokenRef.current;
+      const dek = keyRef.current;
+      if (!token || !dek) return "Unlock the vault first.";
+      if (k < 2 || k > guardians.length) return "Pick at least 2, and no more than the number of guardians.";
+      try {
+        const resolved = await Promise.all(
+          guardians.map(async (g) => {
+            const em = g.email.trim().toLowerCase();
+            const { identityPublicKey } = await api.fetchKeys(token, em);
+            if (!identityPublicKey) throw new Error(`${em} doesn't have an account yet.`);
+            return { userId: em, identityPublicKey, codeword: g.codeword };
+          })
+        );
+        const circle = await createRecoveryCircle(dek, resolved, { k, n: resolved.length, delayMs });
+        const entries: GuardianEntry[] = circle.shares.map((s) => ({
+          email: s.userId,
+          shareIndex: s.shareIndex,
+          ephemeralPub: s.ephemeralPub,
+          wrapped: s.wrapped,
+          codewordSalt: s.codewordSalt,
+          codewordIterations: s.codewordIterations,
+        }));
+        await api.setCircle(token, k, resolved.length, delayMs, circle.recoveryWrappedDEK, entries);
+        await loadGuardianCircle();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't set up guardians.";
+      }
+    },
+    [loadGuardianCircle]
+  );
+
+  const refreshRecoveryStatus = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { request } = await api.fetchRecoveryStatus(token);
+      setRecoveryStatus(request);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  const cancelPendingRecovery = useCallback(async (): Promise<string | null> => {
+    const token = tokenRef.current;
+    const requestId = recoveryStatus?.requestId;
+    if (!token || !requestId) return "No pending request.";
+    try {
+      await api.cancelRecoveryRequest(token, requestId);
+      await refreshRecoveryStatus();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, [recoveryStatus, refreshRecoveryStatus]);
+
+  const refreshPendingGuardianRequests = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    try {
+      const { requests } = await api.fetchPendingForMe(token);
+      setPendingGuardianRequests(requests);
+    } catch {
+      // offline / transient
+    }
+  }, []);
+
+  // Help a friend: unwrap my share (needs my identity key AND the codeword
+  // they told me out loud), re-wrap it to their device, submit.
+  const approveGuardianRequest = useCallback(
+    async (requestId: string, codeword: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const entry = pendingGuardianRequests.find((r) => r.requestId === requestId);
+      if (!token || !entry) return "That request isn't open anymore.";
+      const kp = await ensureIdentity();
+      if (!kp) return "Unlock the vault first.";
+      try {
+        const wrappedShareForRequester = await approveAsGuardian(kp.privateKey, entry.myShare, codeword, entry.sessionPub);
+        await api.approveRecovery(token, requestId, wrappedShareForRequester);
+        await refreshPendingGuardianRequests();
+        return null;
+      } catch {
+        return "That codeword isn't right.";
+      }
+    },
+    [pendingGuardianRequests, refreshPendingGuardianRequests, ensureIdentity]
+  );
+
+  // Start a request: a fresh throwaway session keypair, saved locally in the
+  // clear (this device only — see db.ts's RecoverySession), then ask the
+  // server to open the request so guardians can see it. Sign in first with the
+  // existing connectSignIn (safe to call with a local vault already present).
+  const startRecoveryRequest = useCallback(async (): Promise<
+    { requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string
+  > => {
+    const token = tokenRef.current;
+    if (!token) return "Sign in to your account first.";
+    try {
+      const session = await generateIdentityKeypair();
+      const publicKeyB64 = await exportPublicKeyB64(session.publicKey);
+      const privateKeyPkcs8B64 = await exportPrivateKeyB64(session.privateKey);
+      const result = await api.startRequest(token, publicKeyB64);
+      await db.saveRecoverySession({ id: "session", requestId: result.requestId, publicKeyB64, privateKeyPkcs8B64 });
+      return result;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't start recovery.";
+    }
+  }, []);
+
+  const pollRecoveryRequest = useCallback(async (requestId: string) => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    try {
+      return await api.fetchRecoveryRequest(token, requestId);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const cancelRecoveryRequest = useCallback(async (requestId: string): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return "Not signed in.";
+    try {
+      await api.cancelRecoveryRequest(token, requestId);
+      await db.clearRecoverySession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't cancel it.";
+    }
+  }, []);
+
+  // Once the delay window has cleared server-side: reconstruct the DEK from
+  // the approved shares, set a fresh passphrase from it, unlock.
+  const finishRecoveryRequest = useCallback(
+    async (requestId: string, newPassphrase: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Not signed in.";
+      if (newPassphrase.length < 8) return "Use at least 8 characters for the new passphrase.";
+      try {
+        const poll = await api.fetchRecoveryRequest(token, requestId);
+        if (!poll.recoveryWrappedDEK || !poll.approvalShares) {
+          return "Not ready yet — the delay window hasn't cleared.";
+        }
+        const session = await db.getRecoverySession();
+        if (!session || session.requestId !== requestId) {
+          return "This recovery attempt was started on a different device — finish it there.";
+        }
+        const sessionPriv = await importPrivateKeyB64(session.privateKeyPkcs8B64);
+        const dek = await reconstructDEK(sessionPriv, poll.approvalShares, poll.k, poll.recoveryWrappedDEK);
+
+        const vault = await db.getVault();
+        if (!vault) return "No vault on this device.";
+        const fresh = await setPassphraseFromDEK(dek, newPassphrase, VERIFIER_TEXT);
+        const updated = { ...vault, ...fresh };
+        await db.saveVault(updated);
+        try {
+          await api.updateVault(token, {
+            salt: updated.salt, verifier: updated.verifier,
+            iterations: updated.iterations, wrappedDEK: updated.wrappedDEK,
+          });
+        } catch {
+          // this device is already recovered; the server just lags until next sync
+        }
+
+        await finishUnlock(dek, vault.currency);
+
+        await api.completeRecoveryRequest(token, requestId).catch(() => {});
+        await db.clearRecoverySession();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't finish recovery — the shares didn't reconstruct your key.";
+      }
+    },
+    [finishUnlock]
   );
 
   // ---- writes -------------------------------------------------------------
@@ -682,25 +1098,9 @@ export function useLedger(): Ledger {
       setBusy(true);
       setError(null);
       try {
-        let receiptId: string | undefined;
-
-        // The photo. Downscaled, re-encoded, encrypted, stored. It never touches
-        // the network — there is no code path from here to a server, and the CSP
-        // would refuse one if there were.
-        if (receipt) {
-          const { bytes, type } = await compressImage(receipt);
-          const sealed = await encryptBytes(key, bytes);
-          receiptId = uid();
-          await db.putMedia({
-            id: receiptId,
-            type,
-            createdAt: Date.now(),
-            iv: sealed.iv,
-            data: sealed.data,
-            deleted: false,
-            dirty: true,
-          });
-        }
+        // Never touches the network — there is no code path from here to a
+        // server, and the CSP would refuse one if there were.
+        const receiptId = receipt ? await storeReceiptMedia(key, receipt) : undefined;
 
         const full: TransactionContent = { ...content, receiptId };
         const id = uid();
@@ -741,6 +1141,116 @@ export function useLedger(): Ledger {
     [memory, scheduleSync]
   );
 
+  const updateTransaction = useCallback(
+    async (id: string, content: TransactionContent, at: number, receipt?: File | null) => {
+      const key = keyRef.current;
+      if (!key) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const existing = (await db.allStoredTransactions()).find((t) => t.id === id);
+        if (!existing) throw new Error("Couldn't find that expense.");
+        const prior = await openJSON<TransactionContent>(key, existing.content);
+
+        // Tri-state: undefined keeps the current receipt, null detaches it,
+        // a File replaces it. Replacing or removing always cleans up the old
+        // one — a stale photo of last year's lunch is not "kept for safety",
+        // it's an orphan.
+        let receiptId = prior.receiptId;
+        if (receipt === null) {
+          if (prior.receiptId) await db.deleteMedia(prior.receiptId);
+          receiptId = undefined;
+        } else if (receipt) {
+          if (prior.receiptId) await db.deleteMedia(prior.receiptId);
+          receiptId = await storeReceiptMedia(key, receipt);
+        }
+
+        const full: TransactionContent = { ...content, receiptId };
+
+        setTransactions((prev) => prev.map((t) => (t.id === id ? { ...full, id, at } : t)));
+
+        await db.putStoredTransaction({
+          ...existing,
+          at,
+          updatedAt: Date.now(),
+          dirty: true,
+          content: await sealJSON(key, full),
+        });
+
+        if (content.merchant.trim()) {
+          const next = remember(content.merchant, content.category, memory);
+          setMemory(next);
+          await db.saveStoredMemory({
+            id: "memory",
+            updatedAt: Date.now(),
+            dirty: true,
+            content: await sealJSON(key, next),
+          });
+        }
+        scheduleSync();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't save that.");
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [memory, scheduleSync]
+  );
+
+  // ⚠️ FROZEN PARAMETER, like Hearth's ID_INFO: import ids derive from this
+  // string. Change it and re-importing an old file duplicates every row instead
+  // of skipping it. Pinned by a golden vector in import.test.ts.
+  const IMPORT_ID_INFO = "ballast-import-id-v1";
+
+  const importTransactions = useCallback(
+    async (rows: Array<{ content: TransactionContent; at: number; natural: string }>) => {
+      const key = keyRef.current;
+      if (!key) return { added: 0, skipped: 0 };
+      setBusy(true);
+      setError(null);
+      try {
+        const tag = await tagger(key, IMPORT_ID_INFO);
+        // Everything ever stored, tombstones included: a row the user deleted
+        // stays deleted, no matter how many times the file is re-imported.
+        const existing = new Set((await db.allStoredTransactions()).map((t) => t.id));
+        const fresh: Transaction[] = [];
+        for (const row of rows) {
+          const id = await tag(row.natural);
+          if (existing.has(id)) continue;
+          existing.add(id); // guards against dup naturals within one call
+          fresh.push({ ...row.content, id, at: row.at });
+        }
+
+        setTransactions((prev) => [...prev, ...fresh]);
+        const now = Date.now();
+        for (const t of fresh) {
+          const { id, at, ...content } = t;
+          await db.putStoredTransaction({
+            id,
+            at,
+            createdAt: now,
+            updatedAt: now,
+            deleted: false,
+            dirty: true,
+            content: await sealJSON(key, content),
+          });
+        }
+        // Imports deliberately do NOT teach the categoriser — only a category
+        // the user confirms by hand is a correction. Bulk-learning hundreds of
+        // guessed categories would drown what they actually taught it.
+        if (fresh.length > 0) scheduleSync();
+        return { added: fresh.length, skipped: rows.length - fresh.length };
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't import that file.");
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [scheduleSync]
+  );
+
   const removeTransaction = useCallback(async (id: string) => {
     const target = (await db.allStoredTransactions()).find((t) => t.id === id);
     setTransactions((prev) => prev.filter((t) => t.id !== id));
@@ -758,18 +1268,44 @@ export function useLedger(): Ledger {
     scheduleSync();
   }, [scheduleSync]);
 
-  const loadReceipt = useCallback(async (mediaId: string): Promise<string | null> => {
-    const key = keyRef.current;
-    if (!key) return null;
-    const m = await db.getMedia(mediaId);
-    if (!m) return null;
-    try {
-      const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
-      return dataUrl(bytes, m.type);
-    } catch {
-      return null;
-    }
-  }, []);
+  // Mark (or, passing undefined, un-mark) a banked HSA expense as reimbursed.
+  // Its own action, separate from the full edit form — flipping one fact
+  // shouldn't require opening the whole sheet.
+  const markReimbursed = useCallback(
+    async (id: string, reimbursedAt: number | undefined) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const existing = (await db.allStoredTransactions()).find((t) => t.id === id);
+      if (!existing) return;
+      const prior = await openJSON<TransactionContent>(key, existing.content);
+      const full: TransactionContent = { ...prior, reimbursedAt };
+      setTransactions((prev) => prev.map((t) => (t.id === id ? { ...full, id, at: t.at } : t)));
+      await db.putStoredTransaction({
+        ...existing,
+        updatedAt: Date.now(),
+        dirty: true,
+        content: await sealJSON(key, full),
+      });
+      scheduleSync();
+    },
+    [scheduleSync]
+  );
+
+  const loadReceipt = useCallback(
+    async (mediaId: string): Promise<{ dataUrl: string; type: string } | null> => {
+      const key = keyRef.current;
+      if (!key) return null;
+      const m = await db.getMedia(mediaId);
+      if (!m) return null;
+      try {
+        const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
+        return { dataUrl: dataUrl(bytes, m.type), type: m.type };
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
 
   const suggest = useCallback(
     (merchant: string): Suggestion | null => suggestCategory(merchant, memory),
@@ -838,7 +1374,15 @@ export function useLedger(): Ledger {
     disconnect,
     deleteAccount,
     changePassphrase,
+    recoveryKitAt,
+    createRecoveryKit,
+    removeRecoveryKit,
+    recoverWithKit,
     syncNow: runSync,
+    guardianCircle, loadGuardianCircle, setupGuardians,
+    recoveryStatus, refreshRecoveryStatus, cancelPendingRecovery,
+    pendingGuardianRequests, refreshPendingGuardianRequests, approveGuardianRequest,
+    startRecoveryRequest, pollRecoveryRequest, cancelRecoveryRequest, finishRecoveryRequest,
     setup,
     unlock,
     unlockWithBiometric,
@@ -852,7 +1396,10 @@ export function useLedger(): Ledger {
     addGoal,
     removeGoal,
     addTransaction,
+    updateTransaction,
+    importTransactions,
     removeTransaction,
+    markReimbursed,
     loadReceipt,
     suggest,
   };

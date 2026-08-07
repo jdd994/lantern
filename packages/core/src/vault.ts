@@ -145,3 +145,23 @@ export async function rewrapVault(
     iterations,
   };
 }
+
+// Set a brand-new passphrase from an already-known DEK — no current-passphrase
+// check, unlike rewrapVault. This is what social recovery calls once it has
+// reconstructed the DEK via the guardian circle (see @lantern/core/recovery)
+// instead of via a passphrase; there is no "current passphrase" to confirm.
+export async function setPassphraseFromDEK(
+  dek: CryptoKey,
+  next: string,
+  verifierText: string,
+  iterations: number = PBKDF2_ITERATIONS
+): Promise<{ salt: number[]; verifier: CipherBlob; wrappedDEK: CipherBlob; iterations: number }> {
+  const salt = newSalt();
+  const kek = await deriveKeyFromSalt(next, salt, iterations);
+  return {
+    salt,
+    verifier: await makeVerifier(dek, verifierText),
+    wrappedDEK: await wrapVaultKey(kek, dek),
+    iterations,
+  };
+}

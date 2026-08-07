@@ -53,3 +53,193 @@
 .l-theme-dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; }
 .l-theme-name { font-weight: 650; font-size: 0.92rem; }
 .l-theme-desc { font-size: 0.73rem; opacity: 0.75; line-height: 1.35; }
+
+/* ---- trust tier badge ------------------------------------------------------
+   A quiet pill: colored dot for the rung, the app's own wording beside it.
+   Dot colors read app tokens (--above / --brass / --below) with calm fallbacks. */
+.l-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  border: 1px solid var(--line, #333);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.l-tier-dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--l-tier-color, currentColor); }
+.l-tier-0 { --l-tier-color: var(--above, #8fbf9f); }
+.l-tier-1 { --l-tier-color: var(--brass, var(--accent, #c9a961)); }
+.l-tier-2 { --l-tier-color: var(--ink-soft, #9a9a9a); }
+.l-tier-3 { --l-tier-color: var(--below, #cd8670); }
+
+/* ---- trade-off card --------------------------------------------------------
+   The trade, stated inline at the moment of choosing — never a popup, never
+   fine print. Left border carries the emphasis, like Aura's trade box and
+   Ballast's disclosure both did on their own. */
+.l-trade {
+  padding: 13px 15px;
+  border-radius: var(--radius, 12px);
+  border: 1px solid var(--line, #333);
+  border-left: 2px solid var(--glow, var(--accent, #c9a961));
+  background: var(--bg-raised, var(--surface, rgba(128, 128, 128, 0.07)));
+  margin: 0 0 16px;
+}
+.l-trade-head { margin-bottom: 9px; }
+.l-trade-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft, #bbb);
+}
+.l-trade-body strong { color: var(--ink, #eaeaea); font-weight: 600; }
+.l-trade-sec { margin-top: 11px; }
+.l-trade-sechead {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  margin-bottom: 5px;
+}
+.l-trade-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.l-trade-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #333);
+  background: var(--surface, transparent);
+  font-size: 12.5px;
+  color: var(--ink-soft, #bbb);
+}
+.l-trade-refusal {
+  margin: 0 0 3px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+}
+/* The deliberate tick for heavy choices: one honest sentence, roomy enough to
+   be a real act, small enough to stay calm. */
+.l-trade-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink, #eaeaea);
+  cursor: pointer;
+}
+.l-trade-confirm input { margin-top: 3px; accent-color: var(--accent, #c9a961); }
+
+/* ---- capability ledger -----------------------------------------------------
+   The standing record: everything you said yes to, its cost, and the undo —
+   right there. States each fact once, quietly; never a nag. */
+.l-ledger { list-style: none; margin: 0; padding: 0; }
+.l-ledger-row { padding: 10px 0; border-top: 1px solid var(--line, #333); }
+.l-ledger-row:first-child { border-top: none; padding-top: 2px; }
+.l-ledger-main { display: flex; align-items: center; gap: 8px; }
+.l-ledger-label { font-weight: 600; color: var(--ink, #eaeaea); font-size: 14px; }
+.l-ledger-undo {
+  margin-left: auto;
+  flex: none;
+  font-size: 12.5px;
+  color: var(--ink-soft, #bbb);
+  background: transparent;
+  border: 1px solid var(--line, #333);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.l-ledger-undo:hover { color: var(--ink, #eaeaea); border-color: var(--ink-faint, #777); }
+.l-ledger-discloses {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+}
+.l-ledger-meta { margin: 3px 0 0; font-size: 12px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }
+.l-ledger-empty { font-size: 13px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); }
+
+/* ---- update toast ----------------------------------------------------------
+   The quiet "a newer build is waiting" note (vite-pwa prompt mode). Fixed low
+   center, above the safe area; app tokens keep it native in every sibling. */
+.l-update {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.7rem 0.6rem 1rem;
+  border-radius: 999px;
+  background: var(--surface, #1b1b1b);
+  color: var(--ink, #eaeaea);
+  border: 1px solid var(--line, #333);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+  z-index: 300;
+  max-width: min(92vw, 26rem);
+  animation: l-update-rise 0.25s ease;
+}
+@keyframes l-update-rise {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.l-update-text { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l-update-refresh {
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: #1a1206;
+  background: var(--accent, #c9a961);
+  border: none;
+  border-radius: 999px;
+  padding: 0.42rem 0.9rem;
+  cursor: pointer;
+  flex: none;
+}
+.l-update-dismiss {
+  font: inherit;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--line, #333);
+  background: none;
+  color: var(--ink, #eaeaea);
+  opacity: 0.7;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.l-update-dismiss:hover { opacity: 1; }
+
+/* ---- InstallSheet — "keep it close", said for everyone -------------------- */
+.l-install-title { margin: 0 0 14px; font-size: 18px; font-weight: 500; color: var(--ink, #eaeaea); }
+.l-install-lede { font-size: 14px; line-height: 1.6; color: var(--ink-soft, #bbb); margin: 0 0 16px; }
+.l-install-section { margin-bottom: 18px; }
+.l-install-head { font-size: 13px; font-weight: 600; color: var(--ink-soft, #bbb); margin: 0 0 8px; letter-spacing: 0.02em; }
+.l-steps { margin: 0 0 6px; padding-left: 20px; }
+.l-steps li { font-size: 14px; line-height: 1.6; color: var(--ink-soft, #bbb); margin-bottom: 8px; }
+.l-steps strong { color: var(--ink, #eaeaea); font-weight: 600; }
+.l-step-icon { vertical-align: -2px; color: var(--accent, var(--ink, #eaeaea)); margin: 0 2px; }
+.l-install-more summary { font-size: 13px; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); cursor: pointer; margin-bottom: 8px; }
+.l-install-more summary:hover { color: var(--ink, #eaeaea); }
+.l-install-now {
+  display: block; width: 100%; margin: 0 0 18px; padding: 11px 15px;
+  border-radius: 12px; border: 1px solid var(--accent, #888);
+  background: var(--accent, #888); color: var(--bg, #111);
+  font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.l-install-hint { font-size: 12.5px; line-height: 1.55; color: var(--ink-faint, var(--ink-soft, #9a9a9a)); margin: 0 0 6px; }
+.l-install-hint strong { color: var(--ink-soft, #bbb); }
+.l-install-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.l-install-close {
+  padding: 9px 15px; border-radius: 12px; border: 1px solid transparent;
+  background: none; color: var(--ink-faint, var(--ink-soft, #9a9a9a));
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.l-install-close:hover { color: var(--ink, #eaeaea); }

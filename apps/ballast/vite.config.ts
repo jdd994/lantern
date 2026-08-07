@@ -7,7 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt": a new build waits until the person says Refresh (UpdateToast)
+      // instead of silently swapping under them.
+      registerType: "prompt",
       includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Ballast",
@@ -33,6 +35,22 @@ export default defineConfig({
         // are deliberately NOT cached: a stale balance shown as current is worse
         // than an honest "couldn't refresh".
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        // The OCR engine (~7MB used per device) must not ride the precache —
+        // installing Ballast should never force that download on someone who
+        // never scans a receipt. It is cached on first use instead, below.
+        globIgnores: ["ocr/**"],
+        runtimeCaching: [
+          {
+            // Same-origin only; the engine assets are immutable per deploy and
+            // scanning should work offline once it has worked online.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/ocr/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "ocr-engine",
+              expiration: { maxEntries: 8 },
+            },
+          },
+        ],
         navigateFallback: "index.html",
       },
       devOptions: { enabled: true },

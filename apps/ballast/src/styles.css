@@ -428,6 +428,20 @@ input.mono, input[inputmode="decimal"] {
 .disclosure .tier { margin-bottom: 9px; }
 .disclosure p { margin: 0; }
 
+/* The consent contract for connectors that hold a credential: what's taken and
+   what's refused, both stated up front. The refusals are half the point. */
+.disclosure-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.disclosure-list li { margin-bottom: 3px; }
+.disclosure-refuses-head {
+  margin-top: 10px !important;
+  color: var(--ink);
+  font-weight: 600;
+}
+.disclosure-refuses { color: var(--ink-faint); }
+
 /* ---------- goals ---------- */
 .goal {
   padding: 16px;
@@ -621,6 +635,25 @@ input.mono, input[inputmode="decimal"] {
 }
 .choice-main { flex: 1; }
 
+/* A small in-section filter — visually distinct from `.tabs` (that's
+   top-level nav) and from `.choices` (that's a vertical picker with
+   descriptions). Just two calm pill buttons. */
+.subfilter { display: flex; gap: 6px; margin-bottom: 18px; }
+.subfilter-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.subfilter-btn:hover { border-color: var(--ink-faint); color: var(--ink); }
+.subfilter-btn[aria-pressed="true"] {
+  border-color: var(--brass);
+  background: var(--brass-dim);
+  color: var(--ink);
+}
+
 /* ---------- tabs ---------- */
 .tabs {
   display: flex;
@@ -780,6 +813,27 @@ input.mono, input[inputmode="decimal"] {
 .receipt-preview img {
   max-width: 100%;
   max-height: 220px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+/* A PDF attachment has no image to preview — a plain, calm chip stands in
+   for it, same idiom as `.receipt-chip` but for the picker/edit surfaces
+   rather than the transaction row. */
+.receipt-pdf-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.receipt-pdf {
+  width: 100%;
+  height: 70vh;
   border-radius: var(--radius);
   border: 1px solid var(--line);
 }
@@ -1015,6 +1069,11 @@ input.mono, input[inputmode="decimal"] {
 }
 .support-note .tier { flex-shrink: 0; margin-top: 1px; }
 
+/* Sync sheet — section headings (Guardians, Passphrase, Help a friend). The
+   shared SyncSheet uses one class for all three; before it, two of them were
+   silently unstyled. */
+.pass-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; }
+
 /* Sync sheet — segmented toggle between "new account" and "sign in". */
 .seg {
   display: flex;
@@ -1073,3 +1132,241 @@ input.mono, input[inputmode="decimal"] {
 .set-section:last-of-type { margin-bottom: 0.8rem; }
 .set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
 .set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
+
+/* ---------- receipt line items ---------- */
+/* Rows read off a receipt, under review in AddExpense. Deliberately quieter
+   than the main fields: this is a draft the user is checking, not the record. */
+.items-block { margin-bottom: 18px; }
+.items-head .label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 7px; }
+.item-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.item-row .item-label { flex: 1; min-width: 0; }
+.item-row .item-amount {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.item-row .item-category { width: 130px; flex: none; }
+.item-row input, .item-row select { padding: 7px 9px; font-size: 13.5px; }
+
+/* The per-item HSA toggle. Three states, three treatments — "not eligible" is
+   a plain fact, not a problem, so it's muted rather than alarm-colored. */
+.item-hsa { font-size: 11px; letter-spacing: 0.03em; }
+.item-hsa-yes { color: var(--above); border-color: rgba(143, 191, 163, 0.35); }
+.item-hsa-no { color: var(--ink-faint); }
+
+/* "Mark reimbursed", once reimbursed — a calm confirmation, not a celebration. */
+.is-reimbursed { color: var(--above); }
+.items-block > .hint {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  margin-top: 7px;
+  line-height: 1.5;
+}
+
+/* Items on a saved transaction, folded away until asked for. */
+.txn-items { margin-top: 4px; }
+.txn-items summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  list-style: none;
+  width: fit-content;
+}
+.txn-items summary::before { content: "▸ "; }
+.txn-items[open] summary::before { content: "▾ "; }
+.txn-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  padding: 2px 0 2px 14px;
+}
+.txn-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txn-item-cat { color: var(--ink-faint); flex: none; }
+.txn-item-amount {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  flex: none;
+}
+
+/* ---------- statement import ---------- */
+.section-actions { display: flex; gap: 8px; align-items: center; }
+.import-drop { cursor: pointer; }
+.import-summary { font-size: 14px; color: var(--ink-soft); margin: 0 0 10px; }
+.import-issues {
+  margin: 0 0 12px;
+  padding: 10px 14px 10px 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.import-flip, .check-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.import-preview {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 4px 12px;
+  margin-bottom: 14px;
+}
+.import-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.import-row:last-of-type { border-bottom: none; }
+.import-date { color: var(--ink-faint); flex: none; width: 52px; }
+.import-merchant {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.import-cat { color: var(--ink-faint); flex: none; }
+.import-amount {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  flex: none;
+}
+.import-more { padding: 7px 0; font-size: 12.5px; color: var(--ink-faint); }
+.import-result { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
+
+.receipt-preview-actions { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+
+/* Honesty affordances on the items table. Calm on purpose: the flag is a
+   glance-worthy dot, not an alarm; the gap row is an offer, not a demand. */
+.item-flag {
+  color: var(--brass);
+  font-size: 9px;
+  flex: none;
+  cursor: help;
+}
+.item-row-gap .item-label { border-style: dashed; }
+.adds-up {
+  display: block;
+  font-size: 12.5px;
+  color: var(--above);
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- the scan assist ---------- */
+/* A camera sheet with one outline and one calm sentence. The terms it runs
+   under are in ScanCamera.tsx and public/_headers — on-device, discarded,
+   off means off. */
+.scan-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 10, 0.92);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scan-stage {
+  position: relative;
+  width: min(100vw, 560px);
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.scan-video {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
+}
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.scan-hint {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 21, 18, 0.85);
+  color: var(--ink);
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.scan-controls {
+  position: absolute;
+  bottom: max(26px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px;
+}
+.scan-shutter {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: 4px solid var(--ink);
+  background: rgba(226, 231, 226, 0.25);
+}
+.scan-shutter:disabled { opacity: 0.4; }
+.scan-spacer { width: 64px; }
+.scan-terms {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin: 0;
+  padding: 0 20px 4px;
+}
+.receipt-alt { display: block; margin: 4px auto 0; }
+
+/* ---- Recovery kit ---------------------------------------------------------
+   The printable page. On paper, everything but the kit sheet vanishes (the
+   visibility veil below); on screen it's an ordinary sheet. */
+.kit-lede { font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+.kit-code {
+  font-family: var(--mono); font-size: 20px; letter-spacing: 0.06em;
+  text-align: center; padding: 18px 12px; margin: 14px 0;
+  border: 1px dashed var(--line); border-radius: 10px;
+  user-select: all; overflow-wrap: anywhere;
+}
+.kit-steps { font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); padding-left: 20px; }
+.kit-steps li { margin-bottom: 8px; }
+.kit-fine { font-size: 12px; color: var(--ink-faint); line-height: 1.6; }
+@media print {
+  body * { visibility: hidden; }
+  .kit-sheet, .kit-sheet * { visibility: visible; }
+  .kit-sheet { position: absolute; inset: 0; border: none; max-height: none; box-shadow: none; }
+  .kit-sheet .kit-noprint { display: none; }
+  .kit-code { color: #000; border-color: #000; }
+}

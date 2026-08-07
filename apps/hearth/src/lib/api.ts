@@ -3,6 +3,7 @@
 // moves opaque ciphertext + non-secret metadata only — never the passphrase.
 import { createApiClient } from "@lantern/core/api";
 import { createSharingClient } from "@lantern/core/sharing-api";
+import { createRecoveryClient } from "@lantern/core/recovery-api";
 
 export { ApiError } from "@lantern/core/api";
 export type { VaultMetaDTO } from "@lantern/core/api";
@@ -11,7 +12,7 @@ export type { SyncRecord } from "@lantern/core/sync";
 const API_BASE = "https://hearth-server.jdd994.workers.dev";
 const client = createApiClient(API_BASE);
 
-export const { register, login, fetchVault, updateVault, deleteAccount, pushChanges, pullChanges } = client;
+export const { register, login, fetchVault, updateVault, updateRecoveryKit, deleteAccount, pushChanges, pullChanges } = client;
 
 // Sharing (shared kitchens) speaks the same protocol as its siblings.
 export type { SharedRecord, SharedStrandInfo, StrandMember } from "@lantern/core/sharing-api";
@@ -20,3 +21,14 @@ export const {
   createShared, inviteToStrand, sharedMembers, sharedMine,
   sharedPush, sharedPull, sharedLeave, sharedRemove,
 } = createSharingClient(client.req);
+
+// Social recovery speaks its own small protocol, same shared-wrapper pattern.
+export type {
+  GuardianEntry, RecoveryCircleInfo, RecoveryStatus, PendingForMe, RecoveryRequestPoll,
+} from "@lantern/core/recovery-api";
+export const {
+  setCircle, fetchCircle,
+  startRequest, fetchStatus: fetchRecoveryStatus, fetchRequest: fetchRecoveryRequest,
+  cancelRequest: cancelRecoveryRequest, completeRequest: completeRecoveryRequest,
+  fetchPendingForMe, approve: approveRecovery,
+} = createRecoveryClient(client.req);

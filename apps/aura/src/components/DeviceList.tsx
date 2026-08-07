@@ -1,34 +1,141 @@
 // DeviceList.tsx — your lights, with quick controls. On/off is always there;
 // brightness and color show only for devices that support them. Controls act
 // optimistically (the hook updates state first, then reaches the bulb).
+import { useState } from "react";
 import type { Device, LightState } from "../lib/connectors";
 import { hexToRgb, rgbToHex } from "../lib/color";
+
+// RoomDots — a collapsed room's whole state at a glance: one small dot per
+// light, lit with its actual color when it has one, a warm glow for a
+// kelvin-only bulb that's on, and dim when it's off. No numbers, no sliders —
+// just enough to see the room's mood without expanding it.
+export function RoomDots({
+  devices,
+  states,
+}: {
+  devices: Device[];
+  states: Record<string, LightState>;
+}) {
+  return (
+    <div className="room-dots">
+      {devices.map((d) => {
+        const st = states[d.id];
+        const color = !st?.on ? "var(--off)" : st.color ? `rgb(${st.color.r}, ${st.color.g}, ${st.color.b})` : "var(--glow)";
+        return <span className="room-dot" key={d.id} style={{ background: color }} title={d.name} />;
+      })}
+    </div>
+  );
+}
 
 export function DeviceList({
   devices,
   states,
   onSet,
+  onIdentify,
+  identifying,
+  onRename,
+  onSetBrightness,
 }: {
   devices: Device[];
   states: Record<string, LightState>;
   onSet: (id: string, patch: Partial<LightState>) => void;
+  // Optional — a room-scoped list may not want it, or a caller with no need
+  // for it can simply not pass it. When present: a quick blink so you can see
+  // which physical light this row actually is.
+  onIdentify?: (id: string) => void;
+  identifying?: string | null;
+  // Optional — your own name for this light, shown everywhere from here on.
+  // Never touches the brand's own name; an empty rename resets back to it.
+  onRename?: (id: string, name: string) => void;
+  // Optional — a master fader for this exact list of lights. Shown only when
+  // at least one is on and dimmable; scales them together, doesn't flatten them.
+  onSetBrightness?: (ids: string[], target: number) => void;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function commitRename(id: string, value: string) {
+    onRename?.(id, value);
+    setEditingId(null);
+  }
+
+  const dimmable = devices.filter((d) => d.canBrightness && states[d.id]?.on);
+  const avgBrightness = dimmable.length
+    ? Math.round(dimmable.reduce((sum, d) => sum + (states[d.id]?.brightness ?? 100), 0) / dimmable.length)
+    : 0;
+
   return (
     <div className="devices">
+      {onSetBrightness && dimmable.length > 1 && (
+        <div className="room-brightness">
+          <span className="label">Brightness</span>
+          <input
+            className="dim wide"
+            type="range"
+            min={1}
+            max={100}
+            value={avgBrightness}
+            aria-label="Overall brightness"
+            onChange={(e) => onSetBrightness(devices.map((d) => d.id), Number(e.target.value))}
+          />
+        </div>
+      )}
       {devices.map((d) => {
         const st = states[d.id] ?? { on: false };
+        const editing = editingId === d.id;
         return (
           <div className={"device" + (st.on ? " is-on" : "")} key={d.id}>
             <div className="device-head">
-              <span className="device-name">{d.name}</span>
-              <button
-                className="toggle"
-                role="switch"
-                aria-checked={st.on}
-                onClick={() => onSet(d.id, { on: !st.on })}
-              >
-                <span className="toggle-knob" />
-              </button>
+              {editing ? (
+                <input
+                  className="device-name-input"
+                  defaultValue={d.name}
+                  autoFocus
+                  aria-label={`Rename ${d.name}`}
+                  onBlur={(e) => commitRename(d.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditingId(null);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="device-name">{d.name}</span>
+              )}
+              <div className="device-head-actions">
+                {onRename && !editing && (
+                  <button
+                    type="button"
+                    className="identify-btn"
+                    aria-label={`Rename ${d.name}`}
+                    title="Rename this light"
+                    onClick={() => setEditingId(d.id)}
+                  >
+                    ✎
+                  </button>
+                )}
+                {onIdentify && (
+                  <button
+                    type="button"
+                    className="identify-btn"
+                    aria-label={`Identify ${d.name}`}
+                    title="Blink to see which light this is"
+                    disabled={identifying === d.id}
+                    onClick={() => onIdentify(d.id)}
+                  >
+                    ◎
+                  </button>
+                )}
+                <button
+                  className="toggle"
+                  role="switch"
+                  aria-checked={st.on}
+                  onClick={() => onSet(d.id, { on: !st.on })}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </div>
             </div>
 
             {(d.canBrightness || d.canColor || d.canColorTemp) && (

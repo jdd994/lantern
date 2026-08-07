@@ -206,6 +206,22 @@ export async function wrapPrivateKey(vaultKey: CryptoKey, priv: CryptoKey): Prom
   return { iv: b64(iv), data: b64(new Uint8Array(data)) };
 }
 
+// Plaintext export/import of an identity private key — no wrapping. Used only
+// for a THROWAWAY, single-purpose keypair meant to live unwrapped on one
+// device for a short time (e.g. social recovery's per-attempt session key,
+// see @lantern/core/recovery) — never for an account's real identity key,
+// which must always go through wrapPrivateKey/unwrapPrivateKey above.
+export async function exportPrivateKeyB64(priv: CryptoKey): Promise<string> {
+  return b64(new Uint8Array(await crypto.subtle.exportKey("pkcs8", priv)));
+}
+
+export async function importPrivateKeyB64(s: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("pkcs8", toBuf(fromB64(s)), { name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveKey",
+    "deriveBits",
+  ]);
+}
+
 export async function unwrapPrivateKey(vaultKey: CryptoKey, w: WrappedKey): Promise<CryptoKey> {
   const bytes = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: toBuf(fromB64(w.iv)) },

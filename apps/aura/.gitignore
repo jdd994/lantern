@@ -1,0 +1,4 @@
+# Vendored speech-to-text model + WASM runtime, staged here before an R2
+# upload — rebuilt from Hugging Face + node_modules by scripts/voice-assets.mjs.
+# See that file. Not part of the deployed app; the app fetches from R2 directly.
+.voice-cache/

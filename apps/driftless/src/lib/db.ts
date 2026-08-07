@@ -14,7 +14,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob } from "./crypto";
 
-export const DB_VERSION = 5;
+export const DB_VERSION = 7;
 
 export type VaultMeta = {
   id: "vault";
@@ -31,6 +31,9 @@ export type VaultMeta = {
   // passphrase) — those migrate on first unlock. Changing the passphrase re-wraps
   // this without re-encrypting any data. See crypto.ts wrapVaultKey.
   wrappedDEK?: CipherBlob;
+  // Paper recovery kit (@lantern/core/kit): DEK wrapped under a printed
+  // code's derived key. Rides with the envelope to the server.
+  recoveryKit?: { salt: number[]; wrapped: CipherBlob; createdAt: number };
 };
 
 export type StoredEntry = {
@@ -72,6 +75,11 @@ export type StoredStrand = {
   dirty: boolean;
 };
 
+// A light note about a single day (a title or a line of reflection), keyed by
+// dayKey — never a full Strand (STRANDS_PLAN.md §1). Same shape as StoredEntry
+// so it reconciles the same way; content encrypts { text }.
+export type StoredDayNote = StoredEntry;
+
 // An attached image, stored as encrypted raw bytes (local-first — not synced
 // yet; that needs object storage, see SYNC_PLAN.md). `dirty`/`deleted` exist for
 // when media sync lands.
@@ -85,6 +93,19 @@ export type StoredMedia = {
   dirty: boolean;
 };
 
+// A recovery attempt's throwaway session keypair — generated fresh per
+// attempt, lives here in the clear for its duration, and is what guardians'
+// approved shares get wrapped to (never the account's real identity key,
+// which is itself locked). Same risk tier as SyncState.token: plaintext-local,
+// device-scoped, useless alone. This is also why recovery only completes on
+// the SAME device it was started from — see @lantern/core/recovery.
+export type RecoverySession = {
+  id: "session";
+  requestId: string;
+  publicKeyB64: string;
+  privateKeyPkcs8B64: string;
+};
+
 interface DriftlessDB extends DBSchema {
   vault: { key: string; value: VaultMeta };
   entries: { key: string; value: StoredEntry; indexes: { byCreated: number } };
@@ -92,6 +113,8 @@ interface DriftlessDB extends DBSchema {
   device: { key: string; value: DeviceEnrollment };
   strands: { key: string; value: StoredStrand };
   media: { key: string; value: StoredMedia };
+  recoverySession: { key: string; value: RecoverySession };
+  dayNotes: { key: string; value: StoredDayNote };
 }
 
 let dbPromise: Promise<IDBPDatabase<DriftlessDB>> | null = null;
@@ -134,6 +157,14 @@ function db() {
         // v5: media (encrypted image bytes, local-first).
         if (oldVersion < 5) {
           database.createObjectStore("media", { keyPath: "id" });
+        }
+        // v6: social recovery's throwaway per-attempt session keypair.
+        if (oldVersion < 6) {
+          database.createObjectStore("recoverySession", { keyPath: "id" });
+        }
+        // v7: day notes (a light title/reflection per day, keyed by dayKey).
+        if (oldVersion < 7) {
+          database.createObjectStore("dayNotes", { keyPath: "id" });
         }
       },
     });
@@ -185,12 +216,27 @@ export async function getStoredStrand(id: string): Promise<StoredStrand | undefi
   return (await db()).get("strands", id);
 }
 
+export async function allStoredDayNotes(): Promise<StoredDayNote[]> {
+  return (await db()).getAll("dayNotes");
+}
+
+export async function putStoredDayNote(note: StoredDayNote): Promise<void> {
+  await (await db()).put("dayNotes", note);
+}
+
+export async function getStoredDayNote(id: string): Promise<StoredDayNote | undefined> {
+  return (await db()).get("dayNotes", id);
+}
+
 // Records needing upload (includes dirty tombstones).
 export async function dirtyEntries(): Promise<StoredEntry[]> {
   return (await allStoredEntries()).filter((e) => e.dirty);
 }
 export async function dirtyStrands(): Promise<StoredStrand[]> {
   return (await allStoredStrands()).filter((s) => s.dirty);
+}
+export async function dirtyDayNotes(): Promise<StoredDayNote[]> {
+  return (await allStoredDayNotes()).filter((n) => n.dirty);
 }
 
 // Clear the dirty flag after a successful push — but only if the record hasn't
@@ -206,6 +252,11 @@ export async function clearStrandDirty(id: string, updatedAt: number): Promise<v
   const s = await d.get("strands", id);
   if (s && s.dirty && s.updatedAt === updatedAt) await d.put("strands", { ...s, dirty: false });
 }
+export async function clearDayNoteDirty(id: string, updatedAt: number): Promise<void> {
+  const d = await db();
+  const n = await d.get("dayNotes", id);
+  if (n && n.dirty && n.updatedAt === updatedAt) await d.put("dayNotes", { ...n, dirty: false });
+}
 
 // Mark every local record dirty — used when connecting a NEW account, so the
 // whole journal uploads even if it was previously synced to a different one.
@@ -213,6 +264,7 @@ export async function markAllDirty(): Promise<void> {
   const d = await db();
   for (const e of await d.getAll("entries")) if (!e.dirty) await d.put("entries", { ...e, dirty: true });
   for (const s of await d.getAll("strands")) if (!s.dirty) await d.put("strands", { ...s, dirty: true });
+  for (const n of await d.getAll("dayNotes")) if (!n.dirty) await d.put("dayNotes", { ...n, dirty: true });
   for (const m of await d.getAll("media")) if (!m.dirty && !m.deleted) await d.put("media", { ...m, dirty: true });
 }
 
@@ -236,6 +288,18 @@ export async function clearMediaDirty(id: string): Promise<void> {
   if (m && m.dirty) await d.put("media", { ...m, dirty: false });
 }
 
+export async function getRecoverySession(): Promise<RecoverySession | undefined> {
+  return (await db()).get("recoverySession", "session");
+}
+
+export async function saveRecoverySession(session: RecoverySession): Promise<void> {
+  await (await db()).put("recoverySession", session);
+}
+
+export async function clearRecoverySession(): Promise<void> {
+  await (await db()).delete("recoverySession", "session");
+}
+
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {
   return (await db()).get("device", "device");
 }
@@ -254,14 +318,17 @@ export async function clearDevice(): Promise<void> {
 export async function importData(
   vault: VaultMeta,
   entries: StoredEntry[],
-  strands: StoredStrand[]
+  strands: StoredStrand[],
+  dayNotes: StoredDayNote[] = []
 ): Promise<void> {
   const d = await db();
-  const tx = d.transaction(["vault", "entries", "strands"], "readwrite");
+  const tx = d.transaction(["vault", "entries", "strands", "dayNotes"], "readwrite");
   await tx.objectStore("vault").put(vault);
   const entryStore = tx.objectStore("entries");
   for (const e of entries) await entryStore.put(e);
   const strandStore = tx.objectStore("strands");
   for (const s of strands) await strandStore.put(s);
+  const dayNoteStore = tx.objectStore("dayNotes");
+  for (const n of dayNotes) await dayNoteStore.put(n);
   await tx.done;
 }

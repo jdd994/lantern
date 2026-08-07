@@ -8,6 +8,8 @@ import {
 } from "@lantern/core/crypto";
 
 export * from "@lantern/core/crypto";
+// Social recovery's crypto needs no app-specific constant either.
+export * from "@lantern/core/recovery";
 
 // The per-app verifier token. Exported for @lantern/core/vault (setup / unlock /
 // change-passphrase). MUST stay "ballast-ok" forever, or existing vaults break.

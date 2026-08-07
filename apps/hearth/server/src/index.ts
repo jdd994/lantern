@@ -3,7 +3,7 @@
 import { createServer } from "@lantern/server";
 
 export default createServer({
-  kinds: ["foodLog", "metric", "goal", "recipe", "mealPlan", "pantryItem"],
+  kinds: ["foodLog", "metric", "goal", "recipe", "mealPlan", "pantryItem", "run"],
   service: "hearth-server",
   // Sharing: the /shared/* collections + the identity/key directory, from the
   // shared factory. This is what "plan meals with the people you feed" runs on —
@@ -11,4 +11,8 @@ export default createServer({
   // member's key wrapped to their own public key, and never a plaintext ingredient.
   // Tables: packages/server/schema.sharing.sql (applied to the hearth D1).
   sharing: true,
+  // /recovery/* — guardian-based social recovery. Requires schema.recovery.sql
+  // applied to this app's D1 (see packages/server/schema.recovery.sql).
+  recovery: true,
+  recoveryMinDelayMs: 24 * 3_600_000,
 });

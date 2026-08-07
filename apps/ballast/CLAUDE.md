@@ -12,7 +12,8 @@ port Driftless's proven code over inventing a second version of it.
 
 A financial wellbeing dashboard built around one job: **show you the truth about
 your money, calmly, and help you see whether you're getting where you want to
-go.** It is local-first and end-to-end encrypted. Sync is the main open chapter.
+go.** It is local-first, end-to-end encrypted, and synced across devices
+(Cloudflare Workers + D1, opaque ciphertext only).
 
 ## Purpose (the north star)
 
@@ -111,7 +112,9 @@ on their own trajectory.**
 - `src/lib/spend.ts` — **pure.** Spending windows, category totals, comparisons.
 - `src/lib/categorize.ts` — **pure.** The local learning categoriser.
 - `src/lib/sources/*` — connectors. Each declares its **trust tier**.
-- `src/lib/receipt.ts` — the OCR seam. Today's reader returns nothing.
+- `src/lib/receipt.ts` — the OCR seam. `ocr.ts` (on-device Tesseract, lazy-loaded,
+  every asset served from our origin — see `scripts/ocr-assets.mjs`) plugs into it;
+  `receiptparse.ts` is the **pure**, tested parser that turns OCR text into a draft.
 - `src/hooks/useLedger.ts` — the ONLY place state, IO, and the key meet.
 - `src/components/*` — presentational; data and callbacks in, nothing else.
 
@@ -125,7 +128,7 @@ disclosure buried in a policy.
 |---|---|---|
 | 0 | Manual entry, receipts, file import | **Nobody.** |
 | 1 | Public chain data, market prices | A provider learns *which* asset/address — never how much. |
-| 2 | Read-only API keys (brokerage/exchange) | The institution that already has your data. Nobody new. |
+| 2 | Read-only API keys (brokerage/exchange) — **Alpaca BUILT** | The institution that already has your data. Nobody new. |
 | 3 | Aggregator (Plaid/Teller/SimpleFIN) | **Every transaction, in the clear.** Not built. |
 
 Adding a `connect-src` host to `public/_headers` is a **security decision**, not a
@@ -149,9 +152,9 @@ user-aligned. And it must look exactly as alarming as it is.
    as *unpriced* — never folded into the total as zero. Understating someone's
    net worth while looking plausible is the most dangerous kind of wrong.
 5. **Authentication and encryption stay separate.** Same as Driftless invariant 4.
-   When sync lands, the account says *whose* ciphertext this is; the passphrase
-   *decrypts* it and never leaves the device. Never derive the key from the login
-   credential. A server compromise must yield only unreadable ciphertext.
+   The account says *whose* ciphertext this is; the passphrase *decrypts* it and
+   never leaves the device. Never derive the key from the login credential. A
+   server compromise must yield only unreadable ciphertext.
 6. **No third party sees a receipt photo.** Ever. See `receipt.ts`.
 
 ## Licence
@@ -180,19 +183,43 @@ npm run preview  # serve the built app
 
 1. **Spend tracking** — transactions, encrypted receipt photos, the local
    learning categoriser. (In progress.)
-2. **Sync.** Port Driftless's model wholesale: a tiny custom server (Cloudflare
-   Workers + D1) that stores opaque ciphertext; devices reconcile by
-   `updatedAt`. Records already carry `deleted` + `dirty`. Identity keys are
-   already in the vault.
-3. **Tier 2 connectors** — read-only brokerage/exchange API keys. Keys live
-   encrypted in the vault; the browser calls the institution directly.
-4. **Receipt OCR** — only when a good on-device model is cheap. The seam is
-   already in `receipt.ts`; swapping the reader changes one file and zero UI.
-   **Never** cloud OCR.
+2. **Sync — BUILT.** Ported Driftless's model: a tiny custom server (Cloudflare
+   Workers + D1, `server/`, factory in `@lantern/server`) that stores opaque
+   ciphertext; devices reconcile by `updatedAt` via `@lantern/core/sync`
+   (`src/lib/sync.ts`), wired end-to-end through `useLedger.ts`'s `syncNow`.
+   Deployed at ballast.gold.
+3. **Tier 2 connectors** — ✅ two built: **Alpaca** (`sources/alpaca.ts`) and
+   **Gemini** (`sources/gemini.ts`, re-probed + built 2026-08-04: HMAC-SHA384
+   signed notional-balances read, summed exactly, breakdown dropped). Keys
+   encrypted in the vault, browser → institution directly, consent sheet
+   states takes/refuses (the shared contract from `@lantern/core/connect`).
+   CORS probe matrix (2026-07-17, re-probe before building):
+   Kraken/Binance.US send no CORS; Bitstamp allows origin but not its auth
+   headers; Coinbase permits only OAuth Bearer and its token exchange wants a
+   client secret. Those would all force a balance-seeing server — that's a
+   different rung, not an implementation detail.
+4. **Receipt OCR** — ✅ built, on-device (Tesseract WASM behind the `receipt.ts`
+   seam), then field-hardened against real receipts (each one is a verbatim
+   fixture in `receiptparse.test.ts` — grow the parser BY fixtures, never by
+   guessing). The full loop now: live **scan assist** (`ScanCamera.tsx` +
+   pure `scanassist.ts`; camera granted under strict terms — see
+   `public/_headers`) → multi-pass OCR (default+Sauvola thresholding, two
+   resolutions; original camera bytes, never the storage re-encode) → parser
+   with **witness voting** (a receipt states its total several times; copies
+   vote, cash gets no vote) → honesty layer in the form (gap row for the
+   unaccounted remainder, "worth a glance" markers, "adds up ✓") → item-level
+   awareness ("What you're buying most" in Spending — facts, never verdicts).
+   The engine lazy-loads on first scan from `/ocr/` (vendored by
+   `scripts/ocr-assets.mjs`, gitignored, excluded from the PWA precache).
+   **Never** cloud OCR — that part is permanent. "Copy what it read" under a
+   scanned photo is how a quirky receipt becomes the next fixture.
 5. **Encrypt timestamps.** Today `at` is plaintext so sorting is cheap. Same
    explicit decision Driftless deferred. Revisit with sync.
-6. Niceties: CSV/OFX import (tier 0!), FX for multi-currency (explicit, dated,
-   visible conversions — never an invisible rate), net-worth chart.
+6. Niceties: CSV/OFX import — ✅ built (`lib/import.ts` pure + tested;
+   `ImportSheet`; re-import-safe ids via `@lantern/core/connect`, frozen info
+   string `ballast-import-id-v1` pinned by a golden vector). Still open: FX for
+   multi-currency (explicit, dated, visible conversions — never an invisible
+   rate), net-worth chart.
 
 ## Watch out for
 

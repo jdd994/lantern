@@ -1,0 +1,252 @@
+/* Grove — light under the canopy.
+ *
+ * The fourth sibling. Driftless is a lamplit room; Ballast is deep water at
+ * dusk; Hearth is firelight in a warm kitchen; Grove is the green-gold hush
+ * under old trees — moss and fern over dark loam, warm bark for the bonds.
+ * Wood joins the family's fire and water, and wood feeds fire.
+ *
+ * No counts, no completeness meters, nothing rendered as a score, ever.
+ * System-native fonts (so font-src 'self' stays absolute), a system serif for
+ * remembrances — words read like memory, not like UI — and inline SVG for
+ * icons (never tofu-prone glyphs).
+ */
+
+:root {
+  --bg:        #10150E;
+  --bg-raised: #161C13;
+  --surface:   #1C2417;
+  --surface-2: #232C1D;
+  --line:      #2C3722;
+  --line-soft: #1F281798;
+
+  --ink:       #E4E8D8;
+  --ink-soft:  #ADB79B;
+  --ink-faint: #6F7A61;
+
+  /* Fern — the accent. Moss-green light through leaves; growth, never a grade. */
+  --fern:      #96BE72;
+  --fern-dim:  rgba(150, 190, 114, 0.14);
+
+  /* Bark — the warm wood of trunks and bonds. */
+  --bark:      #C89A6B;
+  --clay:      #C98868; /* gentle trouble tone, never alarm-red */
+
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --maxw: 720px;
+  --radius: 12px;
+
+  /* Canonical accent alias for shared @lantern/ui components. */
+  --accent: var(--fern);
+}
+
+/* ---- Vibes (presets). Default "Canopy" is the base palette above; these
+   re-tint by overriding a few tokens. Starter set — deeper customization later. ---- */
+:root[data-mood="understory"] {
+  --bg:        #0B0F09;
+  --bg-raised: #10150C;
+  --surface:   #151C10;
+  --surface-2: #1B2414;
+  --line:      #242E1A;
+  --line-soft: #161D1098;
+}
+:root[data-mood="meadow"] {
+  --bg:        #EFEDDC;
+  --bg-raised: #F6F4E6;
+  --surface:   #FBFAF0;
+  --surface-2: #EAE7D2;
+  --line:      #D5D2B8;
+  --line-soft: #E2DFC9;
+  --ink:       #26301D;
+  --ink-soft:  #55603F;
+  --ink-faint: #838B6B;
+  --fern:      #5A7C3F;
+  --fern-dim:  rgba(90, 124, 63, 0.12);
+  --bark:      #9A7040;
+  --clay:      #B25B41;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  background:
+    radial-gradient(130% 80% at 50% -10%, rgba(150, 190, 114, 0.05), transparent 60%),
+    var(--bg);
+}
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 22px 120px; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+.brand { font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
+.brand span { color: var(--fern); }
+.top-actions { display: flex; gap: 8px; align-items: center; }
+
+/* buttons */
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+.btn { padding: 9px 15px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); font-size: 14px; transition: background .15s, color .15s, border-color .15s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn-primary { background: var(--fern); border-color: var(--fern); color: #131A0C; font-weight: 600; }
+.btn-primary:hover:not(:disabled) { background: #A6CB84; border-color: #A6CB84; }
+.btn-ghost { background: none; border-color: transparent; color: var(--ink-faint); }
+.btn-ghost:hover:not(:disabled) { color: var(--ink); background: var(--surface); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+:focus-visible { outline: 2px solid var(--fern); outline-offset: 2px; border-radius: 4px; }
+
+/* inputs */
+.field { display: block; margin-bottom: 18px; flex: 1; }
+.field > .label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 7px; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  width: 100%; padding: 11px 13px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--ink); font: inherit; font-size: 15px;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--fern); box-shadow: 0 0 0 3px var(--fern-dim); }
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+
+.check { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--ink-soft); margin: 4px 0 10px; cursor: pointer; }
+.check input { accent-color: var(--fern); width: 16px; height: 16px; }
+
+.hint { font-size: 12.5px; color: var(--ink-faint); line-height: 1.55; margin: 0 0 14px; }
+
+/* sections */
+.section { margin-bottom: 30px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.section-title { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-faint); margin: 0; font-weight: 600; }
+
+.empty { padding: 34px 24px; text-align: center; color: var(--ink-faint); font-size: 14px; line-height: 1.7; border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty p { margin: 0 0 18px; }
+.error { padding: 10px 13px; border-radius: var(--radius); background: rgba(201,136,104,.12); border: 1px solid rgba(201,136,104,.28); color: var(--clay); font-size: 13.5px; margin-bottom: 16px; }
+
+/* people rows — every name a doorway */
+.person-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 14px; margin-bottom: 7px; border-radius: var(--radius); border: 1px solid var(--line-soft); background: var(--bg-raised); text-align: left; transition: border-color .15s, background .15s; }
+.person-row:hover { border-color: var(--fern); background: var(--surface); }
+.person-name { font-size: 15px; color: var(--ink); }
+.person-span { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--ink-faint); white-space: nowrap; }
+
+/* person page */
+.back { margin-bottom: 14px; margin-left: -10px; }
+.person-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.person-actions { display: flex; gap: 7px; align-items: center; }
+.person-title { font-size: 26px; font-weight: 500; letter-spacing: -.01em; margin: 0 0 4px; }
+.person-life { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--ink-faint); margin: 0 0 26px; }
+.kin-none { font-size: 13px; color: var(--ink-faint); margin: 0; padding: 4px 2px; }
+
+/* the remembrance — the point of the whole app, so it reads like memory */
+.remembrance { font-family: var(--serif); font-size: 15.5px; line-height: 1.7; min-height: 130px; resize: vertical; }
+
+/* keepsakes — presented as themselves, never counted */
+.keepsake { padding: 13px 15px; border-radius: var(--radius); border: 1px solid var(--line-soft); border-left: 2px solid var(--bark); background: var(--bg-raised); margin-bottom: 9px; }
+.keepsake-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.keepsake-caption { font-size: 14.5px; color: var(--ink); }
+.keepsake-when { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+.keepsake-img { display: block; max-width: 100%; border-radius: 8px; margin-top: 10px; }
+.keepsake-text { font-family: var(--serif); font-size: 14px; line-height: 1.65; color: var(--ink-soft); margin: 10px 0 0; }
+.transcription { font-family: var(--serif); min-height: 90px; resize: vertical; }
+input[type=file] { width: 100%; font-size: 13.5px; color: var(--ink-soft); }
+input[type=file]::file-selector-button { font: inherit; margin-right: 10px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); cursor: pointer; }
+input[type=file]::file-selector-button:hover { background: var(--surface-2); color: var(--ink); }
+
+/* the tree — the hourglass chart */
+.tree-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.tree-head .back { margin: 0 0 0 -10px; }
+.tree-title { flex: 1; font-size: 18px; font-weight: 500; margin: 0; letter-spacing: -.01em; }
+.tree-scroll { overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg-raised); margin-top: 12px; padding: 8px 0; }
+.tree-vine { stroke: var(--line); stroke-width: 1.5; }
+.tree-vine-partner { stroke: var(--bark); stroke-dasharray: 3 4; }
+.tnode { cursor: pointer; }
+.tnode rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; transition: stroke .15s; }
+.tnode:hover rect { stroke: var(--fern); }
+.tnode:focus-visible { outline: none; }
+.tnode:focus-visible rect { stroke: var(--fern); stroke-width: 2; }
+.tnode-focus rect { fill: var(--fern-dim); stroke: var(--fern); }
+.tnode-name { fill: var(--ink); font-size: 13px; }
+.tnode-life { fill: var(--ink-faint); font-size: 10.5px; font-family: var(--mono); }
+
+/* gate (welcome / lock) */
+.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 26px; }
+.gate-card { width: 100%; max-width: 440px; }
+.gate-brand { font-size: 15px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin: 0 0 26px; }
+.gate-brand span { color: var(--fern); }
+.gate h2 { font-size: 22px; font-weight: 500; margin: 0 0 12px; letter-spacing: -.01em; }
+.gate p { font-size: 14.5px; line-height: 1.65; color: var(--ink-soft); margin: 0 0 18px; }
+.trade { padding: 15px 17px; border-radius: var(--radius); border: 1px solid var(--line); border-left: 2px solid var(--fern); background: var(--bg-raised); font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 22px; }
+.trade strong { color: var(--ink); font-weight: 600; }
+
+/* sheets (the card itself comes from @lantern/ui; Sync brings its own modal
+   shell, same classes as the siblings) */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(6, 9, 5, .72); display: flex; align-items: center; justify-content: center; padding: 22px; z-index: 50; }
+.sheet { width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; padding: 24px; border-radius: 16px; border: 1px solid var(--line); background: var(--bg-raised); }
+.sheet h3 { margin: 0 0 16px; font-size: 18px; font-weight: 500; }
+.sheet-actions { display: flex; gap: 9px; justify-content: flex-end; margin-top: 20px; }
+.row { display: flex; gap: 10px; }
+
+/* segmented toggle (new account / sign in) */
+.seg { display: flex; gap: 4px; padding: 3px; margin: 14px 0 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.seg-btn { flex: 1; padding: 7px 10px; border: none; border-radius: 6px; background: none; color: var(--ink-soft); font-size: 13px; cursor: pointer; }
+.seg-btn[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+
+.btn-danger { color: var(--clay); border-color: transparent; }
+.btn-danger:hover:not(:disabled) { background: rgba(201,136,104,.12); }
+.pass-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; }
+.gate-alt { margin-top: 16px; text-align: center; font-size: 13px; color: var(--ink-faint); }
+
+/* family members */
+.member-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.member-row:last-child { border-bottom: none; }
+.member-email { color: var(--ink); }
+.member-role { font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
+
+/* the invite link — visible to copy by hand even when the clipboard is blocked */
+.invite-link { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; overflow-wrap: anywhere; user-select: all; }
+
+/* whose hand last touched a record — a byline, never a score */
+.byline { font-style: italic; color: var(--ink-faint); }
+
+.linklike { border: none; background: none; padding: 0; font: inherit; color: var(--fern); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.linklike:hover { color: var(--ink); }
+
+/* Removing a person — understated, below the everyday controls, gated by a confirm. */
+.danger-zone { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.linklike.danger { color: var(--clay); font-size: 12.5px; text-decoration: none; }
+.linklike.danger:hover { color: var(--ink); text-decoration: underline; }
+
+/* settings sheet sections */
+.set-section { margin-bottom: 1.4rem; }
+.set-section:last-of-type { margin-bottom: 0.8rem; }
+.set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
+.set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
+
+/* ---- Recovery kit ---------------------------------------------------------
+   The printable page. On paper, everything but the kit sheet vanishes (the
+   visibility veil below); on screen it's an ordinary sheet. */
+.kit-lede { font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+.kit-code {
+  font-family: var(--mono); font-size: 20px; letter-spacing: 0.06em;
+  text-align: center; padding: 18px 12px; margin: 14px 0;
+  border: 1px dashed var(--line); border-radius: 10px;
+  user-select: all; overflow-wrap: anywhere;
+}
+.kit-steps { font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); padding-left: 20px; }
+.kit-steps li { margin-bottom: 8px; }
+.kit-fine { font-size: 12px; color: var(--ink-faint); line-height: 1.6; }
+@media print {
+  body * { visibility: hidden; }
+  .kit-sheet, .kit-sheet * { visibility: visible; }
+  .kit-sheet { position: absolute; inset: 0; border: none; max-height: none; box-shadow: none; }
+  .kit-sheet .kit-noprint { display: none; }
+  .kit-code { color: #000; border-color: #000; }
+}

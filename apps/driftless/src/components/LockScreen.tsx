@@ -1,8 +1,12 @@
 // LockScreen.tsx
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { parseBackup, type Backup } from "../lib/backup";
 import { Welcome } from "./Welcome";
 import { IosSetupNote } from "./IosSetupNote";
+import { RecoveryFlow } from "./RecoveryFlow";
+import { RecoverWithCode } from "./RecoveryKit";
+import type { RecoveryCircleInfo, RecoveryRequestPoll } from "../lib/api";
 
 type Props = {
   mode: "needs-setup" | "locked";
@@ -15,9 +19,126 @@ type Props = {
   onBiometric: () => Promise<boolean>;
   onRestore: (backup: Backup) => Promise<void>;
   onSignIn: (email: string, password: string) => Promise<string | null>;
+  // QR device linking — see AccountSection in Settings.tsx for the other half
+  // (an already-signed-in device scanning this screen's code).
+  onStartLink: () => Promise<{ qr: string } | { error: string }>;
+  onPollLink: () => Promise<"pending" | "expired" | "cancelled" | "linked" | string>;
+  // Social recovery — "I forgot my passphrase." See RecoveryFlow.tsx.
+  account: string | null;
+  guardianCircle: RecoveryCircleInfo | null;
+  onRecoverySignIn: (email: string, password: string) => Promise<string | null>;
+  onLoadGuardianCircle: () => Promise<void>;
+  onStartRecovery: () => Promise<{ requestId: string; k: number; n: number; delayMs: number; guardianEmails: string[] } | string>;
+  onPollRecovery: (requestId: string) => Promise<RecoveryRequestPoll | null>;
+  onCancelRecovery: (requestId: string) => Promise<string | null>;
+  onFinishRecovery: (requestId: string, newPassphrase: string) => Promise<string | null>;
+  onRecoverWithKit: (code: string, newPassphrase: string) => Promise<string | null>;
 };
 
-export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, onRestore, onSignIn }: Props) {
+// New, unset-up device: show a throwaway pairing code as a QR and poll until
+// an already-signed-in device scans it and hands the vault over. No
+// passphrase, no email/password — see @lantern/core/pairing for why that's
+// an intentional tradeoff.
+function LinkNewDevice({
+  onStartLink,
+  onPollLink,
+  onBack,
+}: Pick<Props, "onStartLink" | "onPollLink"> & { onBack: () => void }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<"starting" | "waiting" | "expired" | "cancelled">("starting");
+  const pollBusy = useRef(false);
+
+  const begin = useCallback(async () => {
+    setError(null);
+    setQrDataUrl(null);
+    setState("starting");
+    const res = await onStartLink();
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    setQrDataUrl(await QRCode.toDataURL(res.qr, { margin: 1, width: 240 }));
+    setState("waiting");
+  }, [onStartLink]);
+
+  useEffect(() => {
+    void begin();
+    // Only ever run once per mount — `begin` re-runs itself via the retry buttons.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (state !== "waiting") return;
+    const id = window.setInterval(async () => {
+      if (pollBusy.current) return;
+      pollBusy.current = true;
+      const res = await onPollLink();
+      pollBusy.current = false;
+      if (res === "pending" || res === "linked") return; // "linked": the app opens itself, this screen just unmounts
+      if (res === "expired" || res === "cancelled") {
+        setState(res);
+        return;
+      }
+      setError(res);
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [state, onPollLink]);
+
+  return (
+    <div className="lock-card">
+      <div className="brand">
+        Driftless<span className="dot">.</span>
+      </div>
+      <p className="lock-lead">
+        Open Driftless on your other device, go to <b>Settings → Link a new device</b>, and scan
+        this code.
+      </p>
+      {error && <p className="lock-error">{error}</p>}
+      {state === "starting" && !error && <p className="account-status">Generating a code…</p>}
+      {qrDataUrl && state === "waiting" && (
+        <>
+          <img src={qrDataUrl} alt="Pairing code" width={240} height={240} />
+          <p className="account-hint">Waiting for your other device…</p>
+        </>
+      )}
+      {state === "expired" && <p className="lock-error">That code expired.</p>}
+      {state === "cancelled" && <p className="lock-error">That link was cancelled from the other device.</p>}
+      {(error || state === "expired" || state === "cancelled") && (
+        <button className="save-btn lock-btn" onClick={begin}>
+          Generate a new code
+        </button>
+      )}
+      <button className="lock-restore" onClick={onBack}>
+        ‹ Back
+      </button>
+    </div>
+  );
+}
+
+export function LockScreen({
+  mode,
+  enrolled,
+  onCreate,
+  onUnlock,
+  onBiometric,
+  onRestore,
+  onSignIn,
+  onStartLink,
+  onPollLink,
+  account,
+  guardianCircle,
+  onRecoverySignIn,
+  onLoadGuardianCircle,
+  onStartRecovery,
+  onPollRecovery,
+  onCancelRecovery,
+  onFinishRecovery,
+  onRecoverWithKit,
+}: Props) {
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [showKit, setShowKit] = useState(false);
+  const [linkingNewDevice, setLinkingNewDevice] = useState(false);
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +272,34 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
     return <Welcome onBegin={() => setShowIntro(false)} />;
   }
 
+  if (setup && linkingNewDevice) {
+    return (
+      <div className="lock">
+        <LinkNewDevice
+          onStartLink={onStartLink}
+          onPollLink={onPollLink}
+          onBack={() => setLinkingNewDevice(false)}
+        />
+      </div>
+    );
+  }
+
+  if (!setup && showRecovery) {
+    return (
+      <RecoveryFlow
+        account={account}
+        guardianCircle={guardianCircle}
+        onRecoverySignIn={onRecoverySignIn}
+        onLoadGuardianCircle={onLoadGuardianCircle}
+        onStartRecovery={onStartRecovery}
+        onPollRecovery={onPollRecovery}
+        onCancelRecovery={onCancelRecovery}
+        onFinishRecovery={onFinishRecovery}
+        onBack={() => setShowRecovery(false)}
+      />
+    );
+  }
+
   // Setup, step 2: the optional account.
   if (setup && setupStep === "account") {
     return (
@@ -243,8 +392,10 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
               onKeyDown={(e) => e.key === "Enter" && continueToAccount()}
             />
             <p className="lock-warn">
-              There's no reset. If you forget it, the entries can't be recovered —
-              not by anyone. Keep it somewhere safe.
+              If you ever forget it, the ways back in are a printed recovery kit
+              or your guardians (both set up later, in Settings) — there's no
+              reset by email, and nobody else can ever read the entries. Keep it
+              somewhere safe.
             </p>
             {error && <p className="lock-error">{error}</p>}
             <button className="save-btn lock-btn" disabled={busy} onClick={continueToAccount}>
@@ -303,6 +454,12 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
                 </button>
               </div>
             )}
+
+            {!signingIn && (
+              <button className="lock-restore" onClick={() => setLinkingNewDevice(true)}>
+                Or scan a code from your other device
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -327,6 +484,18 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
             <button className="save-btn lock-btn" disabled={busy} onClick={submit}>
               {busy ? "Working…" : "Unlock"}
             </button>
+            {showKit ? (
+              <RecoverWithCode onRecover={onRecoverWithKit} onBack={() => setShowKit(false)} />
+            ) : (
+              <>
+                <button className="lock-restore" onClick={() => setShowRecovery(true)}>
+                  Forgot your passphrase? Ask your guardians
+                </button>
+                <button className="lock-restore" onClick={() => setShowKit(true)}>
+                  Use a recovery code
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

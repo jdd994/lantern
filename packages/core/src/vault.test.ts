@@ -4,7 +4,7 @@
 // lean on when they delegate their setup/unlock/change-passphrase to these.
 
 import { describe, it, expect } from "vitest";
-import { createVault, openVault, rewrapVault, verifyDEK } from "./vault";
+import { createVault, openVault, rewrapVault, setPassphraseFromDEK, verifyDEK } from "./vault";
 import {
   deriveKeyFromSalt, makeVerifier, encryptString, decryptString, newSalt, exportKeyRaw,
 } from "./crypto";
@@ -73,5 +73,24 @@ describe("vault lifecycle", () => {
   it("change passphrase with the wrong current passphrase returns null", async () => {
     const { dek, secrets } = await createVault("real", TEXT, ITER);
     expect(await rewrapVault(dek, "not-real", "new", secrets, TEXT, ITER)).toBeNull();
+  });
+
+  it("setPassphraseFromDEK: sets a fresh passphrase from a DEK obtained without one (social recovery)", async () => {
+    const { dek, secrets } = await createVault("original", TEXT, ITER);
+    const dekBefore = await exportKeyRaw(dek);
+    const data = await encryptString(dek, "recovered data");
+
+    // No current passphrase involved — this is the DEK as reconstructed by a
+    // guardian circle, not derived from any passphrase the caller knows.
+    const fresh = await setPassphraseFromDEK(dek, "brand-new-passphrase", TEXT, ITER);
+    const recoveredVault = { ...secrets, ...fresh };
+
+    const opened = await openVault("brand-new-passphrase", recoveredVault, TEXT);
+    expect(opened).not.toBeNull();
+    expect(await exportKeyRaw(opened!.dek)).toEqual(dekBefore);
+    expect(await decryptString(opened!.dek, data)).toBe("recovered data");
+
+    // The old passphrase no longer opens the vault.
+    expect(await openVault("original", recoveredVault, TEXT)).toBeNull();
   });
 });

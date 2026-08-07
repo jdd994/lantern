@@ -1,12 +1,43 @@
 # Security headers, applied to every response. connect-src is the allowlist of
-# every host Aura may contact — currently just the Govee cloud APIs (which set
-# CORS headers, so the browser calls them directly). Adding a host here is a
-# security decision, not a config tweak.
+# every host Aura may contact — the Govee cloud APIs (which set CORS headers,
+# so the browser calls them directly), aura-server (the one small Worker
+# behind the feedback box — never lights, keys, or scenes), and Aura's own R2
+# bucket (the speech-to-text model + its WASM runtime — see
+# scripts/voice-assets.mjs; too big for Pages itself, CORS scoped to this
+# domain specifically, still our infrastructure, not a third party). Adding a
+# host here is a security decision, not a config tweak.
+#
+# script-src also allows the R2 bucket — onnxruntime-web loads its WASM glue
+# code via a cross-origin dynamic import() (an actual <script>-equivalent
+# load, not a fetch/XHR), which script-src governs, not connect-src. Missed
+# this the first time: `vite preview` never applies _headers at all (that's
+# Cloudflare Pages-specific), so nothing short of a real deployed browser
+# could have caught it — confirmed on a real phone, "Failed to fetch
+# dynamically imported module" is exactly what a CSP-blocked dynamic import
+# looks like from the calling code's side.
+#
+# worker-src allows blob: alongside self — onnxruntime-web's WASM runtime may
+# spin up a worker from a blob URL for its threaded execution path.
+#
+# script-src also carries 'wasm-unsafe-eval' — WebAssembly compilation itself
+# needs this (confirmed on a real phone: "WebAssembly.instantiate(): ...
+# 'unsafe-eval' is not an allowed source"). Deliberately the CSP3 WASM-specific
+# grant, not the much broader 'unsafe-eval' — this permits compiling/running
+# WebAssembly modules only; arbitrary string-to-code eval()/Function() stays
+# blocked exactly as before.
+#
+# Permissions-Policy grants camera/microphone/geolocation to this origin
+# (`self`) — identify/rename uses none of them, but QR setup-transfer (camera),
+# ambient "listen for the room" (microphone), and sunrise/sunset automations
+# (geolocation) all do. Granting here only makes the browser API reachable;
+# every one of those still only ever starts from an explicit tap, per Aura's
+# sensor-consent rule — this header must never be the thing that decides that,
+# only the thing that stops it from being silently unreachable regardless.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://openapi.api.govee.com https://developer-api.govee.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://pub-265b50abb06d41f9afcab96b2dee95ae.r2.dev; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://openapi.api.govee.com https://developer-api.govee.com https://aura-server.jdd994.workers.dev https://pub-265b50abb06d41f9afcab96b2dee95ae.r2.dev; manifest-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=(self), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin

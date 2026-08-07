@@ -9,6 +9,15 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+// The desktop build's own version (from tauri.conf.json, baked in at build
+// time) — null in the browser, where there's no installed build to name;
+// auravibe.app is always whatever's currently deployed.
+export async function appVersion(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { getVersion } = await import("@tauri-apps/api/app");
+  return getVersion();
+}
+
 // A fetch that uses Tauri's native HTTP when available, else the browser's — same
 // shape as window.fetch, so callers never care which they got. (Accepting the Hue
 // bridge's self-signed cert is configured on the Tauri side in Phase 2.)

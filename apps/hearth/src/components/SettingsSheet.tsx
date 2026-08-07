@@ -14,12 +14,14 @@ export function SettingsSheet({
   onMood,
   unit,
   onUnit,
+  onInstallHelp,
   onClose,
 }: {
   mood: string;
   onMood: (id: string) => void;
   unit: DistanceUnit;
   onUnit: (u: DistanceUnit) => void;
+  onInstallHelp: () => void;
   onClose: () => void;
 }) {
   return (
@@ -45,6 +47,14 @@ export function SettingsSheet({
       </section>
 
       <section className="set-section">
+        <h4 className="set-head">Keep Hearth close</h4>
+        <p className="hint">
+          Hearth can live on your home screen like any app.{" "}
+          <button type="button" className="linklike" onClick={onInstallHelp}>How to install, step by step</button>
+        </p>
+      </section>
+
+      <section className="set-section">
         <h4 className="set-head">How Hearth works</h4>
         <p>
           What you eat and how you're doing is nobody's business but yours. Everything you log is
@@ -57,8 +67,10 @@ export function SettingsSheet({
           watching what you eat.
         </p>
         <p className="hint">
-          The trade: your passphrase never leaves this device, so there's no reset. Forget it and
-          the data can't be recovered by anyone, including us. Keep it somewhere safe.
+          The trade: your passphrase never leaves this device, so there's no reset by email —
+          that button would mean someone else could read your data. Two ways back in live in
+          Sync: a printed recovery kit (a one-page code for a fire safe), or Guardians — a
+          few people you trust, jointly. Keep the passphrase somewhere safe as well.
         </p>
       </section>
 

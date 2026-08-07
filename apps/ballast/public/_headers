@@ -19,14 +19,36 @@
 #   cloudflare-eth.com        — tier 1. Public Ethereum JSON-RPC. Same deal.
 #   api.coingecko.com         — tier 1. Public market prices. Learns which assets
 #                               you hold, NOT how much.
+#   api.alpaca.markets        — tier 2. Your own brokerage, reached directly with
+#   paper-api.alpaca.markets    your own read-only API key. Alpaca already holds
+#                               the account; nobody new learns anything. The key
+#                               travels to this host and can travel nowhere else —
+#                               that is precisely what this line enforces.
+#   api.gemini.com            — tier 2, same rung and same terms (re-probed
+#                               2026-08-04: echoes the origin, approves its HMAC
+#                               headers). Your own exchange, your own Auditor
+#                               key, one balance read.
 #
 # There is no analytics host here, and there never will be. There is no font CDN
 # here either — fonts are system-native, so `font-src 'self'` can stay absolute.
+#
+# `wasm-unsafe-eval` (script-src): permits compiling WebAssembly — and ONLY that;
+# it does not permit JS eval(). Needed by the on-device receipt reader (ocr.ts),
+# whose engine is WASM served from our own origin. The name is scarier than the
+# grant: the wasm still has to come from a script-src-permitted origin, which
+# remains 'self' alone.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ballast-server.jdd994.workers.dev https://blockstream.info https://cloudflare-eth.com https://api.coingecko.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ballast-server.jdd994.workers.dev https://blockstream.info https://cloudflare-eth.com https://api.coingecko.com https://api.alpaca.markets https://paper-api.alpaca.markets https://api.gemini.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=()
+  # camera=(self): granted 2026-07-17, for one feature — the receipt scan
+  # assist — under explicit terms: the camera activates only on the user's tap,
+  # frames are processed on this device in memory and discarded, nothing is
+  # stored until the shutter, nothing ever leaves (connect-src enforces that),
+  # and the stream stops the moment the sheet closes. Declining the permission
+  # leaves the photo-picker path fully working. Nothing else may use this
+  # grant. Everything else stays locked.
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), interest-cohort=(), payment=()
   Cross-Origin-Opener-Policy: same-origin

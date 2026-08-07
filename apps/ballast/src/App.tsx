@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
+import { useEffect, useRef, useState } from "react";
+import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { useLedger } from "./hooks/useLedger";
 import { Welcome } from "./components/Welcome";
 import { LockScreen } from "./components/LockScreen";
@@ -8,15 +10,27 @@ import { AddAccount, UpdateBalance } from "./components/AddAccount";
 import { Goals, AddGoal } from "./components/Goals";
 import { Spending, ReceiptView } from "./components/Spending";
 import { AddExpense } from "./components/AddExpense";
+import { ImportSheet } from "./components/ImportSheet";
 import { Support } from "./components/Support";
 import { Sync } from "./components/Sync";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { InstallHint } from "./components/InstallHint";
 import { Heart, Gear } from "./components/icons";
-import { useTheme } from "@lantern/ui";
+import { InstallSheet, UpdateToast, useTheme } from "@lantern/ui";
 import type { SnapshotContent } from "./lib/ledger";
+import type { Transaction } from "./lib/spend";
 
 type Tab = "worth" | "spending";
+
+// Ballast's own moods, loosely mapped to the shared @lantern/core vibe vocabulary —
+// only for announcing a pick over the local vibe relay, so e.g. Aura's lights can
+// follow if it's running and mirroring is on. Publish-only: Ballast's own theme
+// never changes because of what another app picked.
+const MOOD_TO_VIBE: Record<string, string> = {
+  deep: "candlelight",
+  midnight: "wind-down",
+  shoreline: "daylight",
+};
 
 export default function App() {
   const l = useLedger();
@@ -24,16 +38,49 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingExpense, setAddingExpense] = useState(false);
+  const [editingTxn, setEditingTxn] = useState<Transaction | null>(null);
+  const [importing, setImporting] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ dataUrl: string; type: string } | null>(null);
   const [support, setSupport] = useState(false);
   const [sync, setSync] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [installHelp, setInstallHelp] = useState(false);
   const { mood, setMood } = useTheme("ballast-mood", MOODS.map((m) => m.id), "deep");
+  const relayRef = useRef<VibeRelayHandle | null>(null);
+  useEffect(() => {
+    relayRef.current = connectVibeRelay("ballast", () => {});
+    return () => relayRef.current?.close();
+  }, []);
+  const handleMood = (id: string) => {
+    setMood(id);
+    const vibeId = MOOD_TO_VIBE[id];
+    if (vibeId) relayRef.current?.publish({ vibeId });
+  };
 
   async function viewReceipt(mediaId: string) {
     setReceipt(await l.loadReceipt(mediaId));
   }
+
+  // A new deploy parks behind the service worker until the person says so —
+  // the shared UpdateToast (@lantern/ui) is the whole ceremony. Rendered in
+  // every return branch below, locked screens included: an update offer that
+  // hides behind the vault is one most people never see.
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (registration) setInterval(() => void registration.update(), 60 * 60_000);
+    },
+  });
+  const updateToast = needRefresh ? (
+    <UpdateToast
+      appName="Ballast"
+      onRefresh={() => void updateServiceWorker(true)}
+      onDismiss={() => setNeedRefresh(false)}
+    />
+  ) : null;
 
   if (l.status === "loading") return null;
 
@@ -52,23 +99,46 @@ export default function App() {
             onDisconnect={l.disconnect}
             onDelete={l.deleteAccount}
             onChangePassphrase={l.changePassphrase}
+            recoveryKitAt={l.recoveryKitAt}
+            onCreateRecoveryKit={l.createRecoveryKit}
+            onRemoveRecoveryKit={l.removeRecoveryKit}
             onSyncNow={l.syncNow}
             onClose={() => setSync(false)}
+            guardianCircle={l.guardianCircle}
+            onSetupGuardians={l.setupGuardians}
+            recoveryStatus={l.recoveryStatus}
+            onCancelPendingRecovery={l.cancelPendingRecovery}
+            pendingGuardianRequests={l.pendingGuardianRequests}
+            onApproveGuardianRequest={l.approveGuardianRequest}
           />
         ) : null}
+        {updateToast}
       </>
     );
   }
 
   if (l.status === "locked") {
     return (
+      <>
       <LockScreen
         onUnlock={l.unlock}
         onBiometric={l.unlockWithBiometric}
         hasBiometric={l.hasBiometric}
         error={l.error}
         busy={l.busy}
+        account={l.account}
+        syncError={l.syncError}
+        guardianCircle={l.guardianCircle}
+        onRecoverySignIn={l.connectSignIn}
+        onLoadGuardianCircle={l.loadGuardianCircle}
+        onStartRecovery={l.startRecoveryRequest}
+        onPollRecovery={l.pollRecoveryRequest}
+        onCancelRecovery={l.cancelRecoveryRequest}
+        onRecoverWithKit={l.recoverWithKit}
+        onFinishRecovery={l.finishRecoveryRequest}
       />
+      {updateToast}
+      </>
     );
   }
 
@@ -186,18 +256,36 @@ export default function App() {
         <section className="section">
           <div className="section-head">
             <h2 className="section-title">Spending</h2>
-            <button className="btn btn-sm" onClick={() => setAddingExpense(true)}>
-              Log
-            </button>
+            <div className="section-actions">
+              <button className="btn btn-ghost btn-sm" onClick={() => setImporting(true)}>
+                Import
+              </button>
+              <button className="btn btn-sm" onClick={() => setAddingExpense(true)}>
+                Log
+              </button>
+            </div>
           </div>
           <Spending
             transactions={l.transactions}
             currency={l.currency}
             onRemove={(id) => void l.removeTransaction(id)}
+            onEdit={(t) => setEditingTxn(t)}
+            onMarkReimbursed={(id, at) => void l.markReimbursed(id, at)}
             onViewReceipt={(id) => void viewReceipt(id)}
           />
         </section>
       )}
+
+      {importing ? (
+        <ImportSheet
+          currency={l.currency}
+          accounts={l.accounts}
+          busy={l.busy}
+          suggest={l.suggest}
+          onImport={l.importTransactions}
+          onClose={() => setImporting(false)}
+        />
+      ) : null}
 
       {addingExpense ? (
         <AddExpense
@@ -210,13 +298,36 @@ export default function App() {
         />
       ) : null}
 
-      {receipt ? <ReceiptView src={receipt} onClose={() => setReceipt(null)} /> : null}
+      {editingTxn ? (
+        <AddExpense
+          currency={l.currency}
+          accounts={l.accounts}
+          busy={l.busy}
+          suggest={l.suggest}
+          onAdd={l.addTransaction}
+          editing={editingTxn}
+          onUpdate={l.updateTransaction}
+          onLoadReceipt={l.loadReceipt}
+          onClose={() => setEditingTxn(null)}
+        />
+      ) : null}
+
+      {receipt ? <ReceiptView receipt={receipt} onClose={() => setReceipt(null)} /> : null}
 
       {support ? <Support onClose={() => setSupport(false)} /> : null}
 
       {settings ? (
-        <SettingsSheet mood={mood} onMood={setMood} onClose={() => setSettings(false)} />
+        <SettingsSheet
+          mood={mood}
+          onMood={handleMood}
+          onInstallHelp={() => {
+            setSettings(false);
+            setInstallHelp(true);
+          }}
+          onClose={() => setSettings(false)}
+        />
       ) : null}
+      {installHelp ? <InstallSheet appName="Ballast" onClose={() => setInstallHelp(false)} /> : null}
 
       {sync ? (
         <Sync
@@ -229,8 +340,17 @@ export default function App() {
           onDisconnect={l.disconnect}
           onDelete={l.deleteAccount}
           onChangePassphrase={l.changePassphrase}
+            recoveryKitAt={l.recoveryKitAt}
+            onCreateRecoveryKit={l.createRecoveryKit}
+            onRemoveRecoveryKit={l.removeRecoveryKit}
             onSyncNow={l.syncNow}
           onClose={() => setSync(false)}
+          guardianCircle={l.guardianCircle}
+          onSetupGuardians={l.setupGuardians}
+          recoveryStatus={l.recoveryStatus}
+          onCancelPendingRecovery={l.cancelPendingRecovery}
+          pendingGuardianRequests={l.pendingGuardianRequests}
+          onApproveGuardianRequest={l.approveGuardianRequest}
         />
       ) : null}
 
@@ -262,6 +382,7 @@ export default function App() {
           onClose={() => setUpdating(null)}
         />
       ) : null}
+      {updateToast}
     </div>
   );
 }

@@ -1,7 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { money } from "./money";
 import { normalizeMerchant, suggestCategory, remember, type MerchantMemory } from "./categorize";
-import { byCategory, spentIn, earnedIn, monthWindow, notable, recurring, type Transaction } from "./spend";
+import {
+  byCategory,
+  spentIn,
+  earnedIn,
+  monthWindow,
+  notable,
+  recurring,
+  itemPatterns,
+  hsaAmount,
+  hsaBanked,
+  type Transaction,
+} from "./spend";
 
 const USD = "USD";
 let seq = 0;
@@ -180,5 +191,136 @@ describe("recurring — the subscriptions you forgot about", () => {
   it("ignores a one-off", () => {
     const txns = [tx("2026-07-03", -1599, "NETFLIX", "subscriptions")];
     expect(recurring(txns, now, USD)).toEqual([]);
+  });
+});
+
+describe("attribute: items split a transaction across categories", () => {
+  const now = new Date("2026-07-15").getTime();
+  const target: Transaction = {
+    ...tx("2026-07-10", -8000, "TARGET", "shopping"),
+    items: [
+      { label: "PRODUCE", amount: money(3000, USD), category: "groceries" },
+      { label: "MILK", amount: money(2000, USD), category: "groceries" },
+      { label: "T-SHIRT", amount: money(2500, USD) }, // no category = the headline's
+    ],
+  };
+
+  it("sends each item's money to its own category, remainder to the headline", () => {
+    const r = byCategory([target], monthWindow(now).from, monthWindow(now).to, USD);
+    // 3000+2000 groceries; 2500 headline + 500 remainder (tax) = 3000 shopping.
+    expect(r).toEqual([
+      { category: "groceries", total: { minor: 5000, currency: USD }, count: 1, share: 5000 / 8000 },
+      { category: "shopping", total: { minor: 3000, currency: USD }, count: 1, share: 3000 / 8000 },
+    ]);
+  });
+
+  it("leaves a transaction whose items all agree with it untouched", () => {
+    const plain: Transaction = {
+      ...tx("2026-07-10", -1526, "TRADER JOE'S", "groceries"),
+      items: [
+        { label: "BANANAS", amount: money(149, USD) },
+        { label: "MILK", amount: money(429, USD) },
+      ],
+    };
+    const r = byCategory([plain], monthWindow(now).from, monthWindow(now).to, USD);
+    expect(r).toEqual([
+      { category: "groceries", total: { minor: 1526, currency: USD }, count: 1, share: 1 },
+    ]);
+  });
+
+  it("falls back to the headline when items claim more than the whole transaction", () => {
+    // An inconsistent breakdown gets ignored, not rescaled. We don't make data up.
+    const broken: Transaction = {
+      ...tx("2026-07-10", -1000, "SHOP", "shopping"),
+      items: [{ label: "GLITCH", amount: money(99900, USD), category: "groceries" }],
+    };
+    const r = byCategory([broken], monthWindow(now).from, monthWindow(now).to, USD);
+    expect(r).toEqual([
+      { category: "shopping", total: { minor: 1000, currency: USD }, count: 1, share: 1 },
+    ]);
+  });
+});
+
+describe("itemPatterns: what you're buying, noticed calmly", () => {
+  const now = new Date("2026-07-15").getTime();
+  const w = monthWindow(now);
+  const withItems = (at: string, merchant: string, items: Array<[string, number]>): Transaction => ({
+    ...tx(at, -items.reduce((a, [, m]) => a + m, 0), merchant, "groceries"),
+    items: items.map(([label, minor]) => ({ label, amount: money(minor, USD) })),
+  });
+
+  it("groups the same item across receipts, sizes and casing ignored", () => {
+    const txns = [
+      withItems("2026-07-02", "STORE", [["GREEK YOGURT 32OZ", 689], ["CHIPS", 399]]),
+      withItems("2026-07-09", "STORE", [["Greek Yogurt", 689]]),
+      withItems("2026-07-13", "OTHER STORE", [["CHIPS", 449], ["BREAD", 350]]),
+      withItems("2026-07-14", "STORE", [["CHIPS", 399]]),
+    ];
+    const p = itemPatterns(txns, w.from, w.to, USD);
+    expect(p[0]).toEqual({ label: "CHIPS", count: 3, total: { minor: 1247, currency: USD } });
+    expect(p[1]).toEqual({ label: "GREEK YOGURT 32OZ", count: 2, total: { minor: 1378, currency: USD } });
+    // BREAD appeared once — a one-off is not a pattern.
+    expect(p).toHaveLength(2);
+  });
+
+  it("says nothing when nothing repeats", () => {
+    const txns = [withItems("2026-07-02", "STORE", [["BREAD", 350]])];
+    expect(itemPatterns(txns, w.from, w.to, USD)).toEqual([]);
+  });
+});
+
+describe("HSA banking: the shoebox strategy", () => {
+  it("banks an un-itemized transaction flagged eligible, whole amount", () => {
+    const t = { ...tx("2026-07-02", -3000, "PHARMACY", "health"), hsaEligible: true };
+    expect(hsaAmount(t)).toBe(3000);
+  });
+
+  it("banks nothing for an un-itemized transaction that isn't flagged", () => {
+    const t = tx("2026-07-02", -3000, "PHARMACY", "health");
+    expect(hsaAmount(t)).toBe(0);
+  });
+
+  it("on an itemized receipt, only the flagged items count", () => {
+    // A Target run: bandages are HSA-eligible, chips aren't. The transaction-
+    // level flag is irrelevant once any item overrides it.
+    const t: Transaction = {
+      ...tx("2026-07-02", -2000, "TARGET", "shopping"),
+      items: [
+        { label: "Bandages", amount: money(800, USD), hsaEligible: true },
+        { label: "Chips", amount: money(1200, USD), hsaEligible: false },
+      ],
+    };
+    expect(hsaAmount(t)).toBe(800);
+  });
+
+  it("an itemized receipt with no items overriding falls back to the transaction flag", () => {
+    const t: Transaction = {
+      ...tx("2026-07-02", -2000, "TARGET", "shopping"),
+      hsaEligible: true,
+      items: [
+        { label: "Bandages", amount: money(800, USD) },
+        { label: "Chips", amount: money(1200, USD) },
+      ],
+    };
+    expect(hsaAmount(t)).toBe(2000);
+  });
+
+  it("sums banked and unreimbursed totals across the whole ledger, not a window", () => {
+    const eligible = { ...tx("2020-01-15", -3000, "PHARMACY", "health"), hsaEligible: true };
+    const reimbursed = {
+      ...tx("2026-07-02", -5000, "DENTIST", "health"),
+      hsaEligible: true,
+      reimbursedAt: new Date("2026-07-10").getTime(),
+    };
+    const notEligible = tx("2026-07-05", -1200, "COFFEE", "dining");
+    const b = hsaBanked([eligible, reimbursed, notEligible], USD);
+    expect(b.total).toEqual({ minor: 8000, currency: USD });
+    expect(b.unreimbursed).toEqual({ minor: 3000, currency: USD });
+    expect(b.items).toHaveLength(2);
+  });
+
+  it("income and transfers never bank, even if flagged", () => {
+    const income = { ...tx("2026-07-02", 3000, "REFUND", "income"), hsaEligible: true };
+    expect(hsaBanked([income], USD).total).toEqual({ minor: 0, currency: USD });
   });
 });

@@ -16,7 +16,7 @@ import {
 import { CONNECTORS, connectorFor } from "../lib/sources";
 import { Disclosure } from "./TrustBadge";
 
-const SOURCE_ORDER: SourceKind[] = ["manual", "bitcoin", "ethereum"];
+const SOURCE_ORDER: SourceKind[] = ["manual", "bitcoin", "ethereum", "alpaca", "gemini"];
 
 export function AddAccount({
   currency,
@@ -33,14 +33,19 @@ export function AddAccount({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AccountKind>("cash");
   const [address, setAddress] = useState("");
+  const [keyId, setKeyId] = useState("");
+  const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const connector = CONNECTORS[sourceKind];
   const isManual = sourceKind === "manual";
+  const isKeyed = sourceKind === "alpaca" || sourceKind === "gemini";
 
   function buildRef(): SourceRef {
     if (sourceKind === "manual") return { kind: "manual" };
+    if (sourceKind === "alpaca") return { kind: "alpaca", keyId: keyId.trim(), secret: secret.trim() };
+    if (sourceKind === "gemini") return { kind: "gemini", apiKey: keyId.trim(), secret: secret.trim() };
     return { kind: sourceKind, address: address.trim() };
   }
 
@@ -74,9 +79,10 @@ export function AddAccount({
       await onAdd(
         {
           name: name.trim(),
-          // A crypto address is always a crypto account. Don't make the user
-          // tell us something we already know.
-          kind: isManual ? kind : "crypto",
+          // A crypto address is always a crypto account, a brokerage is an
+          // investment, and an exchange holds crypto. Don't make the user tell
+          // us something we already know.
+          kind: isManual ? kind : sourceKind === "alpaca" ? "investment" : "crypto",
           source,
         },
         initial
@@ -111,7 +117,12 @@ export function AddAccount({
         </div>
 
         {/* The cost of the rung you just picked, before you give it anything. */}
-        <Disclosure tier={connector.tier} discloses={connector.discloses} />
+        <Disclosure
+          tier={connector.tier}
+          discloses={connector.discloses}
+          takes={connector.takes}
+          refuses={connector.refuses}
+        />
 
         <form onSubmit={submit}>
           {error ? <div className="error">{error}</div> : null}
@@ -122,7 +133,7 @@ export function AddAccount({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={isManual ? "Checking" : "Cold wallet"}
+              placeholder={isManual ? "Checking" : sourceKind === "alpaca" ? "Brokerage" : isKeyed ? "Exchange" : "Cold wallet"}
               autoFocus
             />
           </label>
@@ -155,6 +166,37 @@ export function AddAccount({
                   {ACCOUNT_KINDS[kind].liability
                     ? "Enter it as a positive number — Ballast knows a debt counts against you."
                     : `In ${currency}. You can update it whenever you like; each update is kept, so the history is real.`}
+                </span>
+              </label>
+            </>
+          ) : isKeyed ? (
+            <>
+              <label className="field">
+                <span className="label">{sourceKind === "gemini" ? "API key" : "API key ID"}</span>
+                <input
+                  type="text"
+                  className="mono"
+                  value={keyId}
+                  onChange={(e) => setKeyId(e.target.value)}
+                  placeholder={sourceKind === "gemini" ? "account-…" : "PK… or AK…"}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                />
+              </label>
+              <label className="field">
+                <span className="label">API secret</span>
+                <input
+                  type="password"
+                  className="mono"
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                />
+                <span className="hint">
+                  {sourceKind === "gemini"
+                    ? "Create this key in Gemini's API settings with the Auditor role — read-only, so it can't trade or withdraw even in principle. Ballast never moves money; an Auditor key makes that Gemini's rule too."
+                    : "Create this key in the Alpaca dashboard and mark it read-only there — Ballast never places an order, and a read-only key makes that Alpaca's rule too. A paper key (PK…) works and is a fine way to try this out."}
                 </span>
               </label>
             </>

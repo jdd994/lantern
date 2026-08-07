@@ -14,6 +14,7 @@ import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { SharedView } from "./components/SharedView";
 import { HelpSheet } from "./components/HelpSheet";
+import { InstallSheet } from "@lantern/ui";
 import { InstallHint } from "./components/InstallHint";
 import { Settings } from "./components/Settings";
 import { Toast, type ToastData } from "./components/Toast";
@@ -66,10 +67,11 @@ export default function App() {
   const [tag, setTag] = useState<string | null>(null);
   const [view, setView] = useState<"stream" | "timeline" | "strands" | "shared">("stream");
   const [help, setHelp] = useState<null | "top" | "support">(null);
+  const [installHelp, setInstallHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
-  const [reading, setReading] = useState<{ entries: Entry[]; label: string } | null>(null);
+  const [reading, setReading] = useState<{ entries: Entry[]; label: string; note?: string } | null>(null);
   const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const toastTimer = useRef<number | null>(null);
   const joiningRef = useRef(false);
@@ -131,6 +133,17 @@ export default function App() {
     [j.entries, query, tag]
   );
 
+  // A #tag is an anchor to a moment. Tapping one — in any view, even mid-read —
+  // gathers every moment it anchors into the Stream. Fresh query, top of page:
+  // the anchor leads somewhere, it doesn't compound filters.
+  function gather(t: string) {
+    setQuery("");
+    setTag(t);
+    setView("stream");
+    setReading(null);
+    window.scrollTo({ top: 0 });
+  }
+
   // Keep tag filter valid if the underlying tag disappears.
   useEffect(() => {
     if (tag && !tags.includes(tag)) setTag(null);
@@ -167,6 +180,17 @@ export default function App() {
         onBiometric={j.biometricUnlock}
         onRestore={j.restoreBackup}
         onSignIn={j.connectSignIn}
+        onStartLink={j.startLinkAsNewDevice}
+        onPollLink={j.pollLinkAsNewDevice}
+        account={j.account}
+        guardianCircle={j.guardianCircle}
+        onRecoverySignIn={j.recoverySignIn}
+        onLoadGuardianCircle={j.loadGuardianCircle}
+        onStartRecovery={j.startRecoveryRequest}
+        onPollRecovery={j.pollRecoveryRequest}
+        onCancelRecovery={j.cancelRecoveryRequest}
+        onFinishRecovery={j.finishRecoveryRequest}
+          onRecoverWithKit={j.recoverWithKit}
       />
     );
   }
@@ -358,10 +382,22 @@ export default function App() {
             active={tag}
             onToggle={(t) => setTag((cur) => (cur === t ? null : t))}
           />
+          {tag && visible.length > 0 && (
+            <button
+              className="gather-read"
+              onClick={() =>
+                setReading({ entries: [...visible].reverse(), label: `#${tag}` })
+              }
+            >
+              Read #{tag} as one — oldest first
+            </button>
+          )}
           <Stream
             entries={visible}
             totalCount={j.entries.length}
-            onReadDay={(entries, label) => setReading({ entries, label })}
+            onReadDay={(entries, label, dk) => setReading({ entries, label, note: j.dayNotes[dk]?.text })}
+            dayNotes={j.dayNotes}
+            onSetDayNote={j.setDayNote}
             onSave={j.updateEntry}
             onDelete={handleDelete}
             onAnchor={j.setAnchor}
@@ -373,6 +409,7 @@ export default function App() {
 
             onSetMediaConfig={j.setMediaConfig}
             getMediaUrl={j.getMediaUrl}
+            onTag={gather}
           />
         </>
       )}
@@ -391,6 +428,7 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onTag={gather}
         />
       )}
 
@@ -405,16 +443,20 @@ export default function App() {
           onRemoveFrom={j.removeFromStrand}
           onReorder={j.reorderStrand}
           onWriteIn={j.writeInStrand}
+          onWriteInAfter={j.writeInStrandAfter}
+          onWriteChapter={j.writeChapterInStrand}
           onAddPhoto={j.addPhotoToStrand}
           onSaveEntry={j.updateEntry}
           onDeleteEntry={handleDelete}
           onAnchor={j.setAnchor}
+          onSetHeading={j.setHeading}
           onExport={handleExportStrand}
           onAttachMedia={j.attachMedia}
           onRemoveMedia={j.removeMedia}
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+          onTag={gather}
         />
       )}
 
@@ -443,12 +485,24 @@ export default function App() {
       {reading && (
         <Reader
           title={reading.label}
-          subtitle={reading.entries.length + (reading.entries.length === 1 ? " thought" : " thoughts")}
+          subtitle={reading.entries.length === 1 ? "1 thought" : `${reading.entries.length} thoughts`}
+          note={reading.note}
           entries={reading.entries}
           onClose={() => setReading(null)}
+          onTag={gather}
         />
       )}
-      {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
+      {help && (
+        <HelpSheet
+          focus={help}
+          onClose={() => setHelp(null)}
+          onInstallHelp={() => {
+            setHelp(null);
+            setInstallHelp(true);
+          }}
+        />
+      )}
+      {installHelp && <InstallSheet appName="Driftless" onClose={() => setInstallHelp(false)} />}
       {showSettings && (
         <Settings
           onClose={() => setShowSettings(false)}
@@ -461,7 +515,18 @@ export default function App() {
           onDisconnect={j.disconnectAccount}
           onDeleteAccount={j.deleteAccount}
           onSyncNow={j.syncNow}
+          onLinkNewDeviceFromScan={j.linkNewDeviceFromScan}
+          onCancelDeviceLink={j.cancelDeviceLink}
           onChangePassphrase={j.changePassphrase}
+          recoveryKitAt={j.recoveryKitAt}
+          onCreateRecoveryKit={j.createRecoveryKit}
+          onRemoveRecoveryKit={j.removeRecoveryKit}
+          guardianCircle={j.guardianCircle}
+          onSetupGuardians={j.setupGuardians}
+          recoveryStatus={j.recoveryStatus}
+          onCancelPendingRecovery={j.cancelPendingRecovery}
+          pendingGuardianRequests={j.pendingGuardianRequests}
+          onApproveGuardianRequest={j.approveGuardianRequest}
         />
       )}
       <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />
