@@ -21,6 +21,7 @@
     "./vibe-relay": "./src/vibe-relay.ts",
     "./connect": "./src/connect.ts",
     "./kit": "./src/kit.ts",
-    "./time": "./src/time.ts"
+    "./time": "./src/time.ts",
+    "./csp": "./src/csp.ts"
   }
 }

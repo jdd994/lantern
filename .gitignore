@@ -23,3 +23,6 @@ apps/*/src-tauri/gen/
 
 # vite-plugin-pwa dev-mode service worker output
 apps/*/dev-dist/
+
+# Session worktrees live here; they are separate checkouts, not content.
+.claude/worktrees/
