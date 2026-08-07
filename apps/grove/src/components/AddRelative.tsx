@@ -9,7 +9,15 @@
 import { useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
-import { displayName, yearWhen, type ChildLink, type Person, type Relation, type When } from "../lib/model";
+import {
+  displayName,
+  withBirthFamilyName,
+  yearWhen,
+  type ChildLink,
+  type Person,
+  type Relation,
+  type When,
+} from "../lib/model";
 import type { PersonDraft } from "../hooks/useGrove";
 
 const LINK_KINDS: NonNullable<ChildLink["kind"]>[] = ["birth", "adoptive", "step", "foster", "guardian"];
@@ -28,6 +36,7 @@ export function AddRelative({
   const { t } = useLingui();
   const [given, setGiven] = useState("");
   const [family, setFamily] = useState("");
+  const [born, setBorn] = useState("");
   const [living, setLiving] = useState(true);
   const [birthYear, setBirthYear] = useState("");
   const [qualifier, setQualifier] = useState<"" | NonNullable<When["qualifier"]>>("");
@@ -59,7 +68,7 @@ export function AddRelative({
     if (birthYear.trim() && !Number.isFinite(year)) return setError(t`The birth year didn't read as a number.`);
     const when = yearWhen(year, qualifier || undefined);
     const draft: PersonDraft = {
-      names: [{ given: given.trim() || undefined, family: family.trim() || undefined }],
+      names: withBirthFamilyName([{ given: given.trim() || undefined, family: family.trim() || undefined }], born),
       living,
       events: when ? [{ kind: "birth", when }] : [],
     };
@@ -82,6 +91,10 @@ export function AddRelative({
             <input type="text" value={family} onChange={(e) => setFamily(e.target.value)} />
           </label>
         </div>
+        <label className="field">
+          <span className="label"><Trans>Family name at birth (if it changed)</Trans></span>
+          <input type="text" value={born} onChange={(e) => setBorn(e.target.value)} placeholder={t`a maiden name, say`} />
+        </label>
         <div className="row">
           <label className="field">
             <span className="label"><Trans>Born (year, if known)</Trans></span>

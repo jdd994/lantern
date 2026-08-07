@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ancestorsOf,
+  birthFamilyName,
   childrenOf,
   decodeKeepsake,
   decodePerson,
@@ -20,6 +21,7 @@ import {
   unplaced,
   whenLabel,
   whenYear,
+  withBirthFamilyName,
   withEventWhen,
   yearWhen,
   type Keepsake,
@@ -97,6 +99,40 @@ describe("names and lifespans", () => {
   it("shows the first name, falling back gently", () => {
     expect(displayName(person("p", "June", { names: [{ given: "June", family: "Hale" }] }))).toBe("June Hale");
     expect(displayName({ ...person("p", ""), names: [] })).toBe("Someone");
+  });
+
+  it("reads a birth family name only when it differs from the shown one", () => {
+    const married = person("p", "Mary", {
+      names: [{ given: "Mary", family: "Poole" }, { given: "Mary", family: "Hale", kind: "birth" }],
+    });
+    expect(birthFamilyName(married)).toBe("Hale");
+    // Shown under the name they were born with: nothing extra to say.
+    expect(birthFamilyName(person("p", "Mary", { names: [{ given: "Mary", family: "Hale", kind: "birth" }] }))).toBeUndefined();
+    expect(birthFamilyName(person("p", "Mary"))).toBeUndefined();
+  });
+
+  it("sets, updates and clears a birth family name without disturbing other names", () => {
+    const shown = { given: "Mary", family: "Poole" };
+    const aka = { given: "Molly", kind: "aka" as const };
+
+    // Added: the birth entry lands after the shown name, borrowing its given.
+    expect(withBirthFamilyName([shown, aka], " Hale ")).toEqual([shown, { given: "Mary", family: "Hale", kind: "birth" }, aka]);
+
+    // Updated in place — the entry keeps its slot and its own given name.
+    const withBorn = [shown, { given: "Máire", family: "Hale", kind: "birth" as const }, aka];
+    expect(withBirthFamilyName(withBorn, "Hayle")).toEqual([shown, { given: "Máire", family: "Hayle", kind: "birth" }, aka]);
+
+    // Cleared, or set to the name they already go by: the entry goes.
+    expect(withBirthFamilyName(withBorn, "")).toEqual([shown, aka]);
+    expect(withBirthFamilyName(withBorn, "Poole")).toEqual([shown, aka]);
+
+    // Once the two differ, the shown name stops claiming to be the birth one.
+    expect(withBirthFamilyName([{ given: "Mary", family: "Poole", kind: "birth" }], "Hale")).toEqual([
+      { given: "Mary", family: "Poole", kind: undefined },
+      { given: "Mary", family: "Hale", kind: "birth" },
+    ]);
+
+    expect(withBirthFamilyName([], "Hale")).toEqual([{ family: "Hale", kind: "birth" }]);
   });
 
   it("formats fuzzy whens with qualifier and precision", () => {

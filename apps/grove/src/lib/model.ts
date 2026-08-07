@@ -175,6 +175,34 @@ export function displayName(p: Person): string {
   return s || "Someone";
 }
 
+// The family name someone was born with, when it isn't the one they're shown
+// under — a maiden name, or any name changed later in life. It lives as its own
+// Name entry with kind "birth", so GEDCOM round-trips it as NAME/TYPE birth.
+// When the shown name IS the birth name there's nothing extra to say.
+export function birthFamilyName(p: Person): string | undefined {
+  const born = p.names.find((n) => n.kind === "birth");
+  if (!born?.family || born.family === p.names[0]?.family) return undefined;
+  return born.family;
+}
+
+// Set (or clear) that birth family name, leaving every other name alone: an
+// existing birth entry keeps its place and its given name, and the akas keep
+// their order. Clearing drops the entry rather than leaving an empty husk.
+export function withBirthFamilyName(names: Name[], family: string | undefined): Name[] {
+  const f = family?.trim();
+  const [shown, ...rest] = names;
+  const head = shown ? [shown] : [];
+  if (!f || f === shown?.family) return [...head, ...rest.filter((n) => n.kind !== "birth")];
+
+  const i = rest.findIndex((n) => n.kind === "birth");
+  const given = (i === -1 ? undefined : rest[i].given) ?? shown?.given;
+  const born: Name = { ...(given ? { given } : {}), family: f, kind: "birth" };
+  const tail = i === -1 ? [born, ...rest] : rest.map((n, j) => (j === i ? born : n));
+  // The shown name can't also be the birth name once the two differ; it's
+  // simply the name they're known by now.
+  return [...(shown?.kind === "birth" ? [{ ...shown, kind: undefined }] : head), ...tail];
+}
+
 function eventOf(p: Person, kind: LifeEvent["kind"]): LifeEvent | undefined {
   return p.events.find((e) => e.kind === kind);
 }
