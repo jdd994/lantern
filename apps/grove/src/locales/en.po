@@ -413,8 +413,13 @@ msgstr "GEDCOM is genealogy's common tongue — the format Ancestry and every de
 
 #: src/components/AddRelative.tsx:86
 #: src/components/EditPerson.tsx:97
-msgid "Given name"
-msgstr "Given name"
+#~ msgid "Given name"
+#~ msgstr "Given name"
+
+#: src/components/AddRelative.tsx:86
+#: src/components/EditPerson.tsx:97
+msgid "Given names"
+msgstr "Given names"
 
 #: src/components/SettingsSheet.tsx:154
 msgid "Grove can live on your home screen like any app — helpful to know when you're getting a relative set up. <0>How to install, step by step</0>"
@@ -556,6 +561,10 @@ msgstr "Making a link…"
 #: src/components/Welcome.tsx:116
 msgid "Making your vault…"
 msgstr "Making your vault…"
+
+#: src/components/AddRelative.tsx:87
+msgid "Mary Jane"
+msgstr "Mary Jane"
 
 #: src/components/SettingsSheet.tsx:53
 msgid "Meadow"

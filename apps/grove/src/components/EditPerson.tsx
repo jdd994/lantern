@@ -94,7 +94,7 @@ export function EditPerson({
         {error ? <div className="error">{error}</div> : null}
         <div className="row">
           <label className="field">
-            <span className="label"><Trans>Given name</Trans></span>
+            <span className="label"><Trans>Given names</Trans></span>
             <input type="text" value={given} onChange={(e) => setGiven(e.target.value)} autoFocus />
           </label>
           <label className="field">
