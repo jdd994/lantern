@@ -124,15 +124,33 @@ export function dayBounds(now: number): { from: number; to: number } {
 }
 
 // ---- Recipes -----------------------------------------------------------
-// A recipe is a named list of ingredients (each a food + an amount) split into
-// servings. It's the same structured data the tracker already consumes — which
-// is the whole reason recipes belong in this app: cooking a saved recipe becomes
-// a one-tap log of a serving, no re-entering anything.
+// A recipe is a named list of ingredients split into servings. Cooking one is a
+// one-tap log of a serving — that's the whole reason recipes belong in this app.
 //
-// Each ingredient snapshots its per-100g nutrients (like a food log), so editing
-// the food database later never silently rewrites a saved recipe.
+// THE SHAPE IS DELIBERATE, and it changed on 2026-08-07. An ingredient's WORDS
+// are required; its NUMBERS are optional. Most meals are thrown together — you
+// know what went in, not what it weighed — and the old shape (every ingredient
+// searched and weighed before you could save at all) meant those meals simply
+// never got written down. A recipe nobody can be bothered to enter records
+// nothing. So "olive oil, two onions, the rest of the chickpeas" is a complete,
+// valid recipe the moment you type it, because it's what you'd tell a friend.
+//
+// Costing is curation you may do later, per ingredient, or never. What's costed
+// contributes nutrients; what isn't contributes its words. Nothing is ever
+// estimated on your behalf — an uncosted line is an honest blank, not a guess.
+// See `recipeCoverage` for how that partiality is told truthfully.
 
-export type RecipeIngredient = { foodId: string; name: string; grams: number; per100g: Nutrients };
+// The numbers half, present only once you've resolved a line against a food and
+// said how much. Snapshots per-100g (like a food log) so editing the food
+// database later never silently rewrites a saved recipe.
+export type IngredientCost = { foodId: string; name: string; grams: number; per100g: Nutrients };
+
+export type RecipeIngredient = {
+  // What you wrote, verbatim — "a big spoon of harissa". Always present. This is
+  // the recipe; the cost below is bookkeeping laid on top of it.
+  text: string;
+  cost?: IngredientCost;
+};
 
 export type RecipeContent = {
   name: string;
@@ -141,16 +159,57 @@ export type RecipeContent = {
   // Free-form moods/cuisines you choose ("asian", "quick", "comfort"). Yours, not
   // an imposed taxonomy — the UI only ever offers back the tags you've used.
   tags?: string[];
+  // How you made it, in your words. Optional and unparsed — Hearth never tries to
+  // read your method, it just keeps it.
+  method?: string;
+  // A photo of the finished thing, as a data URL, downscaled on device before it
+  // ever reaches storage (see lib/photo.ts). It is sealed with everything else in
+  // this record, so it is E2E encrypted exactly like an ingredient is. NOTHING
+  // looks at it: no recognition, no inference, no upload anywhere but your own
+  // sync. That remains the FoodRecognizer seam's job, and that seam is still
+  // empty. This is a photo you keep, not a photo you're read by.
+  photo?: string;
 };
 
 export type Recipe = RecipeContent & { id: string };
 
+// Legacy shape: ingredients used to be flat { foodId, name, grams, per100g }.
+// Stored recipes are sealed blobs, so they're migrated on open (both for your own
+// recipes and for ones shared into a kitchen), not by a database version bump.
+// An old ingredient was always costed, so it becomes text + cost with the food's
+// name as the words — which is exactly what it displayed before.
+type LegacyIngredient = IngredientCost & { text?: undefined };
+
+export function normalizeIngredient(i: RecipeIngredient | LegacyIngredient): RecipeIngredient {
+  if (typeof i?.text === "string") return i as RecipeIngredient;
+  const old = i as LegacyIngredient;
+  return { text: old.name ?? "", cost: { foodId: old.foodId, name: old.name, grams: old.grams, per100g: old.per100g } };
+}
+
+export function normalizeRecipeContent<T extends RecipeContent>(c: T): T {
+  return { ...c, ingredients: (c.ingredients ?? []).map(normalizeIngredient) };
+}
+
+// Only costed ingredients carry numbers. Everything below sums over these, and
+// `recipeCoverage` is how the UI admits what's missing.
+export const costedIngredients = (r: RecipeContent): IngredientCost[] =>
+  r.ingredients.map((i) => i.cost).filter((c): c is IngredientCost => !!c);
+
+// How much of this recipe has numbers behind it. The UI states this plainly
+// wherever nutrients appear ("4 of 6 ingredients costed") rather than presenting
+// a partial total as if it were the whole meal.
+export function recipeCoverage(r: RecipeContent): { costed: number; total: number; complete: boolean } {
+  const total = r.ingredients.length;
+  const costed = costedIngredients(r).length;
+  return { costed, total, complete: total > 0 && costed === total };
+}
+
 export function recipeTotalGrams(r: RecipeContent): number {
-  return r.ingredients.reduce((g, i) => g + i.grams, 0);
+  return costedIngredients(r).reduce((g, i) => g + i.grams, 0);
 }
 
 export function recipeTotalNutrients(r: RecipeContent): Nutrients {
-  return sum(r.ingredients.map((i) => scale(i.per100g, i.grams)));
+  return sum(costedIngredients(r).map((i) => scale(i.per100g, i.grams)));
 }
 
 export function recipeServingGrams(r: RecipeContent): number {
@@ -166,9 +225,18 @@ export function recipePerServing(r: RecipeContent): Nutrients {
   return out;
 }
 
+// Cooking logs the COSTED part of a recipe, and with nothing costed there is no
+// honest number to log at all. Writing zeros into the day would quietly say "you
+// ate nothing", which is worse than not logging it — so the UI offers to cost it
+// instead of pretending. This is the guard for that, not a judgement on the
+// recipe: an uncosted recipe is a perfectly good recipe, it just isn't arithmetic.
+export const recipeHasNumbers = (r: RecipeContent): boolean => recipeTotalGrams(r) > 0;
+
 // Normalize the whole recipe to a per-100g vector, so a serving can be logged
 // through the ordinary food-log path (loggedNutrients then reproduces the
-// per-serving values exactly). Guards an empty recipe.
+// per-serving values exactly). Guards an empty recipe. Over a partly-costed
+// recipe this describes the costed part only — check `recipeHasNumbers` before
+// offering to cook, and tell the person what's counted (see `recipeCoverage`).
 export function recipeAsFood(r: Recipe): Food {
   const grams = recipeTotalGrams(r);
   const total = recipeTotalNutrients(r);
@@ -182,6 +250,62 @@ export function recipeAsFood(r: Recipe): Food {
     per100g,
   };
 }
+
+// ---- Reading what you typed ---------------------------------------------
+// You dump a meal in as prose; these split it up and find the food in it. Both
+// are best-effort BY DESIGN and neither ever changes what you wrote: the lines
+// stay editable and the original words are what's stored. A wrong guess here
+// costs a tap to fix, never a silent rewrite of your recipe.
+
+// One ingredient per line, and commas count as line breaks — people type both
+// ways in the same breath ("olive oil, two onions\nthe rest of the chickpeas").
+// Leading bullets and dashes from a paste are dropped. Numbers with commas
+// ("1,5 dl") would split wrongly, so a comma between digits is left alone.
+export function parseIngredientLines(text: string): string[] {
+  return text
+    .split(/\n|;|,(?![0-9])/) // a comma before a digit is "1,5 dl", not a break
+    .map((l) => l.replace(/^\s*[-*\u2022\u00b7\u2013\u2014]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+// Words that describe HOW MUCH rather than WHAT. Stripping them turns "the rest
+// of the chickpeas" into "chickpea", which is what both the pantry matcher and
+// the food search actually want. Amounts are never interpreted as quantities —
+// Hearth does not guess that "a big spoon" is 15g. It just stops them drowning
+// out the noun.
+const AMOUNT_WORDS = new Set([
+  "a", "an", "the", "of", "some", "few", "couple", "several", "bit", "lot", "lots",
+  "rest", "most", "half", "quarter", "third", "whole", "extra", "more", "less",
+  "big", "large", "small", "medium", "little", "generous", "heaped", "level",
+  "spoon", "spoons", "spoonful", "spoonfuls", "tbsp", "tsp", "tablespoon", "tablespoons",
+  "teaspoon", "teaspoons", "cup", "cups", "handful", "handfuls", "pinch", "pinches",
+  "dash", "splash", "drizzle", "glug", "knob", "clove", "cloves", "slice", "slices",
+  "tin", "tins", "can", "cans", "jar", "jars", "packet", "packets", "pack", "bag", "bags",
+  "g", "kg", "mg", "ml", "l", "dl", "cl", "oz", "lb", "lbs", "gram", "grams", "kilo", "kilos",
+  "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "dozen",
+  "and", "or", "to", "for", "with", "into", "about", "roughly", "maybe", "plus",
+  // Pointing words — "most of THAT jar of chilli oil" is still just chilli oil.
+  "that", "this", "those", "these", "my", "your", "our", "their", "it", "its", "them",
+]);
+
+// The food words in a loose phrase, lowercased and de-pluralised. Falls back to
+// the raw words when a line is nothing but amounts, so an odd line still matches
+// itself rather than becoming invisible.
+export function ingredientKeywords(text: string): string[] {
+  const raw = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    // A bare number, or a number welded to its unit ("200g", "1kg", "2tbsp").
+    .filter((w) => !/^\d+(\.\d+)?[a-z]*$/.test(w))
+    .map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w));
+  const meaningful = raw.filter((w) => !AMOUNT_WORDS.has(w));
+  return meaningful.length ? meaningful : raw;
+}
+
+// What to put in the food-search box when you tap an uncosted line to cost it.
+export const searchHintFor = (i: RecipeIngredient): string => ingredientKeywords(i.text).join(" ");
 
 // ---- Goals -------------------------------------------------------------
 // YOUR targets, never a norm imposed on you. A goal is a nutrient, a number, and

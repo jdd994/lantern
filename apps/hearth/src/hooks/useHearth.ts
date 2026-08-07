@@ -20,7 +20,7 @@ import * as api from "../lib/api";
 import { syncNow } from "../lib/sync";
 import { biometricSupported, enrollBiometric, unlockBiometric } from "../lib/biometric";
 import {
-  dayBounds, windowTotal, goalProgress, recipeAsFood,
+  dayBounds, windowTotal, goalProgress, recipeAsFood, normalizeRecipeContent,
   type Food, type FoodLog, type FoodLogContent, type Goal, type GoalContent,
   type GoalProgress, type Nutrients, type Recipe, type RecipeContent,
 } from "../lib/nutrition";
@@ -109,6 +109,7 @@ export type Hearth = {
   removeGoal: (id: string) => Promise<void>;
 
   addRecipe: (content: RecipeContent) => Promise<void>;
+  updateRecipe: (id: string, content: RecipeContent) => Promise<void>;
   removeRecipe: (id: string) => Promise<void>;
   logRecipeServing: (recipe: Recipe) => Promise<void>;
 
@@ -228,7 +229,9 @@ export function useHearth(): Hearth {
     );
     const rc = await Promise.all(
       sr.filter((r) => !r.deleted).map(async (r): Promise<Recipe> => {
-        const c = await openJSON<RecipeContent>(key, r.content);
+        // Recipes saved before the loose-ingredient shape are migrated here, on
+        // read — they live in sealed blobs, so there's no schema to bump.
+        const c = normalizeRecipeContent(await openJSON<RecipeContent>(key, r.content));
         return { ...c, id: r.id };
       })
     );
@@ -979,6 +982,22 @@ export function useHearth(): Hearth {
     scheduleSync();
   }, [scheduleSync]);
 
+  // Curating a recipe you already saved — costing a loose ingredient, fixing a
+  // word, adding the photo you forgot. This is the half that makes capturing a
+  // meal in ten seconds honest: what you dashed off stays editable forever, and
+  // going back to it is an ordinary edit, not a re-entry.
+  const updateRecipe = useCallback(async (id: string, content: RecipeContent) => {
+    const key = keyRef.current;
+    if (!key) return;
+    setRecipes((prev) => prev.map((r) => (r.id === id ? { ...content, id } : r)));
+    const stored = (await db.allRecipes()).find((r) => r.id === id);
+    if (!stored) return;
+    await db.putRecipe({
+      ...stored, updatedAt: Date.now(), dirty: true, content: await sealJSON(key, content),
+    });
+    scheduleSync();
+  }, [scheduleSync]);
+
   const removeRecipe = useCallback(async (id: string) => {
     setRecipes((prev) => prev.filter((r) => r.id !== id));
     const stored = (await db.allRecipes()).find((r) => r.id === id);
@@ -1282,7 +1301,9 @@ export function useHearth(): Hearth {
             if (ch.kind === "meta") {
               name = (await openJSON<KitchenMeta>(entry.dek, ch.content)).name || name;
             } else if (ch.kind === "recipe") {
-              shared.push({ ...(await openJSON<RecipeContent>(entry.dek, ch.content)), id: ch.id });
+              // Same migration for a recipe shared in from someone else's
+              // kitchen — they may be on an older build than you.
+              shared.push({ ...normalizeRecipeContent(await openJSON<RecipeContent>(entry.dek, ch.content)), id: ch.id });
             } else if (ch.kind === "mealPlan") {
               sharedPlans.push({ ...(await openJSON<SharedPlanContent>(entry.dek, ch.content)), id: ch.id });
             }
@@ -1362,7 +1383,12 @@ export function useHearth(): Hearth {
     setKitchenError(null);
     try {
       const now = Date.now();
-      const { id: _id, ...content } = recipe;
+      // The photo stays home. Sharing a recipe shares the words — a picture of
+      // your kitchen table is a different act than a list of ingredients, and
+      // nobody should discover after the fact that it travelled. Photos in
+      // shared kitchens can be their own deliberate feature, opted into once
+      // there's a way to say yes to it.
+      const { id: _id, photo: _photo, ...content } = recipe;
       await api.sharedPush(token, strandId, [{
         kind: "recipe", id: uid(), createdAt: now, updatedAt: now,
         deleted: false, dekEpoch: entry.dekEpoch,
@@ -1426,7 +1452,7 @@ export function useHearth(): Hearth {
     recoveryKitAt, createRecoveryKit, removeRecoveryKit, recoverWithKit,
     setup, unlock, unlockWithBiometric, enableBiometric, lock,
     logFood, removeLog, addGoal, removeGoal,
-    addRecipe, removeRecipe, logRecipeServing,
+    addRecipe, updateRecipe, removeRecipe, logRecipeServing,
     addPlan, removePlan, cookPlan,
     addPantryItem, removePantryItem,
     kitchens, kitchenBusy, kitchenError, createKitchen, inviteToKitchen, shareRecipe, syncKitchens,
