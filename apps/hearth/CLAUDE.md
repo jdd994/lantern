@@ -79,6 +79,16 @@ The user was explicit: *"I don't like the comparison too much."* So:
 - Inline SVG for icons, never Unicode glyphs (they tofu on system-font stacks —
   Ballast learned this).
 
+## Layout (decided 2026-07-17)
+
+Three bottom tabs — **Today** (food log, nutrients, goals: the daily act),
+**Kitchen** (recipes, plan, pantry, shared kitchens), **Body** (metrics,
+wearables, runs). Sync + settings stay in the gear sheet; log/measure sheets
+are global. The tab bar is inline in `App.tsx` per the H5 lesson — extract the
+component to `@lantern/ui` only when a second app provably wants tabs; each
+app's information architecture stays its own. A Fitbit OAuth return (`?code`)
+lands on the Body tab, where the connection lives.
+
 ## Stack
 
 - Vite + React 18 + TypeScript, `idb` for IndexedDB, WebCrypto (AES-GCM +
@@ -139,6 +149,8 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 | Provider | Tier | Status | Who learns what |
 |---|---|---|---|
 | **Manual entry** | 0 | Always | **Nobody.** Type a reading; it never leaves. |
+| **Heart-rate strap (BLE)** | 0 | **BUILT** | **Nobody.** Any strap speaking the standard Bluetooth heart-rate GATT profile (Polar H10/H9, Garmin HRM-Dual, Wahoo…) → this page over Web Bluetooth. No vendor, no account, no network, no CSP origin. A live "sit" saves resting HR + HRV (RMSSD from raw R-R); nothing persists unless saved. Chrome/Edge only — Web Bluetooth doesn't exist in Safari/Firefox. `lib/wearable/strap.ts`; shared sit arithmetic in `lib/wearable/live.ts`. |
+| **Smart ring (BLE)** | 0 | **BUILT** | **Nobody.** ColMi R02-class rings via the community reverse-engineered protocol (16-byte frames, sum-&-0xFF checksum) — no vendor app, no account, no network. Live heart rate only: the ring's blood-pressure/blood-sugar/fatigue "readings" are pseudo-measurements and are **unrequestable by construction**; no raw R-R, so a ring sit never claims HRV. `lib/wearable/ring.ts`; full protocol notes in the Wick repo (~/dev/wick). |
 | **Fitbit** | 2 | **BUILT** | **Nobody new.** Browser → Fitbit directly (CORS + OAuth2/PKCE, no client secret, no backend). Fitbit already holds these readings. |
 | Withings (scales) | 2–3 | Candidate | Data API sends `allow-origin: *`, but the token exchange wants a secret → would need a **token broker** (a server that sees a token, never a reading). |
 | Oura | — | **Blocked** | Sends **no `allow-origin`**, and killed personal access tokens Dec 2025. Only the legacy implicit flow remains (no refresh, ~30-day expiry). |
@@ -148,11 +160,52 @@ after an explicit in-app Accept** (`Wearables.tsx`, reusing the `.trade` box).
 **The escape hatch for every blocked vendor is CSV import (tier 0)** — Garmin,
 Whoop and Oura all let you export. Less magical; costs nothing and asks nobody.
 
-**Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and asserted
-in its test:
+### Runs (GPX import, tier 0)
+
+`lib/run.ts` + `components/Runs.tsx` + the `runs` store (db v5, syncable kind
+`"run"`). You pick a `.gpx` file; it's parsed in the tab (no DOMParser — a
+small dependency-free reader, tested in node); distance/duration/ascent are
+computed locally; the route is sealed with the vault key. A run trace is the
+most sensitive record Hearth holds — where you are, alone, at predictable
+times — and GPX is the honest door every vendor leaves open, including the
+refused ones (Garmin/Whoop export it).
+
+Standing decisions:
+- **No map tiles.** Fetching tiles tells a tile server roughly where you run.
+  The route renders as its own shape on blank ground; real maps wait for an
+  offline-tiles story. The CSP stays silent.
+- **No GPX extensions.** Heart rate, cadence, calories ride in `<extensions>`;
+  the parser never reads them (asserted in run.test.ts).
+- **No records, no pace judgement, no streaks.** A run is its facts.
+- Ascent uses a 3m hysteresis (GPS wobble is not climbing) and displays as "≈".
+- Run ids are HMAC-tagged naturals (same `tagger`) — re-import dedupes, and
+  the sync server never learns a record is a run.
+
+### Source-aware aggregation (the witness stand)
+
+With several devices feeding one metric, each source is a separate **witness**
+(`witnesses()` / `chartSeries()` in `lib/metrics.ts`), and four rules hold:
+
+1. **Never average sources silently.** The strap saying 58 while the ring says
+   62 is information — the Body card states each testimony side by side and the
+   chart draws one line per source, never one line threaded through all of them.
+2. **Witness colours follow the entity, for life** (`--wit-*` in styles.css) —
+   validated for colour-vision separation (all pairs) and ≥3:1 contrast on both
+   surfaces. Change one → re-run the dataviz palette validator, don't eyeball.
+   Typed-by-you is quiet ink + a dashed line, named in the legend, never
+   identified by colour alone.
+3. **Uncertainty is part of the datum.** A sit's spread ("mostly 54–61") is
+   stored on the reading (`Reading.note`) and shown beside it forever.
+4. **Measurements and inferences never share a visual language** — currently
+   satisfied by refusing inferences entirely (no scores, no sleep stages).
+
+**Two refusals with no toggle**, enforced in `lib/wearable/fitbit.ts` and
+`lib/wearable/strap.ts`, asserted in their tests:
 1. **No calories burned.** Calories-out next to the food log silently becomes
    deficit maths — the exact harm invariant 3 forbids. Fitbit's `activity` scope
-   grants it anyway; the promise is kept by never asking for the endpoint.
+   grants it anyway; the promise is kept by never asking for the endpoint. The
+   strap's measurement packet volunteers "energy expended" mid-stream; the
+   parser steps over those bytes unread.
 2. **No scores.** Sleep efficiency, readiness, BMI — a grade for your body is not
    a measurement of it. We take the hours slept, never the mark out of 100.
 

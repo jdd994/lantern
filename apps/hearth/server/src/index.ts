@@ -3,7 +3,7 @@
 import { createServer } from "@lantern/server";
 
 export default createServer({
-  kinds: ["foodLog", "metric", "goal", "recipe", "mealPlan", "pantryItem"],
+  kinds: ["foodLog", "metric", "goal", "recipe", "mealPlan", "pantryItem", "run"],
   service: "hearth-server",
   // Sharing: the /shared/* collections + the identity/key directory, from the
   // shared factory. This is what "plan meals with the people you feed" runs on —
