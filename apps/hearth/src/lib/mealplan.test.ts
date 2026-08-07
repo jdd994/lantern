@@ -28,7 +28,7 @@ const recipe: Recipe = {
   id: "r1",
   name: "Stew",
   servings: 2,
-  ingredients: [{ foodId: "a", name: "Beans", grams: 400, per100g }],
+  ingredients: [{ text: "Beans", cost: { foodId: "a", name: "Beans", grams: 400, per100g } }],
 };
 
 describe("weeks and days", () => {

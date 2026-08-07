@@ -9,7 +9,7 @@ const recipe = (name: string, ings: [string, string][]): Recipe => ({
   id: name,
   name,
   servings: 2,
-  ingredients: ings.map(([foodId, n]) => ({ foodId, name: n, grams: 100, per100g })),
+  ingredients: ings.map(([foodId, n]) => ({ text: n, cost: { foodId, name: n, grams: 100, per100g } })),
 });
 
 describe("ingredientCovered", () => {

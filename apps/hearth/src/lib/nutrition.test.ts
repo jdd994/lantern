@@ -71,8 +71,8 @@ describe("recipes", () => {
     name: "Porridge",
     servings: 2,
     ingredients: [
-      { foodId: "seed:oats", name: "Oats", grams: 100, per100g: oats }, // 389 kcal, 16.9 protein
-      { foodId: "seed:milk-2", name: "Milk", grams: 200, per100g: milk }, // 100 kcal, 6.6 protein
+      { text: "Oats", cost: { foodId: "seed:oats", name: "Oats", grams: 100, per100g: oats } }, // 389 kcal, 16.9 protein
+      { text: "Milk", cost: { foodId: "seed:milk-2", name: "Milk", grams: 200, per100g: milk } }, // 100 kcal, 6.6 protein
     ],
   };
 
