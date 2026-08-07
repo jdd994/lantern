@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
+  birthFamilyName,
   childrenOf,
   displayName,
   keepsakesFor,
@@ -122,6 +123,7 @@ export function PersonPage({
 
   const byId = new Map(people.map((p) => [p.id, p]));
   const span = lifespanLabel(person);
+  const bornAs = birthFamilyName(person);
   const treasures = keepsakesFor(person.id, keepsakes);
   const tendedBy = authorHandle(person.author);
 
@@ -141,10 +143,12 @@ export function PersonPage({
           <button className="btn btn-sm" onClick={() => setEditing(true)}><Trans>Edit</Trans></button>
         </div>
       </div>
-      {span || tendedBy ? (
+      {bornAs || span || tendedBy ? (
         <p className="person-life">
+          {bornAs ? <Trans>born {bornAs}</Trans> : null}
+          {bornAs && span ? " · " : ""}
           {span}
-          {span && tendedBy ? " · " : ""}
+          {(bornAs || span) && tendedBy ? " · " : ""}
           {tendedBy ? <span className="byline"><Trans>last tended by {tendedBy}</Trans></span> : null}
         </p>
       ) : null}

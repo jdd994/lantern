@@ -5,7 +5,15 @@
 import { useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Sheet } from "@lantern/ui";
-import { whenYear, withEventWhen, yearWhen, type Person, type When } from "../lib/model";
+import {
+  birthFamilyName,
+  whenYear,
+  withBirthFamilyName,
+  withEventWhen,
+  yearWhen,
+  type Person,
+  type When,
+} from "../lib/model";
 import type { PersonDraft } from "../hooks/useGrove";
 
 type Qual = "" | NonNullable<When["qualifier"]>;
@@ -32,6 +40,7 @@ export function EditPerson({
 
   const [given, setGiven] = useState(first.given ?? "");
   const [family, setFamily] = useState(first.family ?? "");
+  const [born, setBorn] = useState(birthFamilyName(person) ?? "");
   const [living, setLiving] = useState(person.living !== false);
   const [birthYear, setBirthYear] = useState(whenYear(birth)?.toString() ?? "");
   const [birthQual, setBirthQual] = useState<Qual>(birth?.qualifier ?? "");
@@ -60,8 +69,9 @@ export function EditPerson({
     let events = withEventWhen(person.events, "birth", yearWhen(by, birthQual || undefined));
     events = withEventWhen(events, "death", living ? undefined : yearWhen(dy, deathQual || undefined));
 
+    const shown = { ...first, given: given.trim() || undefined, family: family.trim() || undefined };
     onSave({
-      names: [{ ...first, given: given.trim() || undefined, family: family.trim() || undefined }, ...person.names.slice(1)],
+      names: withBirthFamilyName([shown, ...person.names.slice(1)], born),
       living,
       events,
     });
@@ -92,6 +102,13 @@ export function EditPerson({
             <input type="text" value={family} onChange={(e) => setFamily(e.target.value)} />
           </label>
         </div>
+        <label className="field">
+          <span className="label"><Trans>Family name at birth</Trans></span>
+          <input type="text" value={born} onChange={(e) => setBorn(e.target.value)} />
+          <span className="hint">
+            <Trans>A maiden name, or any family name that changed later. Leave it empty if it never did.</Trans>
+          </span>
+        </label>
         <div className="row">
           <label className="field">
             <span className="label"><Trans>Born (year)</Trans></span>
