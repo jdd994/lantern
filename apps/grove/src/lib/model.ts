@@ -22,7 +22,20 @@ export function hasWhen(w: When | undefined): w is When {
 // ---- People --------------------------------------------------------------
 // A person may carry several names across a life (birth name, married name,
 // the name everyone actually called them). The first name is the display one.
+//
+// Two ways to write one, because one way can't hold every culture:
+//   given + family — the shape most of the world's paperwork assumes, and
+//     `given` takes all the fore-names, middle ones included.
+//   full — the name exactly as it's said, in its own order, when the pair
+//     above can't hold it: 王偉 with the family name first, José Luis García
+//     Márquez with two of them, Jón Einarsson whose second word is a
+//     patronymic and not a family name at all, Aristotle with only one.
+// When `full` is set it *is* the name; `family` then only annotates which
+// part of it is the family name, for the birth-name line and for GEDCOM's
+// slashes. Grove never guesses that annotation — an unmarked name is just a
+// name, which is the honest reading.
 export type Name = {
+  full?: string;
   given?: string;
   family?: string;
   kind?: "birth" | "married" | "aka";
@@ -171,7 +184,7 @@ function parseTree(decrypted: string, t: string): Record<string, unknown> {
 
 export function displayName(p: Person): string {
   const n = p.names[0];
-  const s = [n?.given, n?.family].filter(Boolean).join(" ").trim();
+  const s = (n?.full ?? [n?.given, n?.family].filter(Boolean).join(" ")).trim();
   return s || "Someone";
 }
 
@@ -179,9 +192,9 @@ export function displayName(p: Person): string {
 // under — a maiden name, or any name changed later in life. It lives as its own
 // Name entry with kind "birth", so GEDCOM round-trips it as NAME/TYPE birth.
 // When the shown name IS the birth name there's nothing extra to say.
-export function birthFamilyName(p: Person): string | undefined {
-  const born = p.names.find((n) => n.kind === "birth");
-  if (!born?.family || born.family === p.names[0]?.family) return undefined;
+export function birthFamilyName(names: Name[]): string | undefined {
+  const born = names.find((n) => n.kind === "birth");
+  if (!born?.family || born.family === names[0]?.family) return undefined;
   return born.family;
 }
 
@@ -195,12 +208,26 @@ export function withBirthFamilyName(names: Name[], family: string | undefined): 
   if (!f || f === shown?.family) return [...head, ...rest.filter((n) => n.kind !== "birth")];
 
   const i = rest.findIndex((n) => n.kind === "birth");
-  const given = (i === -1 ? undefined : rest[i].given) ?? shown?.given;
-  const born: Name = { ...(given ? { given } : {}), family: f, kind: "birth" };
+  const born = bornName(i === -1 ? undefined : rest[i], shown, f);
   const tail = i === -1 ? [born, ...rest] : rest.map((n, j) => (j === i ? born : n));
   // The shown name can't also be the birth name once the two differ; it's
   // simply the name they're known by now.
   return [...(shown?.kind === "birth" ? [{ ...shown, kind: undefined }] : head), ...tail];
+}
+
+// A birth name is the same name with a different family part in it. When a
+// name is written out in full we swap that part in place, so word order and
+// every other part of it survive — "Mary Jane Poole" becomes "Mary Jane Hale",
+// and "王偉" becomes "李偉" — rather than collapsing to a bare surname.
+function bornName(prev: Name | undefined, shown: Name | undefined, family: string): Name {
+  const born: Name = { family, kind: "birth" };
+  for (const src of [prev, shown]) {
+    if (src?.full && src.family && src.full.includes(src.family)) {
+      return { ...born, full: src.full.replace(src.family, family) };
+    }
+  }
+  const given = prev?.given ?? shown?.given;
+  return given ? { ...born, given } : born;
 }
 
 function eventOf(p: Person, kind: LifeEvent["kind"]): LifeEvent | undefined {

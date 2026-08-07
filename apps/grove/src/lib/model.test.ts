@@ -101,14 +101,18 @@ describe("names and lifespans", () => {
     expect(displayName({ ...person("p", ""), names: [] })).toBe("Someone");
   });
 
+  it("prefers a name written out in full, and falls back to the pair", () => {
+    expect(displayName(person("p", "x", { names: [{ full: "王偉", family: "王" }] }))).toBe("王偉");
+    expect(displayName(person("p", "x", { names: [{ full: "Aristotle" }] }))).toBe("Aristotle");
+    // A stale pair never shows through a full name, and vice versa.
+    expect(displayName(person("p", "x", { names: [{ full: "Jón Einarsson", given: "old" }] }))).toBe("Jón Einarsson");
+  });
+
   it("reads a birth family name only when it differs from the shown one", () => {
-    const married = person("p", "Mary", {
-      names: [{ given: "Mary", family: "Poole" }, { given: "Mary", family: "Hale", kind: "birth" }],
-    });
-    expect(birthFamilyName(married)).toBe("Hale");
+    expect(birthFamilyName([{ given: "Mary", family: "Poole" }, { given: "Mary", family: "Hale", kind: "birth" }])).toBe("Hale");
     // Shown under the name they were born with: nothing extra to say.
-    expect(birthFamilyName(person("p", "Mary", { names: [{ given: "Mary", family: "Hale", kind: "birth" }] }))).toBeUndefined();
-    expect(birthFamilyName(person("p", "Mary"))).toBeUndefined();
+    expect(birthFamilyName([{ given: "Mary", family: "Hale", kind: "birth" }])).toBeUndefined();
+    expect(birthFamilyName([{ given: "Mary" }])).toBeUndefined();
   });
 
   it("sets, updates and clears a birth family name without disturbing other names", () => {
@@ -133,6 +137,23 @@ describe("names and lifespans", () => {
     ]);
 
     expect(withBirthFamilyName([], "Hale")).toEqual([{ family: "Hale", kind: "birth" }]);
+  });
+
+  it("swaps the family part inside a full name, keeping its order and its other parts", () => {
+    expect(withBirthFamilyName([{ full: "Mary Jane Poole", family: "Poole" }], "Hale")).toEqual([
+      { full: "Mary Jane Poole", family: "Poole" },
+      { full: "Mary Jane Hale", family: "Hale", kind: "birth" },
+    ]);
+    // Family name first: the swap happens where the name actually stands.
+    expect(withBirthFamilyName([{ full: "王偉", family: "王" }], "李")).toEqual([
+      { full: "王偉", family: "王" },
+      { full: "李偉", family: "李", kind: "birth" },
+    ]);
+    // Nothing to swap into: the surname alone is still the whole answer.
+    expect(withBirthFamilyName([{ full: "Aristotle" }], "Hale")).toEqual([
+      { full: "Aristotle" },
+      { family: "Hale", kind: "birth" },
+    ]);
   });
 
   it("formats fuzzy whens with qualifier and precision", () => {

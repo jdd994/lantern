@@ -102,6 +102,54 @@ describe("round trip", () => {
   });
 });
 
+// GEDCOM marks the surname where it stands, which is the only way a name that
+// isn't fore-names-then-surname can survive. These are the shapes the old
+// parser refused outright, leaving literal slashes in people's names.
+describe("names that aren't fore-names-then-surname", () => {
+  const nameOf = (gedcom: string) => fromGedcom(gedcom, counter(), 5000).people[0].names[0];
+  const indi = (name: string) => `0 HEAD\n0 @I1@ INDI\n1 NAME ${name}\n0 TRLR\n`;
+
+  it("reads a surname wherever it falls", () => {
+    expect(nameOf(indi("Mary Jane /Poole/"))).toEqual({ given: "Mary Jane", family: "Poole" });
+    expect(nameOf(indi("/Wang/ Wei"))).toEqual({ full: "Wang Wei", family: "Wang" });
+    expect(nameOf(indi("Martin Luther /King/ Jr."))).toEqual({ full: "Martin Luther King Jr.", family: "King" });
+    expect(nameOf(indi("José Luis /García Márquez/"))).toEqual({ given: "José Luis", family: "García Márquez" });
+    expect(nameOf(indi("Aristotle"))).toEqual({ given: "Aristotle" });
+  });
+
+  it("takes the surname from SURN when the name isn't slash-marked", () => {
+    expect(nameOf("0 HEAD\n0 @I1@ INDI\n1 NAME Jón Einarsson\n2 SURN Einarsson\n0 TRLR\n"))
+      .toEqual({ given: "Jón Einarsson", family: "Einarsson" });
+  });
+
+  it("writes them back out unchanged", () => {
+    const people: Person[] = [
+      { id: "a", names: [{ full: "Wang Wei", family: "Wang" }], living: false, events: [], ...shell },
+      { id: "b", names: [{ full: "Martin Luther King Jr.", family: "King" }], living: false, events: [], ...shell },
+      { id: "c", names: [{ full: "Aristotle" }], living: false, events: [], ...shell },
+    ];
+    const text = toGedcom({ people, unions: [], keepsakes: [] }, { privatizeLiving: false });
+    expect(text).toMatch(/1 NAME \/Wang\/ Wei/);
+    expect(text).toMatch(/1 NAME Martin Luther \/King\/ Jr\./);
+    expect(text).toMatch(/1 NAME Aristotle/);
+
+    const back = fromGedcom(text, counter(), 5000);
+    expect(back.people.map((p) => p.names[0])).toEqual([
+      { full: "Wang Wei", family: "Wang" },
+      { full: "Martin Luther King Jr.", family: "King" },
+      { given: "Aristotle" }, // one word, no surname to mark: the pair holds it
+    ]);
+    expect(back.people.map(displayName)).toEqual(["Wang Wei", "Martin Luther King Jr.", "Aristotle"]);
+  });
+
+  it("keeps a surname that can't be found inside the name, in the subtag for it", () => {
+    const people: Person[] = [{ id: "a", names: [{ full: "Mary Jane Poole", family: "Hale" }], living: false, events: [], ...shell }];
+    const text = toGedcom({ people, unions: [], keepsakes: [] }, { privatizeLiving: false });
+    expect(text).toMatch(/1 NAME Mary Jane Poole\n2 SURN Hale/);
+    expect(fromGedcom(text, counter(), 5000).people[0].names[0]).toEqual({ given: "Mary Jane Poole", family: "Hale" });
+  });
+});
+
 describe("privatizing the living (the default)", () => {
   const secret: Keepsake = { id: "k2", caption: "Tom's photo", about: ["tom"], ...shell };
   const text = toGedcom({ people: [june, tom], unions: [grand], keepsakes: [letter, secret] });
