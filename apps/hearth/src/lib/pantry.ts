@@ -9,7 +9,7 @@
 // The tone matters as much as the maths: a recipe you can't quite make is not a
 // failure, it's "you're two things away". We rank by what's closest, never scold,
 // and "missing" is a neutral word here.
-import type { Recipe } from "./nutrition";
+import { ingredientKeywords, type Recipe, type RecipeIngredient } from "./nutrition";
 
 // What you have. Quantities are deliberately NOT tracked: a pantry that demands
 // you weigh your rice is a pantry nobody updates. Presence is enough to answer
@@ -33,8 +33,12 @@ const norm = (s: string) =>
 const singular = (w: string) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
 const words = (s: string) => norm(s).split(" ").filter(Boolean).map(singular);
 
+// An ingredient may be loose words ("the rest of the chickpeas") or a costed
+// food ("Chickpeas, canned"). Costing is the strong signal when it's there;
+// otherwise the words are stripped of amounts, which is what makes a
+// thrown-together recipe match a pantry at all. See `ingredientKeywords`.
 export function ingredientCovered(ingredientName: string, ingredientFoodId: string, pantry: PantryItem[]): boolean {
-  if (pantry.some((p) => p.foodId === ingredientFoodId)) return true;
+  if (ingredientFoodId && pantry.some((p) => p.foodId === ingredientFoodId)) return true;
   const iw = words(ingredientName);
   if (!iw.length) return false;
   return pantry.some((p) => {
@@ -46,11 +50,19 @@ export function ingredientCovered(ingredientName: string, ingredientFoodId: stri
   });
 }
 
+// How an ingredient is named in the "you have / you're missing" lists: the words
+// you wrote, because that's what you'll recognise on a shopping trip. Falls back
+// to the costed food's name for a recipe whose lines were never given text.
+const ingredientLabel = (i: RecipeIngredient): string => i.text.trim() || i.cost?.name || "";
+
 export function matchRecipe(recipe: Recipe, pantry: PantryItem[]): RecipeMatch {
   const have: string[] = [];
   const missing: string[] = [];
   for (const ing of recipe.ingredients) {
-    (ingredientCovered(ing.name, ing.foodId, pantry) ? have : missing).push(ing.name);
+    // Costed → match on the food's real name and id. Loose → match on the food
+    // words in what you typed, with "two"/"the rest of" stripped out.
+    const name = ing.cost ? ing.cost.name : ingredientKeywords(ing.text).join(" ");
+    (ingredientCovered(name, ing.cost?.foodId ?? "", pantry) ? have : missing).push(ingredientLabel(ing));
   }
   const total = recipe.ingredients.length;
   return { recipe, have, missing, ratio: total === 0 ? 0 : have.length / total };
