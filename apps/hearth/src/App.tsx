@@ -7,7 +7,7 @@ import { LockScreen } from "./components/LockScreen";
 import { Today } from "./components/Today";
 import { LogFood } from "./components/LogFood";
 import { Goals, AddGoal } from "./components/Goals";
-import { Recipes, AddRecipe } from "./components/Recipes";
+import { Recipes, AddRecipe, EditRecipe } from "./components/Recipes";
 import { Body, LogMetric } from "./components/Body";
 import { Wearables } from "./components/Wearables";
 import { Runs } from "./components/Runs";
@@ -51,6 +51,9 @@ export default function App() {
   const [logging, setLogging] = useState(false);
   const [addingGoal, setAddingGoal] = useState(false);
   const [addingRecipe, setAddingRecipe] = useState(false);
+  // The recipe open for curation — costing a line, fixing a word, adding the
+  // photo. Held by id so it follows the live record rather than a stale copy.
+  const [editingRecipe, setEditingRecipe] = useState<string | null>(null);
   const [loggingMetric, setLoggingMetric] = useState(false);
   const [sync, setSync] = useState(false);
   const [weekOf, setWeekOf] = useState(() => Date.now());
@@ -245,6 +248,7 @@ export default function App() {
           recipes={h.recipes}
           busy={h.busy}
           onCook={(r) => void h.logRecipeServing(r)}
+          onOpen={(r) => setEditingRecipe(r.id)}
           onRemove={(id) => void h.removeRecipe(id)}
         />
       </section>
@@ -333,6 +337,10 @@ export default function App() {
       ) : null}
       {addingGoal ? <AddGoal onAdd={h.addGoal} onClose={() => setAddingGoal(false)} /> : null}
       {addingRecipe ? <AddRecipe onAdd={h.addRecipe} onClose={() => setAddingRecipe(false)} /> : null}
+      {(() => {
+        const r = editingRecipe ? h.recipes.find((x) => x.id === editingRecipe) : null;
+        return r ? <EditRecipe recipe={r} onSave={h.updateRecipe} onClose={() => setEditingRecipe(null)} /> : null;
+      })()}
       {planningDay !== null ? (
         <AddPlan
           day={planningDay}

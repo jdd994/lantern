@@ -128,6 +128,59 @@ cost of using it. **Full plan: FOOD_DATA.md.**
 | 2 | **AI photo recognition** (the `FoodRecognizer` seam) | A photo of your meal — so **on-device only, or explicit per-use consent.** Off by default. |
 | — | Commercial nutrition APIs (Nutritionix, Edamam…) | They see every query and cost money. **Not used** — against the soul. |
 
+### Recipes: words first, numbers later (2026-08-07)
+
+**An ingredient's words are required; its numbers are optional.** The old shape
+made you search and weigh every ingredient before you could save anything, so
+the meals people actually cook — thrown together, roughly known, never
+measured — simply never got written down. A recipe nobody can be bothered to
+enter records nothing.
+
+- `RecipeIngredient` is `{ text, cost? }`. `text` is what you typed, verbatim
+  ("a big spoon of harissa"). `cost` (`{ foodId, name, grams, per100g }`) appears
+  only if and when you curate that line.
+- **Capture is one text box.** `parseIngredientLines` splits on newlines and
+  commas (a comma between digits is "1,5 dl", not a break) and strips paste
+  bullets. Name + some words = a saved recipe.
+- **Costing is curation, done later, per line, or never.** A recipe that stays
+  loose forever is finished, not a chore outstanding. Nothing nags.
+- **Never invent a number.** Totals sum `costedIngredients` only, and
+  `recipeCoverage` is stated wherever nutrients appear ("3 of 6 costed") so a
+  partial total is never mistaken for a whole meal.
+- **`recipeHasNumbers` guards Cook.** Logging a fully-uncosted recipe would write
+  zeros into the day — "you ate nothing", worse than not logging it. The UI
+  offers to cost it instead.
+- `ingredientKeywords` strips amount words ("the rest of the chickpeas" →
+  `chickpea`), which is what lets the **pantry matcher work on loose recipes**
+  and what seeds the food search when you cost a line.
+- **Migration is on read, not a db bump.** Recipes are sealed blobs, so
+  `normalizeRecipeContent` converts the legacy flat shape in `useHearth` — both
+  for your own recipes and for ones shared in from a kitchen (someone else may
+  be on an older build).
+
+### Recipe photos (`lib/photo.ts`) — tier 0, and NOT the recognizer
+
+A photo of the finished thing, optional, stored as a data URL inside
+`RecipeContent` — so it is sealed and E2E encrypted exactly like an ingredient,
+and the server cannot tell a photo from a shopping list.
+
+**Nothing looks at it.** No model, no inference, no upload to any third party.
+That keeps it tier 0 — the same rung as typing a food in by hand, because no new
+party learns anything. This is emphatically **not** the FoodRecognizer seam
+below; that seam is still empty and this must never quietly become it.
+
+- Downscaled to a 900px long edge and re-encoded to JPEG **on device before
+  sealing**, stepping down a quality ladder until it fits `MAX_BYTES` (400 KB).
+  A multi-MB record is not a record, it's an outage.
+- **Re-encoding through a canvas drops EXIF** — phone photos carry GPS, and a
+  recipe that silently remembers your kitchen's latitude is not something anyone
+  asked for.
+- `img-src` already allows `data:`, so no CSP change was needed.
+- **Photos are stripped when a recipe is shared into a kitchen** (`shareRecipe`).
+  Sharing a recipe shares the words; a picture of your table is a different act,
+  and nobody should discover after the fact that it travelled. Photos in shared
+  kitchens would be their own deliberate, opted-into feature.
+
 ### The FoodRecognizer seam (`recognize.ts`)
 
 Same pattern as Ballast's `ReceiptReader`. Photographing a plate and having it
