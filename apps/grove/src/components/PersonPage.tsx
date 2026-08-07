@@ -123,7 +123,7 @@ export function PersonPage({
 
   const byId = new Map(people.map((p) => [p.id, p]));
   const span = lifespanLabel(person);
-  const bornAs = birthFamilyName(person);
+  const bornAs = birthFamilyName(person.names);
   const treasures = keepsakesFor(person.id, keepsakes);
   const tendedBy = authorHandle(person.author);
 

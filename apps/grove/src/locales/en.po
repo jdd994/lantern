@@ -55,7 +55,7 @@ msgstr "<0>{0}</0> — shared with the family. What anyone adds, everyone keeps:
 msgid "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
 msgstr "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
 
-#: src/components/AddRelative.tsx:101
+#: src/components/AddRelative.tsx:79
 msgid "1885"
 msgstr "1885"
 
@@ -63,7 +63,7 @@ msgstr "1885"
 msgid "1944"
 msgstr "1944"
 
-#: src/components/AddRelative.tsx:49
+#: src/components/AddRelative.tsx:40
 msgid "a child of"
 msgstr "a child of"
 
@@ -80,24 +80,24 @@ msgstr "A keepsake"
 msgid "A keepsake of {0}"
 msgstr "A keepsake of {0}"
 
-#: src/components/EditPerson.tsx:109
+#: src/components/NameFields.tsx:103
 msgid "A maiden name, or any family name that changed later. Leave it empty if it never did."
 msgstr "A maiden name, or any family name that changed later. Leave it empty if it never did."
 
-#: src/components/AddRelative.tsx:96
+#: src/components/NameFields.tsx:101
 msgid "a maiden name, say"
 msgstr "a maiden name, say"
 
-#: src/components/AddRelative.tsx:66
-#: src/components/EditPerson.tsx:54
+#: src/components/AddRelative.tsx:57
+#: src/components/EditPerson.tsx:44
 msgid "A name — even just the one everyone used."
 msgstr "A name — even just the one everyone used."
 
-#: src/components/AddRelative.tsx:47
+#: src/components/AddRelative.tsx:38
 msgid "a parent of"
 msgstr "a parent of"
 
-#: src/components/AddRelative.tsx:48
+#: src/components/AddRelative.tsx:39
 msgid "a partner of"
 msgstr "a partner of"
 
@@ -109,13 +109,13 @@ msgstr "A photo, a scanned letter, a document — kept as itself, encrypted like
 msgid "A shared tree travels through your account — the server relays encrypted records it can't read, wrapped keys it can't open."
 msgstr "A shared tree travels through your account — the server relays encrypted records it can't read, wrapped keys it can't open."
 
-#: src/components/AddRelative.tsx:50
+#: src/components/AddRelative.tsx:41
 msgid "a sibling of"
 msgstr "a sibling of"
 
 #: src/components/AddKeepsake.tsx:82
-#: src/components/AddRelative.tsx:107
-#: src/components/EditPerson.tsx:84
+#: src/components/AddRelative.tsx:85
+#: src/components/EditPerson.tsx:69
 msgid "About"
 msgstr "About"
 
@@ -135,13 +135,13 @@ msgstr "Account email"
 msgid "Account password"
 msgstr "Account password"
 
-#: src/components/AddRelative.tsx:135
+#: src/components/AddRelative.tsx:113
 msgid "Add"
 msgstr "Add"
 
 #. placeholder {0}: relLabel[relation]
 #. placeholder {1}: displayName(anchor)
-#: src/components/AddRelative.tsx:81
+#: src/components/AddRelative.tsx:72
 msgid "Add {0} {1}"
 msgstr "Add {0} {1}"
 
@@ -162,7 +162,7 @@ msgstr "Add a parent"
 msgid "Add a partner"
 msgstr "Add a partner"
 
-#: src/components/AddRelative.tsx:80
+#: src/components/AddRelative.tsx:71
 msgid "Add a person"
 msgstr "Add a person"
 
@@ -174,7 +174,7 @@ msgstr "Add a photo or scan, or say something about it — a keepsake needs one 
 msgid "Add a sibling"
 msgstr "Add a sibling"
 
-#: src/components/AddRelative.tsx:81
+#: src/components/AddRelative.tsx:72
 #: src/components/Home.tsx:41
 msgid "Add the first person"
 msgstr "Add the first person"
@@ -183,13 +183,13 @@ msgstr "Add the first person"
 msgid "Added but not linked to anyone yet — they still belong."
 msgstr "Added but not linked to anyone yet — they still belong."
 
-#: src/components/AddRelative.tsx:54
+#: src/components/AddRelative.tsx:45
 msgid "adoptive"
 msgstr "adoptive"
 
 #: src/components/AddKeepsake.tsx:84
-#: src/components/AddRelative.tsx:109
-#: src/components/EditPerson.tsx:86
+#: src/components/AddRelative.tsx:87
+#: src/components/EditPerson.tsx:71
 msgid "After"
 msgstr "After"
 
@@ -230,20 +230,20 @@ msgid "Back"
 msgstr "Back"
 
 #: src/components/AddKeepsake.tsx:83
-#: src/components/AddRelative.tsx:108
-#: src/components/EditPerson.tsx:85
+#: src/components/AddRelative.tsx:86
+#: src/components/EditPerson.tsx:70
 msgid "Before"
 msgstr "Before"
 
-#: src/components/AddRelative.tsx:53
+#: src/components/AddRelative.tsx:44
 msgid "birth"
 msgstr "birth"
 
-#: src/components/AddRelative.tsx:100
+#: src/components/AddRelative.tsx:78
 msgid "Born (year, if known)"
 msgstr "Born (year, if known)"
 
-#: src/components/EditPerson.tsx:114
+#: src/components/EditPerson.tsx:83
 msgid "Born (year)"
 msgstr "Born (year)"
 
@@ -256,8 +256,8 @@ msgid "By an address you already know. Their copy of the tree's key is wrapped s
 msgstr "By an address you already know. Their copy of the tree's key is wrapped so only they can open it — the server just carries the envelope."
 
 #: src/components/AddKeepsake.tsx:89
-#: src/components/AddRelative.tsx:134
-#: src/components/EditPerson.tsx:139
+#: src/components/AddRelative.tsx:112
+#: src/components/EditPerson.tsx:108
 #: src/components/Family.tsx:161
 msgid "Cancel"
 msgstr "Cancel"
@@ -313,7 +313,7 @@ msgstr "Create vault"
 msgid "Dear June…"
 msgstr "Dear June…"
 
-#: src/components/EditPerson.tsx:129
+#: src/components/EditPerson.tsx:98
 msgid "Died (year, if known)"
 msgstr "Died (year, if known)"
 
@@ -329,12 +329,12 @@ msgstr "Dismiss"
 msgid "Each record carries whose hand last touched it — a byline for stories, never a score."
 msgstr "Each record carries whose hand last touched it — a byline for stories, never a score."
 
-#: src/components/EditPerson.tsx:92
+#: src/components/EditPerson.tsx:77
 #: src/components/PersonPage.tsx:143
 msgid "Edit"
 msgstr "Edit"
 
-#: src/components/EditPerson.tsx:91
+#: src/components/EditPerson.tsx:76
 msgid "Edit person"
 msgstr "Edit person"
 
@@ -352,8 +352,8 @@ msgid "Everything about the living will be in the file, in plain text. Only turn
 msgstr "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
 
 #: src/components/AddKeepsake.tsx:81
-#: src/components/AddRelative.tsx:106
-#: src/components/EditPerson.tsx:83
+#: src/components/AddRelative.tsx:84
+#: src/components/EditPerson.tsx:68
 msgid "Exactly"
 msgstr "Exactly"
 
@@ -366,18 +366,21 @@ msgstr "Export .ged"
 msgid "Family"
 msgstr "Family"
 
-#: src/components/AddRelative.tsx:90
-#: src/components/EditPerson.tsx:101
+#: src/components/NameFields.tsx:93
 msgid "Family name"
 msgstr "Family name"
 
-#: src/components/EditPerson.tsx:106
+#: src/components/NameFields.tsx:100
 msgid "Family name at birth"
 msgstr "Family name at birth"
 
 #: src/components/AddRelative.tsx:95
-msgid "Family name at birth (if it changed)"
-msgstr "Family name at birth (if it changed)"
+#~ msgid "Family name at birth (if it changed)"
+#~ msgstr "Family name at birth (if it changed)"
+
+#: src/components/NameFields.tsx:70
+msgid "Family name, if one of them is"
+msgstr "Family name, if one of them is"
 
 #: src/components/Family.tsx:122
 msgid "Family tree"
@@ -399,7 +402,7 @@ msgstr "For a family tree, the natural guardians are the family."
 msgid "Forgot your passphrase? Ask your guardians"
 msgstr "Forgot your passphrase? Ask your guardians"
 
-#: src/components/AddRelative.tsx:56
+#: src/components/AddRelative.tsx:47
 msgid "foster"
 msgstr "foster"
 
@@ -416,8 +419,7 @@ msgstr "GEDCOM is genealogy's common tongue — the format Ancestry and every de
 #~ msgid "Given name"
 #~ msgstr "Given name"
 
-#: src/components/AddRelative.tsx:86
-#: src/components/EditPerson.tsx:97
+#: src/components/NameFields.tsx:83
 msgid "Given names"
 msgstr "Given names"
 
@@ -429,7 +431,7 @@ msgstr "Grove can live on your home screen like any app — helpful to know when
 msgid "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
 msgstr "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
 
-#: src/components/AddRelative.tsx:57
+#: src/components/AddRelative.tsx:48
 msgid "guardian"
 msgstr "guardian"
 
@@ -442,13 +444,13 @@ msgid "How Grove works"
 msgstr "How Grove works"
 
 #: src/components/AddKeepsake.tsx:79
-#: src/components/AddRelative.tsx:104
-#: src/components/EditPerson.tsx:118
-#: src/components/EditPerson.tsx:133
+#: src/components/AddRelative.tsx:82
+#: src/components/EditPerson.tsx:87
+#: src/components/EditPerson.tsx:102
 msgid "How sure?"
 msgstr "How sure?"
 
-#: src/components/AddRelative.tsx:115
+#: src/components/AddRelative.tsx:93
 msgid "How they're linked"
 msgstr "How they're linked"
 
@@ -483,6 +485,10 @@ msgstr "Invited {em} — the tree will be there next time they open Grove."
 #: src/components/Family.tsx:209
 msgid "Inviting…"
 msgstr "Inviting…"
+
+#: src/components/NameFields.tsx:109
+msgid "Is the name written another way?"
+msgstr "Is the name written another way?"
 
 #: src/components/Family.tsx:85
 msgid "Join our family tree on Grove:"
@@ -538,7 +544,7 @@ msgstr "Letter home, 1944"
 msgid "Link from {0} — used {1} of {2}"
 msgstr "Link from {0} — used {1} of {2}"
 
-#: src/components/AddRelative.tsx:127
+#: src/components/AddRelative.tsx:105
 msgid "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
 msgstr "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
 
@@ -562,13 +568,17 @@ msgstr "Making a link…"
 msgid "Making your vault…"
 msgstr "Making your vault…"
 
-#: src/components/AddRelative.tsx:87
+#: src/components/NameFields.tsx:89
 msgid "Mary Jane"
 msgstr "Mary Jane"
 
 #: src/components/SettingsSheet.tsx:53
 msgid "Meadow"
 msgstr "Meadow"
+
+#: src/components/NameFields.tsx:63
+msgid "Name"
+msgstr "Name"
 
 #: src/components/RecoveryFlow.tsx:179
 msgid "New passphrase"
@@ -614,6 +624,10 @@ msgstr "Open Sync"
 #: src/components/TreeView.tsx:69
 msgid "Open their page"
 msgstr "Open their page"
+
+#: src/components/NameFields.tsx:73
+msgid "Optional, and only ever what you say it is — Grove never guesses. It marks a name at birth and labels the surname when a tree is exported."
+msgstr "Optional, and only ever what you say it is — Grove never guesses. It marks a name at birth and labels the surname when a tree is exported."
 
 #: src/components/Family.tsx:216
 msgid "Or share a link"
@@ -664,7 +678,7 @@ msgstr "Refresh"
 msgid "Refreshing…"
 msgstr "Refreshing…"
 
-#: src/components/EditPerson.tsx:157
+#: src/components/EditPerson.tsx:126
 msgid "Remove from the tree"
 msgstr "Remove from the tree"
 
@@ -676,7 +690,7 @@ msgstr "Remove this keepsake"
 msgid "Remove this keepsake? It will be gone from the tree."
 msgstr "Remove this keepsake? It will be gone from the tree."
 
-#: src/components/EditPerson.tsx:149
+#: src/components/EditPerson.tsx:118
 msgid "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
 msgstr "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
 
@@ -684,7 +698,7 @@ msgstr "Remove this person from the tree? Their links and any union left empty g
 msgid "revoke"
 msgstr "revoke"
 
-#: src/components/EditPerson.tsx:140
+#: src/components/EditPerson.tsx:109
 msgid "Save"
 msgstr "Save"
 
@@ -766,12 +780,12 @@ msgstr "Starting…"
 msgid "Stay"
 msgstr "Stay"
 
-#: src/components/AddRelative.tsx:55
+#: src/components/AddRelative.tsx:46
 msgid "step"
 msgstr "step"
 
-#: src/components/AddRelative.tsx:123
-#: src/components/EditPerson.tsx:124
+#: src/components/AddRelative.tsx:101
+#: src/components/EditPerson.tsx:93
 msgid "Still living"
 msgstr "Still living"
 
@@ -800,12 +814,12 @@ msgstr "Syncing…"
 msgid "Tap anyone to look at the tree from where they stand."
 msgstr "Tap anyone to look at the tree from where they stand."
 
-#: src/components/AddRelative.tsx:68
-#: src/components/EditPerson.tsx:64
+#: src/components/AddRelative.tsx:59
+#: src/components/EditPerson.tsx:54
 msgid "The birth year didn't read as a number."
 msgstr "The birth year didn't read as a number."
 
-#: src/components/EditPerson.tsx:66
+#: src/components/EditPerson.tsx:56
 msgid "The death year didn't read as a number."
 msgstr "The death year didn't read as a number."
 
@@ -897,6 +911,10 @@ msgstr "Use at least 8 characters — a few plain words you'll remember."
 msgid "Use biometrics instead"
 msgstr "Use biometrics instead"
 
+#: src/components/NameFields.tsx:109
+msgid "Use given and family names instead"
+msgstr "Use given and family names instead"
+
 #: src/components/SettingsSheet.tsx:90
 msgid "Vibe"
 msgstr "Vibe"
@@ -940,6 +958,10 @@ msgstr "Who's in it"
 #: src/components/RecoveryFlow.tsx:140
 msgid "Working…"
 msgstr "Working…"
+
+#: src/components/NameFields.tsx:66
+msgid "Written the way it's said, in its own order — however many parts it has."
+msgstr "Written the way it's said, in its own order — however many parts it has."
 
 #: src/App.tsx:86
 msgid "You're in — the family tree is now yours to tend too."
