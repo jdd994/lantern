@@ -51,9 +51,41 @@ msgstr "← Everyone"
 msgid "<0>{0}</0> — shared with the family. What anyone adds, everyone keeps: family records also back up under your own account, encrypted."
 msgstr "<0>{0}</0> — shared with the family. What anyone adds, everyone keeps: family records also back up under your own account, encrypted."
 
+#: src/components/HelpSheet.tsx:208
+msgid "<0>A paper recovery kit</0> — a printed code that opens the vault. Keep it where you keep a passport."
+msgstr "<0>A paper recovery kit</0> — a printed code that opens the vault. Keep it where you keep a passport."
+
 #: src/components/Welcome.tsx:49
 msgid "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
 msgstr "<0>A promise about what this is:</0> Grove is not a records race. No hint leaves, no completeness meters, no \"12,000 people in your tree!\". Dates are scaffolding; what the family <1>remembers</1> about a person is the point. Start with one name and let it grow at the pace of remembering."
+
+#: src/components/HelpSheet.tsx:109
+msgid "<0>Family name at birth</0> is for a maiden name, or any family name that changed later. It shows on their page as <1>born …</1>."
+msgstr "<0>Family name at birth</0> is for a maiden name, or any family name that changed later. It shows on their page as <1>born …</1>."
+
+#: src/components/HelpSheet.tsx:214
+msgid "<0>Guardians</0> — a few people you trust who can jointly let you back in. You tell each of them a codeword out loud. No single guardian, and no server, ever holds your key."
+msgstr "<0>Guardians</0> — a few people you trust who can jointly let you back in. You tell each of them a codeword out loud. No single guardian, and no server, ever holds your key."
+
+#: src/components/HelpSheet.tsx:271
+msgid "<0>Import a .ged</0> brings in a tree from elsewhere. It only ever adds — it never overwrites what's here, and it won't try to merge people who look alike."
+msgstr "<0>Import a .ged</0> brings in a tree from elsewhere. It only ever adds — it never overwrites what's here, and it won't try to merge people who look alike."
+
+#: src/components/HelpSheet.tsx:221
+msgid "<0>Quick unlock</0> uses this device's fingerprint or face in place of typing. It's a convenience for one device; the passphrase stays the real key."
+msgstr "<0>Quick unlock</0> uses this device's fingerprint or face in place of typing. It's a convenience for one device; the passphrase stays the real key."
+
+#: src/components/HelpSheet.tsx:173
+msgid "<0>See the tree</0>, or <1>In the tree</1> on anyone's page, draws the family around one person: those they came from above, those who came from them below, partners alongside on a dashed line."
+msgstr "<0>See the tree</0>, or <1>In the tree</1> on anyone's page, draws the family around one person: those they came from above, those who came from them below, partners alongside on a dashed line."
+
+#: src/components/HelpSheet.tsx:35
+msgid "<0>Share</0> plants a tree the family tends together. It travels through an account, so connect <1>Sync</1> first. Then invite people by an email address you already know, or make an invite link — good for 7 days or 20 uses — and send it somewhere you'd trust with the family's story."
+msgstr "<0>Share</0> plants a tree the family tends together. It travels through an account, so connect <1>Sync</1> first. Then invite people by an email address you already know, or make an invite link — good for 7 days or 20 uses — and send it somewhere you'd trust with the family's story."
+
+#: src/components/HelpSheet.tsx:139
+msgid "<0>What it says, typed out</0> is worth the few minutes. Handwriting fades and is hard to read on a phone; typed words can be read aloud, translated, and carried to other genealogy tools when you export. The scan stays as the proof; the words become the memory."
+msgstr "<0>What it says, typed out</0> is worth the few minutes. Handwriting fades and is hard to read on a phone; typed words can be read aloud, translated, and carried to other genealogy tools when you export. The scan stays as the proof; the words become the memory."
 
 #: src/components/AddRelative.tsx:79
 msgid "1885"
@@ -101,9 +133,17 @@ msgstr "a parent of"
 msgid "a partner of"
 msgstr "a partner of"
 
+#: src/components/HelpSheet.tsx:133
+msgid "A photo, a scanned letter, a certificate. On a person's page tap <0>Add a keepsake</0>, choose a JPEG, PNG or PDF, and say what it is and roughly when it's from."
+msgstr "A photo, a scanned letter, a certificate. On a person's page tap <0>Add a keepsake</0>, choose a JPEG, PNG or PDF, and say what it is and roughly when it's from."
+
 #: src/components/AddKeepsake.tsx:53
 msgid "A photo, a scanned letter, a document — kept as itself, encrypted like everything else."
 msgstr "A photo, a scanned letter, a document — kept as itself, encrypted like everything else."
+
+#: src/components/HelpSheet.tsx:95
+msgid "A private family tree: the people, how they belong to each other, and what the family still tells about them."
+msgstr "A private family tree: the people, how they belong to each other, and what the family still tells about them."
 
 #: src/components/Family.tsx:128
 msgid "A shared tree travels through your account — the server relays encrypted records it can't read, wrapped keys it can't open."
@@ -174,6 +214,10 @@ msgstr "Add a photo or scan, or say something about it — a keepsake needs one 
 msgid "Add a sibling"
 msgstr "Add a sibling"
 
+#: src/components/HelpSheet.tsx:68
+msgid "Add anyone — yourself, a grandmother, whoever you know best. From their page, grow outward: <0>Add a parent</0>, <1>a partner</1>, <2>a child</2>, <3>a sibling</3>. Each new person is placed in the family in the same step."
+msgstr "Add anyone — yourself, a grandmother, whoever you know best. From their page, grow outward: <0>Add a parent</0>, <1>a partner</1>, <2>a child</2>, <3>a sibling</3>. Each new person is placed in the family in the same step."
+
 #: src/components/AddRelative.tsx:72
 #: src/components/Home.tsx:41
 msgid "Add the first person"
@@ -213,6 +257,7 @@ msgstr "Anyone with the link can join, for 7 days or 20 uses, whichever comes fi
 msgid "Around {focusName}"
 msgstr "Around {focusName}"
 
+#: src/components/HelpSheet.tsx:116
 #: src/components/PersonPage.tsx:158
 msgid "As the family remembers"
 msgstr "As the family remembers"
@@ -285,6 +330,7 @@ msgstr "Choose a passphrase"
 
 #: src/components/Family.tsx:135
 #: src/components/Family.tsx:260
+#: src/components/HelpSheet.tsx:290
 #: src/components/SettingsSheet.tsx:188
 msgid "Close"
 msgstr "Close"
@@ -309,6 +355,10 @@ msgstr "Couldn't sign in."
 msgid "Create vault"
 msgstr "Create vault"
 
+#: src/components/HelpSheet.tsx:124
+msgid "Dates and places tell you where someone stood. This part is who they were — and it's the part that disappears first if nobody writes it down."
+msgstr "Dates and places tell you where someone stood. This part is who they were — and it's the part that disappears first if nobody writes it down."
+
 #: src/components/AddKeepsake.tsx:71
 msgid "Dear June…"
 msgstr "Dear June…"
@@ -321,7 +371,7 @@ msgstr "Died (year, if known)"
 msgid "Dimmer, deeper"
 msgstr "Dimmer, deeper"
 
-#: src/App.tsx:240
+#: src/App.tsx:256
 msgid "Dismiss"
 msgstr "Dismiss"
 
@@ -343,13 +393,25 @@ msgstr "Edit person"
 msgid "Enough guardians have approved. Waiting out the safety window — ready in {0}."
 msgstr "Enough guardians have approved. Waiting out the safety window — ready in {0}."
 
+#: src/components/HelpSheet.tsx:238
+msgid "Enough guardians must approve, and then there's a waiting period of at least a day, so the real owner has time to notice and cancel a request that wasn't theirs."
+msgstr "Enough guardians must approve, and then there's a waiting period of at least a day, so the real owner has time to notice and cancel a request that wasn't theirs."
+
 #: src/components/RecoveryFlow.tsx:78
 msgid "Enter your account email and password."
 msgstr "Enter your account email and password."
 
+#: src/components/HelpSheet.tsx:43
+msgid "Everyone in the tree can read and change everything: every person, every bond, every keepsake and its photo. That's deliberate — the invitation is the trust. Nothing is locked away from anyone you've let in."
+msgstr "Everyone in the tree can read and change everything: every person, every bond, every keepsake and its photo. That's deliberate — the invitation is the trust. Nothing is locked away from anyone you've let in."
+
 #: src/components/SettingsSheet.tsx:127
 msgid "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
 msgstr "Everything about the living will be in the file, in plain text. Only turn this off for a copy that stays inside the family."
+
+#: src/components/HelpSheet.tsx:200
+msgid "Everything is encrypted on your device with your passphrase before it goes anywhere. Nobody else can read your family's tree — which also means nobody can reset the passphrase for you. So build a way back in <0>before</0> you need one. Both live under <1>Sync</1>:"
+msgstr "Everything is encrypted on your device with your passphrase before it goes anywhere. Nobody else can read your family's tree — which also means nobody can reset the passphrase for you. So build a way back in <0>before</0> you need one. Both live under <1>Sync</1>:"
 
 #: src/components/AddKeepsake.tsx:81
 #: src/components/AddRelative.tsx:84
@@ -361,7 +423,11 @@ msgstr "Exactly"
 msgid "Export .ged"
 msgstr "Export .ged"
 
-#: src/App.tsx:192
+#: src/components/HelpSheet.tsx:82
+msgid "Families are made in more than one way. When you add a child or a parent you can say how they're linked — birth, adoptive, step, foster, or guardian — and the tree simply says so."
+msgstr "Families are made in more than one way. When you add a child or a parent you can say how they're linked — birth, adoptive, step, foster, or guardian — and the tree simply says so."
+
+#: src/App.tsx:194
 #: src/components/Home.tsx:56
 msgid "Family"
 msgstr "Family"
@@ -431,6 +497,10 @@ msgstr "Grove can live on your home screen like any app — helpful to know when
 msgid "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
 msgstr "Grove is not a records race. No hint leaves, no counts, no completeness meters — a scanned letter is a treasure your grandmother touched, never \"1 source attached.\" People still living get minimal entries by default; they fill in their own story when they join."
 
+#: src/components/HelpSheet.tsx:247
+msgid "Grove works with no account at all — the tree lives on this device. An account adds a backup, your other devices, and sharing. Its password is a separate secret from your passphrase: the account says whose data this is; only the passphrase can read it, and it never leaves your device."
+msgstr "Grove works with no account at all — the tree lives on this device. An account adds a backup, your other devices, and sharing. Its password is a separate secret from your passphrase: the account says whose data this is; only the passphrase can read it, and it never leaves your device."
+
 #: src/components/AddRelative.tsx:48
 msgid "guardian"
 msgstr "guardian"
@@ -439,6 +509,10 @@ msgstr "guardian"
 msgid "Help a family member"
 msgstr "Help a family member"
 
+#: src/App.tsx:206
+#: src/App.tsx:207
+#: src/components/HelpSheet.tsx:92
+#: src/components/HelpSheet.tsx:93
 #: src/components/SettingsSheet.tsx:162
 msgid "How Grove works"
 msgstr "How Grove works"
@@ -453,6 +527,10 @@ msgstr "How sure?"
 #: src/components/AddRelative.tsx:93
 msgid "How they're linked"
 msgstr "How they're linked"
+
+#: src/components/HelpSheet.tsx:228
+msgid "If someone names you their guardian"
+msgstr "If someone names you their guardian"
 
 #: src/components/Welcome.tsx:58
 msgid "If you ever forget your passphrase, the people you trust can let you back in: set up <0>guardians</0> (in Sync) and a few of them together can restore your access — or print a <1>recovery kit</1>: a one-page code for a fire safe. Nobody else can ever get in, including us — there's no reset by email, because a reset button would mean someone besides you could read the tree. Keep the passphrase somewhere safe too."
@@ -506,6 +584,7 @@ msgstr "Keep it"
 msgid "Keep living people private in the export"
 msgstr "Keep living people private in the export"
 
+#: src/components/HelpSheet.tsx:131
 #: src/components/PersonPage.tsx:176
 msgid "Keepsakes"
 msgstr "Keepsakes"
@@ -548,13 +627,17 @@ msgstr "Link from {0} — used {1} of {2}"
 msgid "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
 msgstr "Living people get a minimal entry — a name and a place in the tree. They tell their own story when they join."
 
-#: src/App.tsx:217
+#: src/App.tsx:227
 msgid "Lock"
 msgstr "Lock"
 
-#: src/App.tsx:215
+#: src/App.tsx:225
 msgid "Lock the vault"
 msgstr "Lock the vault"
+
+#: src/components/HelpSheet.tsx:278
+msgid "Look, language, and the home screen"
+msgstr "Look, language, and the home screen"
 
 #: src/components/Family.tsx:236
 msgid "Make an invite link"
@@ -568,6 +651,10 @@ msgstr "Making a link…"
 msgid "Making your vault…"
 msgstr "Making your vault…"
 
+#: src/components/HelpSheet.tsx:190
+msgid "Mark someone <0>Still living</0> and Grove keeps only a name and their place in the tree. Their story is theirs to tell, when they join. If you export the tree, the living are kept private unless you deliberately choose otherwise."
+msgstr "Mark someone <0>Still living</0> and Grove keeps only a name and their place in the tree. Their story is theirs to tell, when they join. If you export the tree, the living are kept private unless you deliberately choose otherwise."
+
 #: src/components/NameFields.tsx:89
 msgid "Mary Jane"
 msgstr "Mary Jane"
@@ -579,6 +666,10 @@ msgstr "Meadow"
 #: src/components/NameFields.tsx:63
 msgid "Name"
 msgstr "Name"
+
+#: src/components/HelpSheet.tsx:101
+msgid "Names, the way they're said"
+msgstr "Names, the way they're said"
 
 #: src/components/RecoveryFlow.tsx:179
 msgid "New passphrase"
@@ -592,13 +683,26 @@ msgstr "No guardians are set up on this account. Once you're back in, set some u
 msgid "None recorded yet."
 msgstr "None recorded yet."
 
+#: src/components/HelpSheet.tsx:161
 #: src/components/Home.tsx:65
 msgid "Not yet placed"
 msgstr "Not yet placed"
 
+#: src/components/HelpSheet.tsx:230
+msgid "Nothing happens today. If they ever lose their passphrase, a request appears for you under <0>Sync</0>. Before you approve, <1>speak to them</1> — in person or by phone — and have them say the codeword they once gave you. That spoken word is what stops an impostor."
+msgstr "Nothing happens today. If they ever lose their passphrase, a request appears for you under <0>Sync</0>. Before you approve, <1>speak to them</1> — in person or by phone — and have them say the codeword they once gave you. That spoken word is what stops an impostor."
+
 #: src/components/PersonPage.tsx:180
 msgid "Nothing kept here yet — a photo, a letter, a story worth saving."
 msgstr "Nothing kept here yet — a photo, a letter, a story worth saving."
+
+#: src/components/HelpSheet.tsx:255
+msgid "On a new phone or computer, open Grove, tap <0>Sign in to sync</0>, and unlock with the same passphrase. The button reads <1>Synced</1> when everything is safely backed up."
+msgstr "On a new phone or computer, open Grove, tap <0>Sign in to sync</0>, and unlock with the same passphrase. The button reads <1>Synced</1> when everything is safely backed up."
+
+#: src/components/HelpSheet.tsx:33
+msgid "One tree, written by the whole family"
+msgstr "One tree, written by the whole family"
 
 #: src/components/Family.tsx:142
 msgid "One tree, written together. Everyone you invite reads and writes every person, bond, and keepsake — the way a family actually remembers. Your whole tree here becomes the starting point."
@@ -646,9 +750,17 @@ msgstr "Partners"
 msgid "Passphrase"
 msgstr "Passphrase"
 
+#: src/components/HelpSheet.tsx:188
+msgid "People who are still living"
+msgstr "People who are still living"
+
 #: src/components/AddKeepsake.tsx:58
 msgid "Photo or scan (JPEG, PNG, or PDF)"
 msgstr "Photo or scan (JPEG, PNG, or PDF)"
+
+#: src/components/HelpSheet.tsx:147
+msgid "Photos are made smaller before they're stored, so a shoebox of scans stays kind to your device. A PDF can be up to 10 MB. iPhone photos in HEIC format may need saving as a JPEG first."
+msgstr "Photos are made smaller before they're stored, so a shoebox of scans stays kind to your device. A PDF can be up to 10 MB. iPhone photos in HEIC format may need saving as a JPEG first."
 
 #: src/components/SettingsSheet.tsx:91
 msgid "Pick the look that feels right. Saved on this device."
@@ -662,7 +774,7 @@ msgstr "Plant the shared tree"
 msgid "Planting…"
 msgstr "Planting…"
 
-#: src/App.tsx:182
+#: src/App.tsx:184
 msgid "Quick unlock"
 msgstr "Quick unlock"
 
@@ -694,6 +806,10 @@ msgstr "Remove this keepsake? It will be gone from the tree."
 msgid "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
 msgstr "Remove this person from the tree? Their links and any union left empty go too. Keepsakes stay, but stop pointing at them."
 
+#: src/components/HelpSheet.tsx:154
+msgid "Removing a keepsake (the <0>×</0> beside it) removes it for everyone in a shared tree, photo and all."
+msgstr "Removing a keepsake (the <0>×</0> beside it) removes it for everyone in a shared tree, photo and all."
+
 #: src/components/Family.tsx:249
 msgid "revoke"
 msgstr "revoke"
@@ -710,9 +826,17 @@ msgstr "Save the document to read it"
 msgid "Saved on this device. A language is downloaded only when you choose it — your device never holds one you don't use."
 msgstr "Saved on this device. A language is downloaded only when you choose it — your device never holds one you don't use."
 
+#: src/App.tsx:252
+msgid "See how Grove works"
+msgstr "See how Grove works"
+
 #: src/components/Home.tsx:57
 msgid "See the tree"
 msgstr "See the tree"
+
+#: src/components/HelpSheet.tsx:171
+msgid "Seeing the tree"
+msgstr "Seeing the tree"
 
 #: src/components/Welcome.tsx:70
 msgid "Set a passphrase"
@@ -727,19 +851,19 @@ msgstr "Set new passphrase"
 msgid "Settings"
 msgstr "Settings"
 
-#: src/App.tsx:204
+#: src/App.tsx:214
 msgid "Settings & vibe"
 msgstr "Settings & vibe"
 
-#: src/App.tsx:205
+#: src/App.tsx:215
 msgid "Settings and vibe"
 msgstr "Settings and vibe"
 
-#: src/App.tsx:192
+#: src/App.tsx:194
 msgid "Share"
 msgstr "Share"
 
-#: src/App.tsx:190
+#: src/App.tsx:192
 msgid "Share the tree with family"
 msgstr "Share the tree with family"
 
@@ -748,7 +872,7 @@ msgid "Share…"
 msgstr "Share…"
 
 #. placeholder {0}: g.tree.title
-#: src/App.tsx:190
+#: src/App.tsx:192
 msgid "Shared: {0}"
 msgstr "Shared: {0}"
 
@@ -764,13 +888,21 @@ msgstr "Sign in"
 msgid "Sign in with your account (not your passphrase) so your guardians can find your request."
 msgstr "Sign in with your account (not your passphrase) so your guardians can find your request."
 
-#: src/App.tsx:173
+#: src/App.tsx:175
 msgid "someone"
 msgstr "someone"
+
+#: src/components/HelpSheet.tsx:163
+msgid "Someone you've added but not linked to anyone waits under <0>Not yet placed</0>. Nothing is wrong — they still belong. Open a relative's page and add them from there when you learn where they fit."
+msgstr "Someone you've added but not linked to anyone waits under <0>Not yet placed</0>. Nothing is wrong — they still belong. Open a relative's page and add them from there when you learn where they fit."
 
 #: src/components/RecoveryFlow.tsx:160
 msgid "Start recovery"
 msgstr "Start recovery"
+
+#: src/components/HelpSheet.tsx:66
+msgid "Start with one person"
+msgstr "Start with one person"
 
 #: src/components/RecoveryFlow.tsx:160
 msgid "Starting…"
@@ -789,30 +921,42 @@ msgstr "step"
 msgid "Still living"
 msgstr "Still living"
 
-#: src/App.tsx:199
+#: src/App.tsx:201
 msgid "Sync"
 msgstr "Sync"
 
-#: src/App.tsx:197
+#: src/App.tsx:199
 msgid "Sync across devices"
 msgstr "Sync across devices"
 
-#: src/App.tsx:199
+#: src/components/HelpSheet.tsx:245
+msgid "Sync and other devices"
+msgstr "Sync and other devices"
+
+#: src/App.tsx:201
 msgid "Synced"
 msgstr "Synced"
 
 #. placeholder {0}: g.account
-#: src/App.tsx:197
+#: src/App.tsx:199
 msgid "Syncing as {0}"
 msgstr "Syncing as {0}"
 
-#: src/App.tsx:199
+#: src/App.tsx:201
 msgid "Syncing…"
 msgstr "Syncing…"
+
+#: src/components/HelpSheet.tsx:262
+msgid "Taking your history with you"
+msgstr "Taking your history with you"
 
 #: src/components/TreeView.tsx:71
 msgid "Tap anyone to look at the tree from where they stand."
 msgstr "Tap anyone to look at the tree from where they stand."
+
+#: src/components/HelpSheet.tsx:180
+msgid "Tap anyone to look at the tree from where they stand. Tap the person in the middle, or <0>Open their page</0>, to read about them. Brothers and sisters are listed on the person's page rather than in the drawing, to keep it readable."
+msgstr "Tap anyone to look at the tree from where they stand. Tap the person in the middle, or <0>Open their page</0>, to read about them. Brothers and sisters are listed on the person's page rather than in the drawing, to keep it readable."
 
 #: src/components/AddRelative.tsx:59
 #: src/components/EditPerson.tsx:54
@@ -827,6 +971,10 @@ msgstr "The death year didn't read as a number."
 msgid "The family tree"
 msgstr "The family tree"
 
+#: src/components/HelpSheet.tsx:280
+msgid "The gear also holds the vibe (three moods of light under the trees) and the language. Grove can sit on your home screen like any app — <0>here's how, step by step</0>."
+msgstr "The gear also holds the vibe (three moods of light under the trees) and the language. Grove can sit on your home screen like any app — <0>here's how, step by step</0>."
+
 #: src/components/Home.tsx:36
 msgid "The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone tells stories about. One name is enough; the rest grows from it."
 msgstr "The grove is empty. Begin with anyone — yourself, a grandparent, the relative everyone tells stories about. One name is enough; the rest grows from it."
@@ -834,6 +982,10 @@ msgstr "The grove is empty. Begin with anyone — yourself, a grandparent, the r
 #: src/components/Family.tsx:158
 msgid "The Hale tree"
 msgstr "The Hale tree"
+
+#: src/components/HelpSheet.tsx:118
+msgid "The heart of each page. Who were they? What did they love, what did they always say? Write it the way you'd tell it at the table. It saves when you tap away."
+msgstr "The heart of each page. Who were they? What did they love, what did they always say? Write it the way you'd tell it at the table. It saves when you tap away."
 
 #: src/components/LockScreen.tsx:67
 msgid "The paper way back in."
@@ -871,13 +1023,17 @@ msgstr "Those don't match."
 msgid "tree"
 msgstr "tree"
 
-#: src/App.tsx:225
+#: src/App.tsx:235
 msgid "Try again"
 msgstr "Try again"
 
 #: src/components/RecoveryFlow.tsx:183
 msgid "Type it again"
 msgstr "Type it again"
+
+#: src/components/HelpSheet.tsx:264
+msgid "Under settings (the gear), <0>Export .ged</0> writes the tree as GEDCOM, the format every genealogy tool understands. Names, dates, bonds and the typed words of your keepsakes travel; the scans themselves stay in Grove."
+msgstr "Under settings (the gear), <0>Export .ged</0> writes the tree as GEDCOM, the format every genealogy tool understands. Names, dates, bonds and the typed words of your keepsakes travel; the scans themselves stay in Grove."
 
 #: src/components/SettingsSheet.tsx:51
 msgid "Under the leaves"
@@ -947,6 +1103,14 @@ msgstr "What it says, typed out (so it can be read and remembered)"
 msgid "What should it be called?"
 msgstr "What should it be called?"
 
+#: src/components/HelpSheet.tsx:57
+msgid "What the family writes is also kept, encrypted, under your own account. If you ever leave the shared tree, your copy of what was written stays with you."
+msgstr "What the family writes is also kept, encrypted, under your own account. If you ever leave the shared tree, your copy of what was written stays with you."
+
+#: src/components/HelpSheet.tsx:50
+msgid "When someone else's hand was the last on a page you'll see <0>last tended by</0> and their name; on a keepsake, <1>kept by</1>. It's a byline, like a note in a family Bible — never a score."
+msgstr "When someone else's hand was the last on a page you'll see <0>last tended by</0> and their name; on a keepsake, <1>kept by</1>. It's a byline, like a note in a family Bible — never a score."
+
 #: src/components/PersonPage.tsx:165
 msgid "Who were they? What did they love, what did they always say, what does the family still tell about them?"
 msgstr "Who were they? What did they love, what did they always say, what does the family still tell about them?"
@@ -959,15 +1123,23 @@ msgstr "Who's in it"
 msgid "Working…"
 msgstr "Working…"
 
+#: src/components/HelpSheet.tsx:103
+msgid "Write a name the way it's actually said, in its own order, however many parts it has. If one part is the family name you can say which — Grove never guesses."
+msgstr "Write a name the way it's actually said, in its own order, however many parts it has. If one part is the family name you can say which — Grove never guesses."
+
 #: src/components/NameFields.tsx:66
 msgid "Written the way it's said, in its own order — however many parts it has."
 msgstr "Written the way it's said, in its own order — however many parts it has."
 
-#: src/App.tsx:86
+#: src/components/HelpSheet.tsx:75
+msgid "You don't need to know everything. A year can be <0>Exactly</0>, <1>About</1>,<2> Before</2> or <3>After</3>, or left empty. Half-known is welcome; it's how families actually remember."
+msgstr "You don't need to know everything. A year can be <0>Exactly</0>, <1>About</1>,<2> Before</2> or <3>After</3>, or left empty. Half-known is welcome; it's how families actually remember."
+
+#: src/App.tsx:88
 msgid "You're in — the family tree is now yours to tend too."
 msgstr "You're in — the family tree is now yours to tend too."
 
-#: src/App.tsx:231
+#: src/App.tsx:241
 msgid "You've been invited to a family tree. Connect Sync to join — <0>open Sync</0>."
 msgstr "You've been invited to a family tree. Connect Sync to join — <0>open Sync</0>."
 
@@ -986,3 +1158,7 @@ msgstr "Your guardians have vouched for you. Choose a new passphrase."
 #: src/components/LockScreen.tsx:96
 msgid "Your passphrase unlocks the tree on this device."
 msgstr "Your passphrase unlocks the tree on this device."
+
+#: src/components/HelpSheet.tsx:198
+msgid "Your passphrase, and the ways back in"
+msgstr "Your passphrase, and the ways back in"

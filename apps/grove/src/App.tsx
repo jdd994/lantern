@@ -13,6 +13,7 @@ import { AddRelative } from "./components/AddRelative";
 import { SettingsSheet, MOODS } from "./components/SettingsSheet";
 import { Sync } from "./components/Sync";
 import { Family } from "./components/Family";
+import { HelpSheet } from "./components/HelpSheet";
 import { Gear } from "./components/icons";
 import type { Relation } from "./lib/model";
 
@@ -60,6 +61,7 @@ export default function App() {
   const [sync, setSync] = useState(false);
   const [family, setFamily] = useState(false);
   const [installHelp, setInstallHelp] = useState(false);
+  const [help, setHelp] = useState(false);
   const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const [joinNote, setJoinNote] = useState<string | null>(null);
   const joiningRef = useRef(false);
@@ -200,6 +202,14 @@ export default function App() {
           </button>
           <button
             className="btn btn-ghost btn-sm"
+            onClick={() => setHelp(true)}
+            title={t`How Grove works`}
+            aria-label={t`How Grove works`}
+          >
+            ?
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
             onClick={() => setSettings(true)}
             title={t`Settings & vibe`}
             aria-label={t`Settings and vibe`}
@@ -237,6 +247,12 @@ export default function App() {
       {joinNote ? (
         <div className="hint banner">
           {joinNote}{" "}
+          {g.tree ? (
+            <>
+              <button className="linklike" onClick={() => setHelp(true)}><Trans>See how Grove works</Trans></button>
+              {" · "}
+            </>
+          ) : null}
           <button className="linklike" onClick={() => setJoinNote(null)}><Trans>Dismiss</Trans></button>
         </div>
       ) : null}
@@ -305,6 +321,16 @@ export default function App() {
             setInstallHelp(true);
           }}
           onClose={() => setSettings(false)}
+        />
+      ) : null}
+      {help ? (
+        <HelpSheet
+          shared={!!g.tree}
+          onInstallHelp={() => {
+            setHelp(false);
+            setInstallHelp(true);
+          }}
+          onClose={() => setHelp(false)}
         />
       ) : null}
       {installHelp ? <InstallSheet appName="Grove" onClose={() => setInstallHelp(false)} /> : null}
