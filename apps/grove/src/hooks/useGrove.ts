@@ -114,6 +114,7 @@ export function useGrove() {
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTreeRef = useRef<(() => Promise<void>) | null>(null); // breaks the runSync↔syncTree declaration cycle
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → data: URL (decrypted, in-memory only)
+  const mediaMirror = useRef({ running: false, again: false }); // one scan-mirroring pass at a time
 
   useEffect(() => {
     treeRef.current = tree;
@@ -256,6 +257,21 @@ export function useGrove() {
       if (!key) return false;
       const local = await db.getStoredByKind(kind, rec.id);
       if (local && local.updatedAt >= rec.updatedAt) return false;
+      // A treasure someone in the family removed takes its scan with it — here
+      // and in my own account's storage — so a removal is a removal everywhere.
+      if (kind === "keepsake" && rec.deleted && local && !local.deleted) {
+        try {
+          const mediaId = decodeKeepsake(payload, rec).mediaId;
+          if (mediaId) {
+            mediaUrls.current.delete(mediaId);
+            await db.deleteMedia(mediaId);
+            const token = tokenRef.current;
+            if (token) void api.deleteMediaRemote(token, mediaId).catch(() => {});
+          }
+        } catch {
+          // an unreadable tombstone still removes the record below
+        }
+      }
       await db.putStoredByKind(kind, {
         id: rec.id,
         createdAt: local?.createdAt ?? rec.createdAt,
@@ -268,6 +284,42 @@ export function useGrove() {
     },
     []
   );
+
+  // Carry scans to the shared tree: each one this device holds that the tree
+  // hasn't received is re-encrypted under the TREE's key and uploaded, then
+  // noted so it never travels twice. Records mirror instantly; scans follow
+  // here, best-effort — one that fails stays unmarked and goes with the next
+  // tree sync. One pass at a time; a request that arrives mid-pass runs after.
+  const mirrorMediaToTree = useCallback(async (strandId: string, dek: CryptoKey) => {
+    if (mediaMirror.current.running) {
+      mediaMirror.current.again = true;
+      return;
+    }
+    mediaMirror.current.running = true;
+    try {
+      do {
+        mediaMirror.current.again = false;
+        for (const m of await db.allMedia()) {
+          const token = tokenRef.current;
+          const key = keyRef.current;
+          if (!token || !key) return; // locked or signed out mid-pass — stop quietly
+          if (m.deleted || m.sharedTo === strandId) continue;
+          try {
+            // Removed while this pass was under way? Then it doesn't go.
+            if ((await db.getMedia(m.id))?.deleted) continue;
+            const plain = await decryptBytes(key, { iv: m.iv, data: m.data });
+            const cb = await encryptBytes(dek, plain);
+            await api.uploadSharedMedia(token, strandId, m.id, cb.iv, cb.data, m.type);
+            await db.markMediaShared(m.id, strandId);
+          } catch {
+            // offline / transient — the scan is safe here; it goes next time
+          }
+        }
+      } while (mediaMirror.current.again);
+    } finally {
+      mediaMirror.current.running = false;
+    }
+  }, []);
 
   const syncTree = useCallback(async () => {
     const token = tokenRef.current;
@@ -324,12 +376,15 @@ export function useGrove() {
         await loadAll(key);
         scheduleSync(); // the merged family records back up to my own account too
       }
+      // Scans follow their records, in the background — a shoebox of photos
+      // mustn't hold the tree up.
+      void mirrorMediaToTree(s.strandId, entry.dek);
     } catch (e) {
       setTreeError(e instanceof Error ? e.message : "Couldn't reach the family tree just now.");
     } finally {
       setTreeBusy(false);
     }
-  }, [ensureIdentity, mergeTreeRecord, loadAll, scheduleSync]);
+  }, [ensureIdentity, mergeTreeRecord, loadAll, scheduleSync, mirrorMediaToTree]);
 
   useEffect(() => {
     syncTreeRef.current = syncTree;
@@ -1200,8 +1255,12 @@ export function useGrove() {
       const k: Keepsake = { ...stamp(draft), mediaId, id: uid(), createdAt: now, updatedAt: now };
       setKeepsakes((prev) => [...prev, k]);
       persistKeepsake(k);
+      // The record just mirrored to the family's tree; send its scan after it.
+      const t = treeRef.current;
+      const entry = t ? treeKeys.current.get(t.strandId) : undefined;
+      if (mediaId && t && entry) void mirrorMediaToTree(t.strandId, entry.dek);
     },
-    [persistKeepsake, stamp]
+    [persistKeepsake, stamp, mirrorMediaToTree]
   );
 
   // Removing a treasure is deliberate but honest: tombstones for the record
@@ -1216,7 +1275,11 @@ export function useGrove() {
         mediaUrls.current.delete(mediaId);
         void db.deleteMedia(mediaId);
         const token = tokenRef.current;
-        if (token) void api.deleteMediaRemote(token, mediaId).catch(() => {});
+        if (token) {
+          void api.deleteMediaRemote(token, mediaId).catch(() => {});
+          const t = treeRef.current;
+          if (t) void api.deleteSharedMediaRemote(token, t.strandId, mediaId).catch(() => {});
+        }
       }
     },
     [persistKeepsake]
@@ -1280,7 +1343,11 @@ export function useGrove() {
 
   // Decrypt a stored scan to an in-memory data: URL (cached; a data: URL, not
   // blob:, so it displays under a strict CSP). If the blob isn't on this
-  // device (added on another), pull the ciphertext from storage and keep it.
+  // device, pull the ciphertext and keep it: from my own storage if I added it
+  // on another device, else from the shared tree if someone in the family did.
+  // A family scan is re-encrypted under MY vault key and marked dirty, so —
+  // like the records — my own account keeps a copy of what the family kept.
+  const sharedTreeId = tree?.strandId; // a tree arriving re-mints this callback, so a waiting scan retries
   const getMediaUrl = useCallback(async (id: string): Promise<string | null> => {
     const cached = mediaUrls.current.get(id);
     if (cached) return cached;
@@ -1293,9 +1360,19 @@ export function useGrove() {
       if (!token) return null;
       try {
         const dl = await api.downloadMedia(token, id);
-        if (!dl) return null;
-        m = { id, type: dl.type, createdAt: Date.now(), iv: dl.iv, data: dl.data, deleted: false, dirty: false };
+        if (dl) {
+          m = { id, type: dl.type, createdAt: Date.now(), iv: dl.iv, data: dl.data, deleted: false, dirty: false };
+        } else {
+          const entry = sharedTreeId ? treeKeys.current.get(sharedTreeId) : undefined;
+          if (!sharedTreeId || !entry) return null;
+          const shared = await api.downloadSharedMedia(token, sharedTreeId, id);
+          if (!shared) return null; // not arrived yet — records travel ahead of their scans
+          const plain = await decryptBytes(entry.dek, { iv: shared.iv, data: shared.data });
+          const cb = await encryptBytes(key, plain);
+          m = { id, type: shared.type, createdAt: Date.now(), iv: cb.iv, data: cb.data, deleted: false, dirty: true, sharedTo: sharedTreeId };
+        }
         await db.putMedia(m);
+        if (m.dirty) scheduleSync();
       } catch {
         return null;
       }
@@ -1308,7 +1385,7 @@ export function useGrove() {
     } catch {
       return null;
     }
-  }, []);
+  }, [sharedTreeId, scheduleSync]);
 
   return {
     status,

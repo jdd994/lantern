@@ -82,3 +82,52 @@ export async function deleteMediaRemote(token: string, id: string): Promise<void
   });
   if (!res.ok && res.status !== 404) throw new ApiError(`Media delete failed (${res.status})`, res.status);
 }
+
+// ---- Shared-tree scans — the same wire format, encrypted with the TREE's ----
+// DEK and gated server-side by membership. Keyed s/<treeId>/<mediaId>.
+
+export async function uploadSharedMedia(
+  token: string,
+  treeId: string,
+  id: string,
+  iv: Uint8Array,
+  data: ArrayBuffer,
+  type: string
+): Promise<void> {
+  const body = new Uint8Array(iv.byteLength + data.byteLength);
+  body.set(iv, 0);
+  body.set(new Uint8Array(data), iv.byteLength);
+  const res = await fetch(`${API_BASE}/shared/${treeId}/media/${id}?type=${encodeURIComponent(type)}`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!res.ok) throw new ApiError(`Media upload failed (${res.status})`, res.status);
+}
+
+export async function downloadSharedMedia(
+  token: string,
+  treeId: string,
+  id: string
+): Promise<{ iv: Uint8Array; data: ArrayBuffer; type: string } | null> {
+  const res = await fetch(`${API_BASE}/shared/${treeId}/media/${id}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(`Media download failed (${res.status})`, res.status);
+  const all = new Uint8Array(await res.arrayBuffer());
+  return {
+    iv: all.slice(0, 12),
+    data: all.slice(12).buffer,
+    type: res.headers.get("content-type") || "application/octet-stream",
+  };
+}
+
+// Remove a scan from the tree's storage. Best-effort, idempotent.
+export async function deleteSharedMediaRemote(token: string, treeId: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/shared/${treeId}/media/${id}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) throw new ApiError(`Media delete failed (${res.status})`, res.status);
+}
