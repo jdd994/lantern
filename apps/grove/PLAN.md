@@ -97,6 +97,17 @@ the family's history is portable, never hostage, and it's the honest on-ramp
 for someone arriving from Ancestry with twenty years of research.
 Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
 
+## The in-app guide
+
+`components/HelpSheet.tsx` — built 2026-09-20, opened from the "?" in the
+header (and offered in the banner right after someone joins by invite link,
+since relatives arrive with no context). Thirteen collapsed topics, all through
+the Lingui catalog. In a shared tree the family topic leads and opens first;
+otherwise "Start with one person" does. **It names real buttons** ("Add a
+keepsake", "Sign in to sync", "Export .ged"…) — when a label or a behaviour
+changes, change the guide in the same commit. New features get a topic or a
+line here, or they don't exist for the people who weren't in the room.
+
 ## Later, deliberately
 
 - **Digital legacy.** A genealogy app is inherently about mortality; the

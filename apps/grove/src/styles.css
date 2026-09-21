@@ -93,7 +93,7 @@ body {
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
 .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
 .brand span { color: var(--fern); }
-.top-actions { display: flex; gap: 8px; align-items: center; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 /* buttons */
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
@@ -230,6 +230,24 @@ input[type=file]::file-selector-button:hover { background: var(--surface-2); col
 .set-section:last-of-type { margin-bottom: 0.8rem; }
 .set-head { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: 0 0 8px; letter-spacing: 0.02em; }
 .set-section p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); margin: 0 0 10px; }
+
+/* help sheet — topics as native disclosures: a list to pick from, not a wall */
+.help-body { margin: 6px 0 4px; }
+.help-item { border-bottom: 1px solid var(--line); }
+.help-item:first-of-type { border-top: 1px solid var(--line); }
+.help-item summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 2px; cursor: pointer; list-style: none;
+  font-family: var(--serif); font-size: 16px; color: var(--ink);
+}
+.help-item summary::-webkit-details-marker { display: none; }
+.help-item summary::after { content: "+"; font-family: var(--mono); font-size: 14px; color: var(--ink-faint); }
+.help-item[open] summary::after { content: "–"; }
+.help-item summary:hover { color: var(--fern); }
+.help-item-body { padding: 0 2px 14px; }
+.help-item-body p { font-size: 14px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 9px; }
+.help-item-body p:last-child { margin-bottom: 0; }
+.help-item-body b { color: var(--ink); font-weight: 600; }
 
 /* ---- Recovery kit ---------------------------------------------------------
    The printable page. On paper, everything but the kit sheet vanishes (the
