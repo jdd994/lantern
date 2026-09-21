@@ -13,7 +13,7 @@ export default defineConfig({
     VitePWA({
       // "prompt": a new build waits until the person says Refresh (UpdateToast in main.tsx).
       registerType: "prompt",
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "Grove",
         short_name: "Grove",
@@ -22,8 +22,18 @@ export default defineConfig({
         background_color: "#10150E",
         display: "standalone",
         start_url: "/",
-        // SVG-only for now; render proper PNG + maskable icons before deploy.
-        icons: [{ src: "favicon.svg", sizes: "any", type: "image/svg+xml" }],
+        // Rendered from favicon.svg. The maskable one is full-bleed with the
+        // art inside the safe circle, so Android can cut any shape from it.
+        icons: [
+          { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
+          { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "maskable-icon-512x512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png}"],
