@@ -68,6 +68,10 @@ export type StoredMedia = {
   data: ArrayBuffer; // ciphertext
   deleted: boolean;
   dirty: boolean;
+  // The shared tree this scan has reached (uploaded there under the tree's
+  // key, or fetched from it). Absent = the family can't see it yet; the next
+  // tree sync carries it over. Bookkeeping only — never leaves the device.
+  sharedTo?: string;
 };
 
 export type SyncState = { id: "state"; cursor: number; token?: string; accountEmail?: string };
@@ -176,6 +180,12 @@ export async function clearMediaDirty(id: string): Promise<void> {
   const d = await db();
   const m = await d.get("media", id);
   if (m && m.dirty) await d.put("media", { ...m, dirty: false });
+}
+// Note that a scan has reached a shared tree, so it isn't carried there twice.
+export async function markMediaShared(id: string, treeId: string): Promise<void> {
+  const d = await db();
+  const m = await d.get("media", id);
+  if (m && m.sharedTo !== treeId) await d.put("media", { ...m, sharedTo: treeId });
 }
 
 // ---- sync + device -------------------------------------------------------

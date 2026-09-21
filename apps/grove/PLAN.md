@@ -144,8 +144,17 @@ Mapping: `INDI ↔ person`, `FAM ↔ union`, `OBJE/SOUR ↔ keepsake`.
    what the family wrote. Author stamped on every revision — a byline, never
    a score. Two-user browser-verified end to end against a local Worker
    (multi-device pull, invite, cross-account merge, co-authoring both ways).
-   Follow-ups: shared-tree media blobs (scans currently travel per-account),
-   invite links (needs frozen GROVE_INVITE_LABELS). Biometric quick unlock —
+   Invite links — **done (2026-08-04).** Shared-tree scans — **done
+   (2026-09-20):** a keepsake's scan follows its record into the tree,
+   re-encrypted under the TREE's key (`s/<treeId>/<mediaId>` in R2, gated by
+   membership). Records mirror instantly; scans ride behind them in a
+   background pass that marks each one `sharedTo` so it never travels twice and
+   heals on the next tree sync if it fails. A member who opens a family scan
+   keeps it re-encrypted under their OWN vault key and backs it up to their own
+   account — same rule as the records. Removing a keepsake removes its scan
+   from the tree, and from every member's device and account as the tombstone
+   merges. ⚠️ When member removal + re-key is built, the scans must be re-keyed
+   with the records (Driftless's rotateDEK is the pattern). Biometric quick unlock —
    **done (2026-07-27):** the sibling pattern via @lantern/core/biometric
    (platform passkey + PRF wraps this device's copy of the DEK; opt-in
    per device, never synced, self-clears if stale; ⚠️ frozen PRF salt in
