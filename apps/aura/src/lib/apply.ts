@@ -113,3 +113,54 @@ export function rhythmStep(
   }
   return Object.keys(patch).length ? patch : null;
 }
+
+// ---- easing into a vibe -----------------------------------------------------
+// A vibe can arrive over minutes instead of at once. The targets are exactly
+// what the vibe would have snapped to (vibePatches — same palette variation,
+// same color-vs-temperature routing); this is only the walk from wherever each
+// light is now to there. Pure: the two engines (the live hook, the background
+// keeper) own the clock and the transport, and both ride the wall clock the way
+// brightness fades already do.
+
+const mix = (a: number, b: number, f: number) => a + (b - a) * f;
+
+export type EaseStart = { brightness: number; color?: Color; kelvin?: number };
+
+// Where one device's walk begins. An off light starts dark and takes the vibe's
+// hue at once — there's nothing to blend from — so it fades up in the right
+// color rather than passing through some other one on the way. A lit bulb in
+// the other mode (white when the vibe wants color, or vice versa) likewise
+// jumps into the target's mode at the first frame and blends from there.
+export function easeStart(st: LightState | undefined, target: Partial<LightState>): EaseStart {
+  if (!st?.on) return { brightness: 0, color: target.color, kelvin: target.kelvin };
+  return {
+    brightness: st.brightness ?? 100,
+    color: target.color !== undefined ? (st.color ?? target.color) : undefined,
+    kelvin: target.kelvin !== undefined ? (st.kelvin ?? target.kelvin) : undefined,
+  };
+}
+
+// The patch for one frame of the walk, `frac` 0..1 along it. Never says `on` —
+// the engine lights the bulb with the first frame and leaves the rest small.
+export function easeFrame(
+  start: EaseStart,
+  target: Partial<LightState>,
+  frac: number
+): Partial<LightState> {
+  const f = Math.max(0, Math.min(1, frac));
+  const patch: Partial<LightState> = {};
+  if (target.brightness !== undefined) {
+    patch.brightness = Math.max(1, Math.min(100, Math.round(mix(start.brightness, target.brightness, f))));
+  }
+  if (target.color !== undefined) {
+    const from = start.color ?? target.color;
+    patch.color = {
+      r: Math.round(mix(from.r, target.color.r, f)),
+      g: Math.round(mix(from.g, target.color.g, f)),
+      b: Math.round(mix(from.b, target.color.b, f)),
+    };
+  } else if (target.kelvin !== undefined) {
+    patch.kelvin = Math.round(mix(start.kelvin ?? target.kelvin, target.kelvin, f));
+  }
+  return patch;
+}

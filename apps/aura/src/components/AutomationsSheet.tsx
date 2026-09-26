@@ -56,7 +56,8 @@ function describeAction(
     const label =
       vibeById(a.vibeId)?.label ?? customVibes.find((v) => v.id === a.vibeId)?.label ?? "Vibe";
     const room = a.roomId ? rooms.find((r) => r.id === a.roomId)?.name : null;
-    return room ? `${label} · ${room}` : label;
+    const over = a.minutes ? ` over ${a.minutes}m` : "";
+    return (room ? `${label} · ${room}` : label) + over;
   }
   if (a.kind === "fade") {
     const scope = a.roomId ? (rooms.find((r) => r.id === a.roomId)?.name ?? "a room") : "all lights";
@@ -96,6 +97,7 @@ type ActionRow = {
   kind: ActionChoice;
   vibeId: string;
   vibeRoomId: string; // "" = whole home
+  vibeMin: number; // 0 = at once; more = ease in over that many minutes
   sceneId: string;
   roomId: string;
   fadeRoomId: string; // "" = all lights
@@ -105,57 +107,70 @@ type ActionRow = {
 
 // Starters — ready automations that only ever fill the form in. Nothing is added
 // until you've seen exactly what it will do and pressed the same button as always.
-type Starter = {
-  id: string;
-  label: string;
-  desc: string;
+// A starter with several stops (the day arc) can't fit one form, so it shows its
+// stops as a list first and adds them together — each one a plain automation
+// afterward, editable like any other.
+type Stop = {
   triggerKind: TriggerKind;
   timeValue?: string;
   offsetMin?: number;
   days?: number[];
   rows: Partial<ActionRow>[];
 };
+type Starter = {
+  id: string;
+  label: string;
+  desc: string;
+  steps: Stop[];
+};
 const STARTERS: Starter[] = [
+  {
+    id: "day-arc",
+    label: "Day arc",
+    desc: "Sunrise wakes the room into morning light; from sunset it eases red-ward — sunset, wind-down, night. Four automations, added together.",
+    steps: [
+      { triggerKind: "sunrise", offsetMin: 0, rows: [{ kind: "vibe", vibeId: "morning", vibeMin: 20 }] },
+      { triggerKind: "sunset", offsetMin: -20, rows: [{ kind: "vibe", vibeId: "sunset", vibeMin: 15 }] },
+      { triggerKind: "sunset", offsetMin: 30, rows: [{ kind: "vibe", vibeId: "wind-down", vibeMin: 20 }] },
+      { triggerKind: "sunset", offsetMin: 90, rows: [{ kind: "vibe", vibeId: "night", vibeMin: 20 }] },
+    ],
+  },
   {
     id: "sunset-lamplight",
     label: "Sunset lamplight",
     desc: "A little before sunset, the whole home eases into warm calm.",
-    triggerKind: "sunset",
-    offsetMin: -15,
-    rows: [{ kind: "vibe", vibeId: "calm" }],
+    steps: [{ triggerKind: "sunset", offsetMin: -15, rows: [{ kind: "vibe", vibeId: "calm" }] }],
   },
   {
     id: "evening-embers",
     label: "Evening embers",
     desc: "Half an hour after sunset, sink into low wind-down light.",
-    triggerKind: "sunset",
-    offsetMin: 30,
-    rows: [{ kind: "vibe", vibeId: "wind-down" }],
+    steps: [{ triggerKind: "sunset", offsetMin: 30, rows: [{ kind: "vibe", vibeId: "wind-down" }] }],
   },
   {
     id: "gentle-wake",
     label: "Gentle wake",
     desc: "Weekday mornings fade the lights up slowly, like a sunrise indoors.",
-    triggerKind: "time",
-    timeValue: "07:00",
-    days: [1, 2, 3, 4, 5],
-    rows: [{ kind: "fade", fadeTo: 70, fadeMin: 20 }],
+    steps: [
+      {
+        triggerKind: "time",
+        timeValue: "07:00",
+        days: [1, 2, 3, 4, 5],
+        rows: [{ kind: "fade", fadeTo: 70, fadeMin: 20 }],
+      },
+    ],
   },
   {
     id: "wind-down-dark",
     label: "Wind down to dark",
     desc: "Late evening, everything fades gently to off over half an hour.",
-    triggerKind: "time",
-    timeValue: "21:30",
-    rows: [{ kind: "fade", fadeTo: 0, fadeMin: 30 }],
+    steps: [{ triggerKind: "time", timeValue: "21:30", rows: [{ kind: "fade", fadeTo: 0, fadeMin: 30 }] }],
   },
   {
     id: "midnight-off",
     label: "Midnight all off",
     desc: "Whatever was left on goes off at midnight.",
-    triggerKind: "time",
-    timeValue: "00:00",
-    rows: [{ kind: "allOff" }],
+    steps: [{ triggerKind: "time", timeValue: "00:00", rows: [{ kind: "allOff" }] }],
   },
 ];
 
@@ -196,6 +211,9 @@ export function AutomationsSheet({
   const [locating, setLocating] = useState(false);
   const [editing, setEditing] = useState<Automation | null>(null);
   const [starterNote, setStarterNote] = useState<string | null>(null);
+  // A multi-stop starter being looked over before its stops are added.
+  const [arc, setArc] = useState<Starter | null>(null);
+  const [arcRoomId, setArcRoomId] = useState(""); // "" = whole home
 
   const choices = useMemo<{ id: ActionChoice; label: string; disabled?: boolean }[]>(
     () => [
@@ -212,6 +230,7 @@ export function AutomationsSheet({
     kind: "vibe",
     vibeId: "calm",
     vibeRoomId: "",
+    vibeMin: 0,
     sceneId: scenes[0]?.id ?? "",
     roomId: rooms[0]?.id ?? "",
     fadeRoomId: "",
@@ -220,7 +239,9 @@ export function AutomationsSheet({
   });
   const [rows, setRows] = useState<ActionRow[]>([blankRow()]);
 
-  const needsLocation = (triggerKind === "sunset" || triggerKind === "sunrise") && !coords;
+  const isSun = (k: TriggerKind) => k === "sunset" || k === "sunrise";
+  const needsLocation = isSun(triggerKind) && !coords;
+  const arcNeedsLocation = !!arc && !coords && arc.steps.some((s) => isSun(s.triggerKind));
 
   const buildTrigger = (): Trigger =>
     triggerKind === "time"
@@ -228,10 +249,21 @@ export function AutomationsSheet({
       : triggerKind === "motion"
         ? { kind: "sensor", sensorId }
         : { kind: "sun", event: triggerKind, offsetMin };
+  const stopTrigger = (s: Stop): Trigger =>
+    s.triggerKind === "time"
+      ? { kind: "time", minutes: parseHHMM(s.timeValue ?? "18:00") }
+      : s.triggerKind === "motion"
+        ? { kind: "sensor", sensorId }
+        : { kind: "sun", event: s.triggerKind, offsetMin: s.offsetMin ?? 0 };
 
   const rowToAction = (r: ActionRow): Action =>
     r.kind === "vibe"
-      ? { kind: "vibe", vibeId: r.vibeId, ...(r.vibeRoomId ? { roomId: r.vibeRoomId } : {}) }
+      ? {
+          kind: "vibe",
+          vibeId: r.vibeId,
+          ...(r.vibeRoomId ? { roomId: r.vibeRoomId } : {}),
+          ...(r.vibeMin > 0 ? { minutes: Math.min(180, Math.round(r.vibeMin)) } : {}),
+        }
       : r.kind === "scene"
         ? { kind: "scene", sceneId: r.sceneId }
         : r.kind === "allOff"
@@ -247,7 +279,8 @@ export function AutomationsSheet({
 
   const rowFromAction = (a: Action): ActionRow => {
     const base = blankRow();
-    if (a.kind === "vibe") return { ...base, kind: "vibe", vibeId: a.vibeId, vibeRoomId: a.roomId ?? "" };
+    if (a.kind === "vibe")
+      return { ...base, kind: "vibe", vibeId: a.vibeId, vibeRoomId: a.roomId ?? "", vibeMin: a.minutes ?? 0 };
     if (a.kind === "scene") return { ...base, kind: "scene", sceneId: a.sceneId };
     if (a.kind === "allOff") return { ...base, kind: "allOff" };
     if (a.kind === "fade")
@@ -264,15 +297,49 @@ export function AutomationsSheet({
 
   function applyStarter(s: Starter) {
     setEditing(null);
-    setTriggerKind(s.triggerKind);
-    if (s.timeValue) setTimeValue(s.timeValue);
-    setOffsetMin(s.offsetMin ?? 0);
-    setDays(s.days ?? []);
-    setRows(s.rows.map((r) => ({ ...blankRow(), ...r })));
+    if (s.steps.length > 1) {
+      // Several stops: show them, then add together. A starter about "the room"
+      // starts on the first room, if there is one — the picker is right there.
+      setArc(s);
+      setArcRoomId(rooms[0]?.id ?? "");
+      setStarterNote(null);
+      return;
+    }
+    const st = s.steps[0];
+    setArc(null);
+    setTriggerKind(st.triggerKind);
+    if (st.timeValue) setTimeValue(st.timeValue);
+    setOffsetMin(st.offsetMin ?? 0);
+    setDays(st.days ?? []);
+    setRows(st.rows.map((r) => ({ ...blankRow(), ...r })));
     setStarterNote(s.desc);
   }
 
+  // The stop's actions with the arc's chosen room on every vibe.
+  const stopActions = (s: Stop): Action[] =>
+    s.rows.map((r) =>
+      rowToAction({ ...blankRow(), ...r, ...(r.kind === "vibe" ? { vibeRoomId: arcRoomId } : {}) })
+    );
+
+  // The name writes itself from what the automation does — nothing to type,
+  // and exports/sorting still read sensibly.
+  const nameFor = (trigger: Trigger, actions: Action[]) =>
+    `${describeTrigger(trigger, sensors)} · ${actions
+      .map((a) => describeAction(a, scenes, rooms, customVibes))
+      .join(" + ")}`;
+
+  function addArc() {
+    if (!arc) return;
+    for (const s of arc.steps) {
+      const trigger = stopTrigger(s);
+      const actions = stopActions(s);
+      onAdd(nameFor(trigger, actions), trigger, actions, s.days ?? []);
+    }
+    setArc(null);
+  }
+
   function startEdit(a: Automation) {
+    setArc(null);
     const t = a.trigger;
     if (t.kind === "time") {
       setTriggerKind("time");
@@ -293,6 +360,7 @@ export function AutomationsSheet({
 
   function resetForm() {
     setEditing(null);
+    setArc(null);
     setTriggerKind("sunset");
     setTimeValue("18:00");
     setOffsetMin(0);
@@ -309,11 +377,7 @@ export function AutomationsSheet({
   function save() {
     const trigger = buildTrigger();
     const actions = rows.map(rowToAction);
-    // The name writes itself from what the automation does — nothing to type,
-    // and exports/sorting still read sensibly.
-    const name = `${describeTrigger(trigger, sensors)} · ${actions
-      .map((a) => describeAction(a, scenes, rooms, customVibes))
-      .join(" + ")}`;
+    const name = nameFor(trigger, actions);
     if (editing) {
       onUpdate(editing.id, name, trigger, actions, days);
       resetForm();
@@ -383,214 +447,292 @@ export function AutomationsSheet({
                 </button>
               ))}
             </div>
-            <p className="hint">
-              {starterNote ?? "Tap a starter to fill the form in, tweak anything, then add — or build from scratch below."}
-            </p>
-          </div>
-        )}
-
-        <div className="seg">
-          {(["sunset", "sunrise", "time", ...(sensors.length ? (["motion"] as const) : [])] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              className="seg-btn"
-              aria-pressed={triggerKind === k}
-              onClick={() => setTriggerKind(k)}
-            >
-              {k === "time" ? "Clock" : k[0].toUpperCase() + k.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {triggerKind === "motion" ? (
-          <>
-            <label className="field">
-              <span className="label">When this sees motion</span>
-              <select value={sensorId} onChange={(e) => setSensorId(e.target.value)}>
-                {sensors.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <span className="hint">
-                Fires the moment motion starts, then waits a minute before it can fire again.
-              </span>
-            </label>
-            {sensors.some((s) => s.sourceId === "demo") && (
-              <div className="sheet-actions" style={{ justifyContent: "flex-start" }}>
-                <button className="btn btn-sm" onClick={onSimulateMotion}>
-                  Simulate motion (demo)
-                </button>
-              </div>
+            {!arc && (
+              <p className="hint">
+                {starterNote ?? "Tap a starter to fill the form in, tweak anything, then add — or build from scratch below."}
+              </p>
             )}
-          </>
-        ) : triggerKind === "time" ? (
-          <label className="field">
-            <span className="label">At</span>
-            <input type="time" value={timeValue} onChange={(e) => setTimeValue(e.target.value)} />
-          </label>
-        ) : (
-          <label className="field">
-            <span className="label">Offset (minutes, − for before)</span>
-            <input
-              type="number"
-              step={5}
-              value={offsetMin}
-              onChange={(e) => setOffsetMin(Number(e.target.value) || 0)}
-            />
-            <span className="hint">
-              e.g. −15 lights come up 15 min before {triggerKind}. 0 is right at {triggerKind}.
-            </span>
-          </label>
-        )}
-
-        {needsLocation && (
-          <div className="loc-note">
-            <p className="hint">Sun triggers need your location to know when {triggerKind} is.</p>
-            <button className="btn btn-sm" onClick={useLocation} disabled={locating}>
-              {locating ? "Locating…" : "Use my location"}
-            </button>
           </div>
         )}
 
-        <div className="field">
-          <span className="label">On days (none = every day)</span>
-          <div className="days">
-            {DAY_LETTERS.map((letter, d) => (
-              <button
-                key={d}
-                type="button"
-                className="day"
-                aria-pressed={days.includes(d)}
-                aria-label={DAY_NAMES[d]}
-                onClick={() => toggleDay(d)}
-              >
-                {letter}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="field">
-          <span className="label">Do</span>
-          {rows.map((row, i) => (
-            <div className="action-row" key={i}>
-              <select value={row.kind} onChange={(e) => updateRow(i, { kind: e.target.value as ActionChoice })}>
-                {choices.map((c) => (
-                  <option key={c.id} value={c.id} disabled={c.disabled}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              {row.kind === "vibe" && (
-                <div className="fade-fields">
-                  <select value={row.vibeId} onChange={(e) => updateRow(i, { vibeId: e.target.value })}>
-                    <optgroup label="Vibes">
-                      {VIBES.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {customVibes.length > 0 && (
-                      <optgroup label="Your vibes">
-                        {customVibes.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                  <select value={row.vibeRoomId} onChange={(e) => updateRow(i, { vibeRoomId: e.target.value })}>
-                    <option value="">Whole home</option>
-                    {rooms.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {row.kind === "scene" && scenes.length > 0 && (
-                <select value={row.sceneId} onChange={(e) => updateRow(i, { sceneId: e.target.value })}>
-                  {scenes.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {(row.kind === "roomOn" || row.kind === "roomOff") && rooms.length > 0 && (
-                <select value={row.roomId} onChange={(e) => updateRow(i, { roomId: e.target.value })}>
+        {arc ? (
+          <div className="arc-preview">
+            <p className="hint">{arc.desc}</p>
+            {rooms.length > 0 && (
+              <label className="field">
+                <span className="label">For</span>
+                <select value={arcRoomId} onChange={(e) => setArcRoomId(e.target.value)}>
+                  <option value="">Whole home</option>
                   {rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
                   ))}
                 </select>
-              )}
-              {row.kind === "fade" && (
-                <div className="fade-fields">
-                  <select value={row.fadeRoomId} onChange={(e) => updateRow(i, { fadeRoomId: e.target.value })}>
-                    <option value="">All lights</option>
-                    {rooms.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
+              </label>
+            )}
+            <ul className="arc-steps">
+              {arc.steps.map((s, i) => {
+                const trigger = stopTrigger(s);
+                return (
+                  <li key={i}>
+                    <span className="auto-when">
+                      {describeTrigger(trigger, sensors)}
+                      <span className="auto-days">{describeDays(s.days)}</span>
+                    </span>
+                    <span className="auto-arrow">→</span>
+                    <span className="auto-do">
+                      {stopActions(s)
+                        .map((a) => describeAction(a, scenes, rooms, customVibes))
+                        .join(" + ")}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {arcNeedsLocation && (
+              <div className="loc-note">
+                <p className="hint">These stops follow the sun, so they need your location once.</p>
+                <button className="btn btn-sm" onClick={useLocation} disabled={locating}>
+                  {locating ? "Locating…" : "Use my location"}
+                </button>
+              </div>
+            )}
+            <p className="hint">
+              Each stop becomes its own automation — tap one afterward to move it, change its vibe,
+              or switch it off on its own.
+            </p>
+            <div className="sheet-actions">
+              <button className="btn" onClick={() => setArc(null)}>
+                Not now
+              </button>
+              <button className="btn btn-primary" onClick={addArc} disabled={arcNeedsLocation}>
+                Add these {arc.steps.length}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="seg">
+              {(["sunset", "sunrise", "time", ...(sensors.length ? (["motion"] as const) : [])] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="seg-btn"
+                  aria-pressed={triggerKind === k}
+                  onClick={() => setTriggerKind(k)}
+                >
+                  {k === "time" ? "Clock" : k[0].toUpperCase() + k.slice(1)}
+                </button>
+              ))}
+            </div>
+    
+            {triggerKind === "motion" ? (
+              <>
+                <label className="field">
+                  <span className="label">When this sees motion</span>
+                  <select value={sensorId} onChange={(e) => setSensorId(e.target.value)}>
+                    {sensors.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
                       </option>
                     ))}
                   </select>
-                  <label className="mini">
-                    to
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={row.fadeTo}
-                      onChange={(e) => updateRow(i, { fadeTo: Number(e.target.value) })}
-                    />
-                    %
-                  </label>
-                  <label className="mini">
-                    over
-                    <input
-                      type="number"
-                      min={1}
-                      max={120}
-                      value={row.fadeMin}
-                      onChange={(e) => updateRow(i, { fadeMin: Number(e.target.value) })}
-                    />
-                    min
-                  </label>
+                  <span className="hint">
+                    Fires the moment motion starts, then waits a minute before it can fire again.
+                  </span>
+                </label>
+                {sensors.some((s) => s.sourceId === "demo") && (
+                  <div className="sheet-actions" style={{ justifyContent: "flex-start" }}>
+                    <button className="btn btn-sm" onClick={onSimulateMotion}>
+                      Simulate motion (demo)
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : triggerKind === "time" ? (
+              <label className="field">
+                <span className="label">At</span>
+                <input type="time" value={timeValue} onChange={(e) => setTimeValue(e.target.value)} />
+              </label>
+            ) : (
+              <label className="field">
+                <span className="label">Offset (minutes, − for before)</span>
+                <input
+                  type="number"
+                  step={5}
+                  value={offsetMin}
+                  onChange={(e) => setOffsetMin(Number(e.target.value) || 0)}
+                />
+                <span className="hint">
+                  e.g. −15 lights come up 15 min before {triggerKind}. 0 is right at {triggerKind}.
+                </span>
+              </label>
+            )}
+    
+            {needsLocation && (
+              <div className="loc-note">
+                <p className="hint">Sun triggers need your location to know when {triggerKind} is.</p>
+                <button className="btn btn-sm" onClick={useLocation} disabled={locating}>
+                  {locating ? "Locating…" : "Use my location"}
+                </button>
+              </div>
+            )}
+    
+            <div className="field">
+              <span className="label">On days (none = every day)</span>
+              <div className="days">
+                {DAY_LETTERS.map((letter, d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className="day"
+                    aria-pressed={days.includes(d)}
+                    aria-label={DAY_NAMES[d]}
+                    onClick={() => toggleDay(d)}
+                  >
+                    {letter}
+                  </button>
+                ))}
+              </div>
+            </div>
+    
+            <div className="field">
+              <span className="label">Do</span>
+              {rows.map((row, i) => (
+                <div className="action-row" key={i}>
+                  <select value={row.kind} onChange={(e) => updateRow(i, { kind: e.target.value as ActionChoice })}>
+                    {choices.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.disabled}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  {row.kind === "vibe" && (
+                    <div className="fade-fields">
+                      <select value={row.vibeId} onChange={(e) => updateRow(i, { vibeId: e.target.value })}>
+                        <optgroup label="Vibes">
+                          {VIBES.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {customVibes.length > 0 && (
+                          <optgroup label="Your vibes">
+                            {customVibes.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      <select value={row.vibeRoomId} onChange={(e) => updateRow(i, { vibeRoomId: e.target.value })}>
+                        <option value="">Whole home</option>
+                        {rooms.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="mini">
+                        over
+                        <input
+                          type="number"
+                          min={0}
+                          max={180}
+                          value={row.vibeMin}
+                          onChange={(e) => updateRow(i, { vibeMin: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                        min
+                      </label>
+                    </div>
+                  )}
+                  {row.kind === "scene" && scenes.length > 0 && (
+                    <select value={row.sceneId} onChange={(e) => updateRow(i, { sceneId: e.target.value })}>
+                      {scenes.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {(row.kind === "roomOn" || row.kind === "roomOff") && rooms.length > 0 && (
+                    <select value={row.roomId} onChange={(e) => updateRow(i, { roomId: e.target.value })}>
+                      {rooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {row.kind === "fade" && (
+                    <div className="fade-fields">
+                      <select value={row.fadeRoomId} onChange={(e) => updateRow(i, { fadeRoomId: e.target.value })}>
+                        <option value="">All lights</option>
+                        {rooms.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="mini">
+                        to
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={row.fadeTo}
+                          onChange={(e) => updateRow(i, { fadeTo: Number(e.target.value) })}
+                        />
+                        %
+                      </label>
+                      <label className="mini">
+                        over
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={row.fadeMin}
+                          onChange={(e) => updateRow(i, { fadeMin: Number(e.target.value) })}
+                        />
+                        min
+                      </label>
+                    </div>
+                  )}
+                  {rows.length > 1 && (
+                    <button className="chip-tool static" aria-label="Remove action" onClick={() => removeRow(i)}>
+                      ×
+                    </button>
+                  )}
                 </div>
+              ))}
+              {rows.some((r) => r.kind === "fade") && (
+                <p className="hint">Fade to 0% winds down and turns the lights off at the end.</p>
               )}
-              {rows.length > 1 && (
-                <button className="chip-tool static" aria-label="Remove action" onClick={() => removeRow(i)}>
-                  ×
+              {rows.some((r) => r.kind === "vibe") && (
+                <p className="hint">
+                  A vibe over 0 min arrives at once; over more, each light eases there from wherever it is.
+                </p>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={addRow}>
+                + Add action
+              </button>
+            </div>
+    
+            <div className="sheet-actions">
+              {editing && (
+                <button className="btn" onClick={resetForm}>
+                  Cancel
                 </button>
               )}
+              <button className="btn btn-primary" onClick={save} disabled={needsLocation}>
+                {editing ? "Save changes" : "Add automation"}
+              </button>
             </div>
-          ))}
-          {rows.some((r) => r.kind === "fade") && (
-            <p className="hint">Fade to 0% winds down and turns the lights off at the end.</p>
-          )}
-          <button className="btn btn-ghost btn-sm" onClick={addRow}>
-            + Add action
-          </button>
-        </div>
-
-        <div className="sheet-actions">
-          {editing && (
-            <button className="btn" onClick={resetForm}>
-              Cancel
-            </button>
-          )}
-          <button className="btn btn-primary" onClick={save} disabled={needsLocation}>
-            {editing ? "Save changes" : "Add automation"}
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       <p className="hint auto-foot">
