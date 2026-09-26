@@ -25,7 +25,7 @@ import {
   type Automation,
 } from "../lib/automations";
 import { RHYTHM_PRESETS, rhythmPresetById, rhythmTarget } from "../lib/rhythm";
-import { rhythmStep, vibePatches, type RhythmMemory } from "../lib/apply";
+import { easeFrame, easeStart, rhythmStep, vibePatches, type EaseStart, type RhythmMemory } from "../lib/apply";
 import { effectiveDeviceIds, type Room } from "../lib/rooms";
 import { startCadence } from "../lib/cadence";
 import type { CustomVibe, StoredScene, StoredSource } from "../lib/db";
@@ -42,6 +42,7 @@ type World = {
 
 const SCENE_TRANSITION_MS = 800;
 const RHYTHM_TRANSITION_MS = 4000;
+const EASE_TRANSITION_MS = 4000;
 
 function startHomeKeeper(home: Home): () => void {
   const hdb = db.forHome(dbNameFor(home.id));
@@ -115,6 +116,37 @@ function startHomeKeeper(home: Home): () => void {
     stops.push(holder.stop);
   };
 
+  // A vibe easing in over minutes — same pure walk as the live engine's
+  // (easeStart / easeFrame), same wall-clock cadence as the fades above.
+  const startEase = async (action: Extract<Action, { kind: "vibe" }>) => {
+    const w = world;
+    if (!w) return;
+    const targets = vibePatches(action.vibeId, action.roomId, w.devices, w.rooms, w.customVibes);
+    if (!targets.length) return;
+    const starts: Record<string, EaseStart> = {};
+    for (const { deviceId, patch } of targets) {
+      const device = w.devices.find((d) => d.id === deviceId)!;
+      starts[deviceId] = easeStart((await getState(device)) ?? undefined, patch);
+      await push(deviceId, { ...easeFrame(starts[deviceId], patch, 0), on: true }, EASE_TRANSITION_MS);
+    }
+    const startedAt = Date.now();
+    const totalMs = Math.max(1, action.minutes ?? 0) * 60_000;
+    const holder: { stop?: () => void } = {};
+    const step = async () => {
+      const frac = Math.min(1, (Date.now() - startedAt) / totalMs);
+      for (const { deviceId, patch } of targets) {
+        await push(deviceId, easeFrame(starts[deviceId], patch, frac), EASE_TRANSITION_MS);
+      }
+      if (frac >= 1 && holder.stop) {
+        holder.stop();
+        const i = stops.indexOf(holder.stop);
+        if (i >= 0) stops.splice(i, 1);
+      }
+    };
+    holder.stop = startCadence(20_000, () => void step());
+    stops.push(holder.stop);
+  };
+
   const runAction = async (action: Action) => {
     const w = world;
     if (!w) return;
@@ -122,8 +154,12 @@ function startHomeKeeper(home: Home): () => void {
       const scene = w.scenes.find((s) => s.id === action.sceneId);
       for (const [id, st] of Object.entries(scene?.states ?? {})) await push(id, st, SCENE_TRANSITION_MS);
     } else if (action.kind === "vibe") {
-      for (const { deviceId, patch } of vibePatches(action.vibeId, action.roomId, w.devices, w.rooms, w.customVibes)) {
-        await push(deviceId, patch, SCENE_TRANSITION_MS);
+      if (action.minutes) {
+        void startEase(action);
+      } else {
+        for (const { deviceId, patch } of vibePatches(action.vibeId, action.roomId, w.devices, w.rooms, w.customVibes)) {
+          await push(deviceId, patch, SCENE_TRANSITION_MS);
+        }
       }
     } else if (action.kind === "allOff") {
       for (const d of w.devices) await push(d.id, { on: false });

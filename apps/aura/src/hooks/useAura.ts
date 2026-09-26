@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as db from "../lib/db";
 import { dbNameFor, homeKey } from "../lib/homes";
-import { rhythmStep, vibePatches, type RhythmMemory } from "../lib/apply";
+import { easeFrame, easeStart, rhythmStep, vibePatches, type EaseStart, type RhythmMemory } from "../lib/apply";
 import { vibeById } from "@lantern/core";
 import { connectVibeRelay, type VibeRelayHandle } from "@lantern/core/vibe-relay";
 import { connectorFor, type Device, type LightState, type Sensor } from "../lib/connectors";
@@ -74,6 +74,9 @@ const SCENE_TRANSITION_MS = 800;
 // one imperceptible on brands that honor it (Hue, Home Assistant); the rest snap
 // through steps small enough not to be noticed anyway.
 const RHYTHM_TRANSITION_MS = 4000;
+// A vibe easing in over minutes steps every 20s like a fade — the same long
+// native transition smooths each step on brands that can.
+const EASE_TRANSITION_MS = 4000;
 
 // Merge two lists by id; items in `next` overwrite matching ones in `prev`.
 function mergeById<T extends { id: string }>(prev: T[], next: T[]): T[] {
@@ -621,6 +624,43 @@ export function useAura(homeId: string) {
   );
   useEffect(() => () => activeFades.current.forEach((stop) => stop()), []);
 
+  // A vibe arriving over minutes — the morning setting coming up with the sun,
+  // the evening sliding red-ward. The per-device targets are exactly what the
+  // vibe would snap to (vibePatches); the walk there is pure (easeFrame) and
+  // rides the wall clock like a fade. It's still a real vibe change, so it
+  // mirrors to other apps once, at the start, the way tapping the vibe would.
+  const startEase = useCallback(
+    (action: Extract<Action, { kind: "vibe" }>) => {
+      const targets = vibePatches(action.vibeId, action.roomId, devices, rooms, customVibes);
+      if (!targets.length) return;
+      const cur = statesRef.current;
+      const starts: Record<string, EaseStart> = {};
+      for (const { deviceId, patch } of targets) {
+        starts[deviceId] = easeStart(cur[deviceId], patch);
+        setDevice(deviceId, { ...easeFrame(starts[deviceId], patch, 0), on: true }, true, EASE_TRANSITION_MS);
+      }
+      const startedAt = Date.now();
+      const totalMs = Math.max(1, action.minutes ?? 0) * 60_000;
+      const holder: { stop?: () => void } = {};
+      const step = () => {
+        const frac = Math.min(1, (Date.now() - startedAt) / totalMs);
+        for (const { deviceId, patch } of targets) {
+          setDevice(deviceId, easeFrame(starts[deviceId], patch, frac), true, EASE_TRANSITION_MS);
+        }
+        if (frac >= 1 && holder.stop) {
+          holder.stop();
+          activeFades.current = activeFades.current.filter((s) => s !== holder.stop);
+        }
+      };
+      holder.stop = startCadence(20_000, step);
+      activeFades.current.push(holder.stop);
+      if (mirrorVibes && vibeById(action.vibeId)) {
+        relayRef.current?.publish({ vibeId: action.vibeId, roomId: action.roomId });
+      }
+    },
+    [devices, rooms, customVibes, setDevice, mirrorVibes]
+  );
+
   // "Which one is this?" — a few quick bright/dim pulses (or on/off, for a
   // fixture with no brightness control), then back to exactly whatever it was
   // showing before. Works identically for every brand: it's just setDevice
@@ -680,8 +720,11 @@ export function useAura(homeId: string) {
     (action: Action) => {
       if (action.kind === "scene") applyScene(action.sceneId);
       // A scheduled vibe is a real vibe change — same path as tapping it, so it
-      // mirrors to other apps too when mirroring is on.
-      else if (action.kind === "vibe") applyVibe(action.vibeId, action.roomId);
+      // mirrors to other apps too when mirroring is on. With minutes it eases in.
+      else if (action.kind === "vibe") {
+        if (action.minutes) startEase(action);
+        else applyVibe(action.vibeId, action.roomId);
+      }
       else if (action.kind === "allOff") setRoomPower(devices.map((d) => d.id), false);
       else if (action.kind === "fade") startFade(action);
       else if (action.kind === "roomPower") {
@@ -689,7 +732,7 @@ export function useAura(homeId: string) {
         if (room) setRoomPower(effectiveDeviceIds(room, rooms), action.on);
       }
     },
-    [applyScene, applyVibe, setRoomPower, startFade, devices, rooms]
+    [applyScene, applyVibe, setRoomPower, startFade, startEase, devices, rooms]
   );
 
   const addAutomation = useCallback(

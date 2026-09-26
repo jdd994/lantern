@@ -13,7 +13,7 @@ const ITEMS: { title: string; body: string }[] = [
   { title: "Rooms", body: "Group lights by where they are. Each room has its own vibe and All on / All off. A light lives in one room, or none." },
   { title: "Homes", body: "Tap the Aura wordmark to manage homes — each is its own world of connections, rooms, scenes, and automations, with its own location. Homes you're not looking at keep their schedules running." },
   { title: "Day rhythm", body: "Open Rhythm to let lit lights follow the sun — cool and bright at midday, warm at the edges, ember-red after dusk. It never turns a light on, and a color you set yourself is left alone." },
-  { title: "Automations", body: "Have the lights change on their own — at a set time, or at sunrise / sunset. Start from a ready-made one and tweak it, or tap an existing one to edit. They run while Aura is open — and the desktop app keeps them running from the tray, even with its window closed." },
+  { title: "Automations", body: "Have the lights change on their own — at a set time, or at sunrise / sunset. A vibe can arrive at once or ease in over minutes. Start from a ready-made one and tweak it (the Day arc starter adds a whole day in four stops — morning with the sun, then red-ward through sunset, wind-down, and night), or tap an existing one to edit. They run while Aura is open — and the desktop app keeps them running from the tray, even with its window closed." },
 ];
 
 // Tip / support options — same addresses as the other lantern apps (same

@@ -23,7 +23,11 @@ export type Action =
   | { kind: "scene"; sceneId: string }
   // Set a vibe (built-in @lantern/core vocabulary or a custom one) — the same
   // thing tapping it in the vibe row does. roomId omitted means the whole home.
-  | { kind: "vibe"; vibeId: string; roomId?: string }
+  // minutes, when set, means the vibe arrives over that long instead of at once:
+  // each light walks from wherever it is toward the vibe (see easeFrame in
+  // apply.ts) — the morning setting coming up with the sun, the evening
+  // sliding red-ward without a step anyone notices.
+  | { kind: "vibe"; vibeId: string; roomId?: string; minutes?: number }
   | { kind: "roomPower"; roomId: string; on: boolean }
   | { kind: "allOff" }
   // Gently ramp brightness to a target over some minutes (wake-up = fade up;
